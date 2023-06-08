@@ -1,0 +1,14 @@
+opam-version: "1.0"
+maintainer: "Max Vistrup <contact@maxv.dk>"
+
+synopsis: "Scaling reasoning about operational semantics using itrees."
+
+depends: [
+  "coq" { (>= "8.13" & < "8.18~") | (= "dev") }
+  "coq-iris" { (= "dev.2023-05-04.1.f47867af") | (= "dev") }
+  "coq-stdpp" { (= "dev.2023-03-24.1.504d165a") | (= "dev") }
+  "coq-itree" { (= "5.1.1") }
+]
+
+build: [make "-j%{jobs}%"]
+install: [make "install"]
