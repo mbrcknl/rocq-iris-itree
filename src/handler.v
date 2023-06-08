@@ -19,10 +19,19 @@ Record iHandler Σ (E : Type → Type) := IHandler {
 Arguments IHandler {_ _} _.
 Coercion ihandle : iHandler >-> Funclass.
 
-(** Explicitrly maps events along a coercion of event types. *)
-Definition liftE {E1} E2 {f : E1 -< E2} {T} (e : E1 T) : E2 T :=
+Import EqNotations.
+(** Convenient helper for constructing [iHandler]s that treat only events with
+a particular, fixed answrer tytpe [A]. *)
+Definition IHandlerT {Σ} {E : Type → Type} {A : Type}
+  (H : (E A → (A → iProp Σ) → iProp Σ)) : iHandler Σ E :=
+  IHandler (λ A' e Φ, ∃ x : A' = A, H
+    (rew [λ A, E A] x in e)
+    (rew [λ A, (A → iProp Σ)%type] x in Φ))%I.
+
+(** Maps events along a morphism of event types. *)
+Definition liftE {E1} E2 `{f : E1 -< E2} {T} (e : E1 T) : E2 T :=
   (@resum _ _ _ _ f) _ e.
-(** Restricts a handler along a coercion of event types. *)
+(** Restricts a handler along a morphism of event types. *)
 Definition restrictH {Σ E2} E1 (H1 : iHandler Σ E2) `{!E1 -< E2} : iHandler Σ E1 :=
   IHandler (λ T e Φ, H1 T (liftE E2 e) Φ)%I.
 
