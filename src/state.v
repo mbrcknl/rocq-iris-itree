@@ -24,10 +24,14 @@ Inductive stateE (S : Type) : Type → Type :=
   (** Set the global state. *)
   | ESetState (x : S) : stateE S unit
   (** Yield control to another (demonically chosen) thread in the thread-pool. *)
-  | EYield : stateE S unit.
+  | EYield : stateE S unit
+  (** Split the thread into two threads corresponding to the answers [true]
+  and [false]. *)
+  | EFork : stateE S bool.
 Arguments EGetState {_}.
 Arguments ESetState {_} _.
 Arguments EYield {_}.
+Arguments EFork {_}.
 
 (** State interpretation predicate which is enforced at every [EYield]. *)
 Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
@@ -55,6 +59,8 @@ Definition yieldH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invG
   IHandlerT (λ e Φ,
       ∃ s, ⌜e = EYield⌝ ∗ state_is s ∗ |={∅, ⊤}=> (state_interp s ∗
                   (∀ s', state_is s' -∗ state_interp s' ={⊤,∅}=∗ Φ tt)))%I.
+Definition forkH {Σ} (S : Type) `{!stateHGS Σ S} : iHandler Σ (stateE S) :=
+  IHandlerT (λ e Φ, Φ true ∗ Φ false)%I.
 
 Definition stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateE S) :=
-  get_stateH S ∪ set_stateH S ∪ yieldH S.
+  get_stateH S ∪ set_stateH S ∪ yieldH S ∪ forkH S.
