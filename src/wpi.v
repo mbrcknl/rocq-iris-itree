@@ -131,7 +131,7 @@ Notation "'WPi' t @ H {{ v , Q } }" := (wp_itree H t%itree (λ v, Q))
 
 Section wp_itree.
   Context {Σ : gFunctors} {E : Type → Type} {H : iHandler Σ E}.
-  Context `{!invGS_gen HasNoLc Σ} `{ord_laterGS Σ}.
+  Context `{!invGS_gen HasNoLc Σ}.
 
   Local Existing Instance wp_itree_pre_monotone.
   Lemma wp_itree_unfold {R} (t : itree E R) Φ :
@@ -251,4 +251,21 @@ Section wp_itree.
     iApply (bi_mono1_intro with "[] Hwp"). by iIntros (?) "?".
   Qed.
 
+  Lemma wp_frame_l {R} Φ (t : itree E R) (P : iProp Σ) :
+    P ∗ WPi t @ H {{ Φ }} -∗
+    WPi t @ H {{ v, P ∗ Φ v }}.
+  Proof.
+    iIntros "[HP Hwp]".
+    iApply (wp_itree_wand with "[HP]"); last exact.
+    eauto with iFrame.
+  Qed.
+
+  Lemma wp_frame_r {R} Φ (t : itree E R) (P : iProp Σ) :
+    WPi t @ H {{ Φ }} ∗ P -∗
+    WPi t @ H {{ v, Φ v ∗ P }}.
+  Proof.
+    iIntros "[Hwp HP]".
+    iApply (wp_itree_wand with "[HP]"); last exact.
+    eauto with iFrame.
+  Qed.
 End wp_itree.
