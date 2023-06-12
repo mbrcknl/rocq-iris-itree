@@ -299,9 +299,9 @@ Section translation.
     - iModIntro. iIntros (t Φ) "Hwp". iApply wpi_unfold.
       iDestruct "Hwp" as ">[(%r&%Hret&HΦ)|[(%t'&%Hstep&Hwp)|(%A&%e&%k&%Hvis&Hwp)]]".
       * iModIntro. iLeft. iExists r. iFrame. iPureIntro.
-        setoid_rewrite -> Hret. apply interp_ret.
+        setoid_rewrite Hret. apply interp_ret.
       * iModIntro. iRight. iLeft. iExists (interp f t'). iSplit.
-        + iPureIntro. setoid_rewrite -> Hstep. apply interp_tau.
+        + iPureIntro. setoid_rewrite Hstep. apply interp_tau.
         + done.
       * setoid_rewrite <- wpi_unfold. rewrite Hvis. setoid_rewrite interp_vis.
         iApply wpi_bind. iApply wpi_wand.
