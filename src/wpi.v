@@ -276,19 +276,22 @@ Section translation.
   Context {H1 : iHandler Σ E1} {H2 : iHandler Σ E2}.
   Context `{!invGS_gen HasNoLc Σ}.
 
-  (* Translation lemmata. *)
+  (* Translation lemma. *)
 
-  (* The following lemmata allow you to relate weakest preconditions across
+  (** The following lemma allow you to relate weakest preconditions across
   [iHandler]s. Specifically, if you have a function [f] that interprets each
   event [E1 A] as an [itree E2 A], that is, a way to "translate" from events
   [E1] to [E2], then you may want to relate [WPI t @ H1 {{ Φ }}] to [WPI
-  interp f t @ H1 {{ Φ }}] for itrees [t]. The following statements gives you
+  interp f t @ H1 {{ Φ }}] for itrees [t]. The following statement gives you
   sufficient conditions for when one implies the other. *)
-
-  Lemma wp_translationn_forward {R} :
+  Lemma wp_translation {R} :
     □ (∀ A (e : E1 A) Q Q', (∀ v, Q v -∗ Q' v) -∗ H1 A e Q -∗ H1 A e Q') -∗
     □ (∀ A (e : E1 A) ψ, (▷ |={∅}=> H1 A e ψ) -∗ WPi (f A e) @ H2 {{ v, ▷ ψ v }}) -∗
     ∀ (t : itree E1 R) Φ, WPi t @ H1 {{ Φ }} -∗ WPi (interp f t) @ H2 {{ Φ }}.
+  (** One could hope for a converse statement, but unfortunately the proof
+  makes use of [wp_itree_bind] which is a one-way implication (because it in
+  turn makes use of [wp_itree_ind]). If [wp_itree_bind] was instead an
+  equivalence, it would in fact be possible to prove a converse statement. *)
   Proof.
     iIntros "#Hmon #HH". iApply wp_itree_ind.
     - intros n t1 t2 Heqnt φ1 φ2 Heqnφ. apply wp_itree_ne.
