@@ -70,7 +70,7 @@ Section wp_itree.
   Context `{!invGS_gen HasNoLc Σ}.
 
   (** The definition of the weakest precondition, prior to taking the fixpoint. *)
-  Definition wp_itree_pre (H : iHandler Σ E)
+  Definition wpi_pre (H : iHandler Σ E)
     (wp_itree : leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ) :
                 leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ :=
     λ t Φ,
@@ -81,45 +81,44 @@ Section wp_itree.
         close [H] so as to make it monotonic. Without this, the weakest
         precondition may fail to satisfy desirable properties such as the rule
         of consequence. *)
-        (∃ T (e : E T) k, ⌜t ≅ Vis e k⌝ ∗ ▷ |={∅}=> bi_mono1 (H T e) (λ x, wp_itree (k x) Φ))
+        (∃ T (e : E T) k, ⌜t ≅ Vis e k⌝ ∗ bi_mono1 (H T e) (λ x, ▷ wp_itree (k x) Φ))
       )%I.
 
-  Global Instance wp_itree_pre_ne n H:
-    Proper ((dist n ==> dist n ==> dist n) ==> dist n ==> dist n ==> dist n) (wp_itree_pre H).
+  Global Instance wpi_pre_ne n H:
+    Proper ((dist n ==> dist n ==> dist n) ==> dist n ==> dist n ==> dist n) (wpi_pre H).
   Proof.
-    move => ?? Hwp ?? -> ?? HΦ. rewrite /wp_itree_pre/bi_mono1.
+    move => ?? Hwp ?? -> ?? HΦ. rewrite /wpi_pre/bi_mono1.
     repeat (f_equiv || eapply Hwp || eapply HΦ || reflexivity).
   Qed.
 
-  Lemma wp_itree_pre_mono H wp1 wp2:
+  Lemma wpi_pre_mono H wp1 wp2:
     ⊢ □ (∀ t Φ, wp1 t Φ -∗ wp2 t Φ)
-    → ∀ t Φ, wp_itree_pre H wp1 t Φ -∗ wp_itree_pre H wp2 t Φ.
+    → ∀ t Φ, wpi_pre H wp1 t Φ -∗ wpi_pre H wp2 t Φ.
   Proof.
     iIntros "#Hinner" (t Φ) "Hwp".
     iMod "Hwp" as "[?|[[%t' [% ?]]|(%T&%e&%k&%&Hwp)]]"; iModIntro.
     - iLeft. by iFrame.
     - iRight. iLeft. iExists _. iSplit; [done|]. iModIntro. by iApply "Hinner".
     - iRight. iRight. iExists _, _, _. iSplit; [done|].
-      iModIntro. iMod "Hwp". iModIntro.
       iApply (bi_mono1_mono with "[] Hwp"). iIntros (?) "?". by iApply "Hinner".
   Qed.
 
-  Local Instance wp_itree_pre_monotone H :
-    BiMonoPred (λ wp_itree, uncurry (wp_itree_pre H (curry wp_itree))).
+  Local Instance wpi_pre_monotone H :
+    BiMonoPred (λ wp_itree, uncurry (wpi_pre H (curry wp_itree))).
   Proof.
     constructor.
-    - iIntros (Π Ψ ??) "#Hinner". iIntros ([??]) "Hsim" => /=. iApply wp_itree_pre_mono; [|done].
+    - iIntros (Π Ψ ??) "#Hinner". iIntros ([??]) "Hsim" => /=. iApply wpi_pre_mono; [|done].
       iIntros "!>" (??) "HΠ". by iApply ("Hinner" $! (_, _)).
     - move => wp_itree Hwp n [??] [??] /= [/=??].
-      apply wp_itree_pre_ne; eauto. move => ?????? /=. by apply: Hwp.
+      apply wpi_pre_ne; eauto. move => ?????? /=. by apply: Hwp.
   Qed.
 
   Definition wp_itree (H : iHandler Σ E) : itree E R → (R → iProp Σ) → iProp Σ :=
     (* It is necessary to uncurry temporarily to get to the form
     [(A → iProp Σ) → (A → iProp Σ)] of which we can take the least fixpoint. *)
-    curry (bi_least_fixpoint (λ wp_pre, uncurry (wp_itree_pre H (curry wp_pre)))).
+    curry (bi_least_fixpoint (λ wp_pre, uncurry (wpi_pre H (curry wp_pre)))).
 
-  Global Instance wp_itree_ne H n:
+  Global Instance wpi_ne H n:
     Proper ((=) ==> ((=) ==> dist n) ==> dist n) (wp_itree H).
   Proof. move => ?? -> ?? HΦ. unfold wp_itree. f_equiv. intros ?. by apply HΦ. Qed.
 End wp_itree.
@@ -134,16 +133,16 @@ Section wp_itree.
   Context {Σ : gFunctors} {E : Type → Type} {H : iHandler Σ E}.
   Context `{!invGS_gen HasNoLc Σ}.
 
-  Local Existing Instance wp_itree_pre_monotone.
-  Lemma wp_itree_unfold {R} (t : itree E R) Φ :
-    WPi t @ H {{ Φ }} ⊣⊢ wp_itree_pre H (wp_itree H) t Φ.
+  Local Existing Instance wpi_pre_monotone.
+  Lemma wpi_unfold {R} (t : itree E R) Φ :
+    WPi t @ H {{ Φ }} ⊣⊢ wpi_pre H (wp_itree H) t Φ.
   Proof. rewrite /wp_itree /curry. apply: least_fixpoint_unfold. Qed.
 
   (* Induction principles for WPi. *)
 
-  Lemma wp_itree_strong_ind {R} (G: leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ):
+  Lemma wpi_strong_ind {R} (G: leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ):
     NonExpansive2 G →
-    ⊢ (□ ∀ t Φ, wp_itree_pre H (λ t' Ψ, G t' Ψ ∧ WPi t' @ H {{ Ψ }}) t Φ -∗ G t Φ)
+    ⊢ (□ ∀ t Φ, wpi_pre H (λ t' Ψ, G t' Ψ ∧ WPi t' @ H {{ Ψ }}) t Φ -∗ G t Φ)
       -∗ ∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ.
   Proof.
     iIntros (Hne) "#HPre". iIntros (t Φ) "Hwp".
@@ -152,21 +151,21 @@ Section wp_itree.
     iIntros "!>" ([??]) "Hwp" => /=. by iApply "HPre".
   Qed.
 
-  Lemma wp_itree_ind {R} (G: leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ):
+  Lemma wpi_ind {R} (G: leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ):
     NonExpansive2 G →
-    ⊢ (□ ∀ t Φ, wp_itree_pre H G t Φ -∗ G t Φ)
+    ⊢ (□ ∀ t Φ, wpi_pre H G t Φ -∗ G t Φ)
       -∗ ∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ.
   Proof.
-    iIntros (Hne) "#HPre". iApply wp_itree_strong_ind. iIntros "!>" (t Φ) "Hwp".
-    iApply "HPre". iApply (wp_itree_pre_mono with "[] Hwp").
+    iIntros (Hne) "#HPre". iApply wpi_strong_ind. iIntros "!>" (t Φ) "Hwp".
+    iApply "HPre". iApply (wpi_pre_mono with "[] Hwp").
     iIntros "!>" (??) "[? _]". by iFrame.
   Qed.
 
-  Global Instance wp_itree_proper R :
+  Global Instance wpi_proper R :
     Proper ((eqit (=) false false) ==> (=) ==> (⊢)) (wp_itree (R:=R) H).
   Proof.
     move => t1 t2 Heqit ?? ->. iIntros "Hwp".
-    rewrite !wp_itree_unfold.
+    rewrite !wpi_unfold.
     iMod "Hwp" as "[[%r [% Hwp]]|[[%t' [% Hwp]]|(%T&%e&%k&%&Hwp)]]";
       iModIntro.
     - iLeft. iExists _. iFrame. by rewrite -Heqit.
@@ -175,7 +174,7 @@ Section wp_itree.
   Qed.
 
   (** Rule of consequence. *)
-  Lemma wp_itree_wand {R} (t : itree E R) Φ Ψ:
+  Lemma wpi_wand {R} (t : itree E R) Φ Ψ:
     (∀ r, Φ r -∗ Ψ r) -∗
     WPi t @ H {{ Φ }} -∗
     WPi t @ H {{ Ψ }}.
@@ -185,20 +184,19 @@ Section wp_itree.
     iAssert (∀ Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { iApply ("Hgen" with "Hwp"). done. }
     iIntros (?) "Hwp".
-    iApply (wp_itree_ind with "[] Hwp"). { solve_proper. }
+    iApply (wpi_ind with "[] Hwp"). { solve_proper. }
     iIntros "!>" (??) "Hwp". iIntros (?) "Hc".
-    rewrite wp_itree_unfold.
+    rewrite wpi_unfold.
     iMod "Hwp" as "[[%r [% Hwp]]|[[%t' [% Hwp]]|(%T&%e&%k&%&Hwp)]]"; iModIntro.
     - iLeft. iExists _. iSplit; [done|]. by iApply "Hc".
     - iRight. iLeft. iExists _. iSplit; [done|]. iModIntro. by iApply "Hwp".
     - iRight. iRight. iExists _, _, _. iSplit; [done|].
-      iModIntro. iMod "Hwp". iModIntro.
       iApply (bi_mono1_mono with "[Hc] Hwp"). iIntros (?) "Hwp". by iApply "Hwp".
   Qed.
 
   (* Monadic rules. *)
 
-  Lemma wp_itree_bind {R T} (t : itree E T) (k : T → itree E R) Φ :
+  Lemma wpi_bind {R T} (t : itree E T) (k : T → itree E R) Φ :
     WPi t @ H {{ r, WPi (k r) @ H {{ Φ }} }} -∗
     WPi (ITree.bind t k) @ H {{ Φ }}.
   Proof.
@@ -207,11 +205,11 @@ Section wp_itree.
     iAssert (∀ Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { iApply ("Hgen" with "Hwp"). iIntros (?) "?". done. }
     iIntros (?) "Hwp".
-    iApply (wp_itree_ind with "[] Hwp"). { solve_proper. }
+    iApply (wpi_ind with "[] Hwp"). { solve_proper. }
     iIntros "!>" (??) "Hwp". iIntros (?) "Hc".
-    rewrite wp_itree_unfold.
+    rewrite wpi_unfold.
     iMod "Hwp" as "[[%r [%Heq Hwp]]|[[%t' [%Heq Hwp]]|(%X&%e&%j&%Heq&Hwp)]]".
-    - iDestruct ("Hc" with "[$]") as "Hc". rewrite wp_itree_unfold.
+    - iDestruct ("Hc" with "[$]") as "Hc". rewrite wpi_unfold.
       iMod "Hc" as "[[%r' [%Heq' Hwp]]|[[%t' [% Hwp]]|(%X&%e&%j&%&Hwp)]]"; iModIntro.
       + iLeft. iExists _. iSplit; [iPureIntro|done]. by rewrite Heq bind_ret_l.
       + iRight. iLeft. iExists _. iSplit; [iPureIntro|done]. by rewrite Heq bind_ret_l.
@@ -221,43 +219,44 @@ Section wp_itree.
       iModIntro. by iApply "Hwp".
     - iModIntro. iRight. iRight. iExists _, _, _. iSplit.
       { iPureIntro. by rewrite Heq bind_vis. }
-      iModIntro. iMod "Hwp". iModIntro.
       iApply (bi_mono1_mono with "[Hc] Hwp"). iIntros (?) "Hwp". by iApply "Hwp".
   Qed.
 
-  Lemma wp_itree_ret {R} Φ (r : R):
+  Lemma wpi_ret {R} Φ (r : R):
     Φ r -∗
     WPi Ret r @ H {{ Φ }}.
   Proof.
-    iIntros "HΦ". rewrite wp_itree_unfold. iIntros "!>".
+    iIntros "HΦ". rewrite wpi_unfold. iIntros "!>".
     iLeft. iExists _. by iFrame.
   Qed.
 
   (* Other basic cases. *)
 
-  Lemma wp_itree_Tau {R} Φ (t : itree E R):
+  Lemma wpi_tau {R} Φ (t : itree E R):
     ▷ WPi t @ H {{ Φ }} -∗
     WPi Tau t @ H {{ Φ }}.
   Proof.
-    iIntros "Hwp". iEval (rewrite wp_itree_unfold). iIntros "!>".
+    iIntros "Hwp". iEval (rewrite wpi_unfold). iIntros "!>".
     iRight. iLeft. iExists _. iSplit; [done|]. by iModIntro.
   Qed.
 
-  Lemma wp_itree_vis {R} Φ T e (k : T → itree E R):
-    ▷ H T e (λ r, WPi k r @ H {{ Φ }}) -∗
+  Lemma wpi_vis {R} Φ T e (k : T → itree E R):
+    H T e (λ r, WPi k r @ H {{ Φ }}) -∗
     WPi (Vis e k) @ H {{ Φ }}.
   Proof.
-    iIntros "Hwp". iEval (rewrite wp_itree_unfold). iIntros "!>".
-    iRight. iRight. iExists _, _, _. iSplit; [done|]. do 2 iModIntro.
+    iIntros "Hwp". iEval (rewrite wpi_unfold). iIntros "!>".
+    iRight. iRight. iExists _, _, _. iSplit; [done|].
     iApply (bi_mono1_intro with "[] Hwp"). by iIntros (?) "?".
   Qed.
+
+  (* Derived rules. *)
 
   Lemma wp_frame_l {R} Φ (t : itree E R) (P : iProp Σ) :
     P ∗ WPi t @ H {{ Φ }} -∗
     WPi t @ H {{ v, P ∗ Φ v }}.
   Proof.
     iIntros "[HP Hwp]".
-    iApply (wp_itree_wand with "[HP]"); last exact.
+    iApply (wpi_wand with "[HP]"); last exact.
     eauto with iFrame.
   Qed.
 
@@ -266,7 +265,7 @@ Section wp_itree.
     WPi t @ H {{ v, Φ v ∗ P }}.
   Proof.
     iIntros "[Hwp HP]".
-    iApply (wp_itree_wand with "[HP]"); last exact.
+    iApply (wpi_wand with "[HP]"); last exact.
     eauto with iFrame.
   Qed.
 End wp_itree.
@@ -286,28 +285,28 @@ Section translation.
   sufficient conditions for when one implies the other. *)
   Lemma wp_translation {R} :
     □ (∀ A (e : E1 A) Q Q', (∀ v, Q v -∗ Q' v) -∗ H1 A e Q -∗ H1 A e Q') -∗
-    □ (∀ A (e : E1 A) ψ, (▷ |={∅}=> H1 A e ψ) -∗ WPi (f A e) @ H2 {{ v, ▷ ψ v }}) -∗
+    □ (∀ A (e : E1 A) ψ, H1 A e ψ -∗ WPi (f A e) @ H2 {{ v, ψ v }}) -∗
     ∀ (t : itree E1 R) Φ, WPi t @ H1 {{ Φ }} -∗ WPi (interp f t) @ H2 {{ Φ }}.
   (** One could hope for a converse statement, but unfortunately the proof
-  makes use of [wp_itree_bind] which is a one-way implication (because it in
-  turn makes use of [wp_itree_ind]). If [wp_itree_bind] was instead an
-  equivalence, it would in fact be possible to prove a converse statement. *)
+  makes use of [wpi_bind] which is a one-way implication (because it in turn
+  makes use of [wpi_ind]). If [wpi_bind] was instead an equivalence, it
+  would in fact be possible to prove a converse statement. *)
   Proof.
-    iIntros "#Hmon #HH". iApply wp_itree_ind.
-    - intros n t1 t2 Heqnt φ1 φ2 Heqnφ. apply wp_itree_ne.
+    iIntros "#Hmon #HH". iApply wpi_ind.
+    - intros n t1 t2 Heqnt φ1 φ2 Heqnφ. apply wpi_ne.
       * by setoid_rewrite Heqnt.
       * intros v v' Heqv. rewrite Heqv. apply Heqnφ.
-    - iModIntro. iIntros (t Φ) "Hwp". iApply wp_itree_unfold.
+    - iModIntro. iIntros (t Φ) "Hwp". iApply wpi_unfold.
       iDestruct "Hwp" as ">[(%r&%Hret&HΦ)|[(%t'&%Hstep&Hwp)|(%A&%e&%k&%Hvis&Hwp)]]".
       * iModIntro. iLeft. iExists r. iFrame. iPureIntro.
         setoid_rewrite -> Hret. apply interp_ret.
       * iModIntro. iRight. iLeft. iExists (interp f t'). iSplit.
         + iPureIntro. setoid_rewrite -> Hstep. apply interp_tau.
         + done.
-      * setoid_rewrite <- wp_itree_unfold. rewrite Hvis. setoid_rewrite interp_vis.
-        iApply wp_itree_bind. iApply wp_itree_wand.
-        + iIntros (a) "Hwp2". by iApply wp_itree_Tau.
-        + iApply "HH". iNext. iDestruct "Hwp" as ">Hwp". iModIntro.
-          iApply bi_mono1_elim; last done. iIntros (Q) "HQ". by iApply "Hmon".
+      * setoid_rewrite <- wpi_unfold. rewrite Hvis. setoid_rewrite interp_vis.
+        iApply wpi_bind. iApply wpi_wand.
+        + iIntros (a) "Hwp2". by iApply wpi_tau.
+        + iApply "HH". iApply bi_mono1_elim; last done. iIntros (Q) "HQ".
+          by iApply "Hmon".
   Qed.
 End translation.
