@@ -5,6 +5,7 @@ From iris.base_logic.lib Require Export ghost_var.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.itree Require Import handler.
 From ITree Require Import ITree.
+From ITree Require Import Interp.InterpFacts.
 From ITree Require Import Eq.
 
 (** Weaken a predicate transformer into a monotonic predicate transformer in a
@@ -269,3 +270,41 @@ Section wp_itree.
     eauto with iFrame.
   Qed.
 End wp_itree.
+
+Section translation.
+  Context {Σ : gFunctors} {E1 E2 : Type → Type} {f : E1 ~> itree E2}.
+  Context {H1 : iHandler Σ E1} {H2 : iHandler Σ E2}.
+  Context `{!invGS_gen HasNoLc Σ}.
+
+  (* Translation lemmata. *)
+
+  (* The following lemmata allow you to relate weakest preconditions across
+  [iHandler]s. Specifically, if you have a function [f] that interprets each
+  event [E1 A] as an [itree E2 A], that is, a way to "translate" from events
+  [E1] to [E2], then you may want to relate [WPI t @ H1 {{ Φ }}] to [WPI
+  interp f t @ H1 {{ Φ }}] for itrees [t]. The following statements gives you
+  sufficient conditions for when one implies the other. *)
+
+  Lemma wp_translationn_forward {R} :
+    □ (∀ A (e : E1 A) Q Q', (∀ v, Q v -∗ Q' v) -∗ H1 A e Q -∗ H1 A e Q') -∗
+    □ (∀ A (e : E1 A) ψ, (▷ |={∅}=> H1 A e ψ) -∗ WPi (f A e) @ H2 {{ v, ▷ ψ v }}) -∗
+    ∀ (t : itree E1 R) Φ, WPi t @ H1 {{ Φ }} -∗ WPi (interp f t) @ H2 {{ Φ }}.
+  Proof.
+    iIntros "#Hmon #HH". iApply wp_itree_ind.
+    - intros n t1 t2 Heqnt φ1 φ2 Heqnφ. apply wp_itree_ne.
+      * by setoid_rewrite Heqnt.
+      * intros v v' Heqv. rewrite Heqv. apply Heqnφ.
+    - iModIntro. iIntros (t Φ) "Hwp". iApply wp_itree_unfold.
+      iDestruct "Hwp" as ">[(%r&%Hret&HΦ)|[(%t'&%Hstep&Hwp)|(%A&%e&%k&%Hvis&Hwp)]]".
+      * iModIntro. iLeft. iExists r. iFrame. iPureIntro.
+        setoid_rewrite -> Hret. apply interp_ret.
+      * iModIntro. iRight. iLeft. iExists (interp f t'). iSplit.
+        + iPureIntro. setoid_rewrite -> Hstep. apply interp_tau.
+        + done.
+      * setoid_rewrite <- wp_itree_unfold. rewrite Hvis. setoid_rewrite interp_vis.
+        iApply wp_itree_bind. iApply wp_itree_wand.
+        + iIntros (a) "Hwp2". by iApply wp_itree_Tau.
+        + iApply "HH". iNext. iDestruct "Hwp" as ">Hwp". iModIntro.
+          iApply bi_mono1_elim; last done. iIntros (Q) "HQ". by iApply "Hmon".
+  Qed.
+End translation.
