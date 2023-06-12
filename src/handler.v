@@ -28,12 +28,9 @@ Definition IHandlerT {Σ} {E : Type → Type} {A : Type}
     (rew [λ A, E A] x in e)
     (rew [λ A, (A → iProp Σ)%type] x in Φ))%I.
 
-(** Maps events along a morphism of event types. *)
-Definition liftE {E1} E2 `{f : E1 -< E2} {T} (e : E1 T) : E2 T :=
-  (@resum _ _ _ _ f) _ e.
 (** Restricts a handler along a morphism of event types. *)
 Definition restrictH {Σ E2} E1 (H1 : iHandler Σ E2) `{!E1 -< E2} : iHandler Σ E1 :=
-  IHandler (λ T e Φ, H1 T (liftE E2 e) Φ)%I.
+  IHandler (λ A e Φ, H1 A (subevent A e) Φ)%I.
 
 (** Asserts that the [iHandler] [H1] is stronger than [H2]. *)
 Definition subH {Σ E} (H1 H2 : iHandler Σ E) : iProp Σ :=
