@@ -35,35 +35,23 @@ Arguments ESetState {_} _.
 Arguments EYield {_}.
 Arguments EFork {_}.
 
-(** State interpretation predicate which is enforced at every [EYield]. *)
+(** State interpretation predicate which is enforced at every [EYield], [EGet]
+and [ESet]. *)
 Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
 
-(* TODO: Switch to some authoritative thing. *)
-(** Asserts read-access to the state *)
-Definition state_is {Σ S} `{!stateHGS Σ S} (s : S) : iProp Σ :=
-  ∃ q, ghost_var stateH_name q s.
-(** Asserts writable access to the state.
-
-From the poitn of view of the weakest precondition, ownership corresponds to
-the fraction 1/2 since at any given moment the adequacy proof also holds 1/2 of
-the state. *)
-Definition state_own {Σ S} `{!stateHGS Σ S} (s : S) : iProp Σ :=
-  ghost_var stateH_name (1/2) s.
-
 (* Handlers for [stateE]. *)
-Definition get_stateH {Σ} (S : Type) `{!stateHGS Σ S} : iHandler Σ (stateE S) :=
+Definition get_stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} : iHandler Σ (stateE S) :=
   IHandlerT (λ e Φ,
-      ∃ s, ⌜e = EGetState⌝ ∗ state_is s ∗ (state_is s -∗ Φ s))%I.
-Definition set_stateH {Σ} (S : Type) `{!stateHGS Σ S} : iHandler Σ (stateE S) :=
-  IHandlerT (λ e Φ,
-      ∃ s s', ⌜e = ESetState s'⌝ ∗ state_own s ∗ (state_own s' -∗ Φ tt))%I.
+      ⌜e = EGetState⌝ ∗ (∀ s, state_interp s -∗ (state_interp s ∗ Φ s)))%I.
+Definition set_stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} : iHandler Σ (stateE S) :=
+  IHandlerT (λ e Φ, ∃ s',
+    ⌜e = ESetState s'⌝ ∗ (∀ s, state_interp s ==∗ (state_interp s' ∗ Φ tt)))%I.
 (** At each [EYield], we re-assert all invariants as well as the [state_interp]. *)
-Definition yieldH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateE S) :=
-  IHandlerT (λ e Φ,
-      ∃ s, ⌜e = EYield⌝ ∗ state_is s ∗ |={∅, ⊤}=> (state_interp s ∗
-                  (∀ s', state_is s' -∗ state_interp s' ={⊤,∅}=∗ Φ tt)))%I.
+Definition yieldH {Σ} (S : Type) `{!stateHGS Σ S} `{!invGS_gen HasNoLc Σ} `{!stateInterp Σ S} : iHandler Σ (stateE S) :=
+  IHandlerT (λ e Φ, ⌜e = EYield⌝ ∗
+    ∀ s, state_interp s ={⊤}=∗ (∃ s', state_interp s' ∗ Φ tt))%I.
 Definition forkH {Σ} (S : Type) `{!stateHGS Σ S} : iHandler Σ (stateE S) :=
-  IHandlerT (λ e Φ, Φ true ∗ Φ false)%I.
+  IHandlerT (λ e Φ, ⌜e = EFork⌝ ∗ Φ true ∗ Φ false)%I.
 
 Definition stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateE S) :=
   get_stateH S ∪ set_stateH S ∪ yieldH S ∪ forkH S.
@@ -84,11 +72,12 @@ Section wp_state.
 
   Lemma wp_set {R} (s s' : S) (k : unit → itree E R) (Φ : R → iProp Σ) :
     state_own s -∗
-    ▷ (state_own s' -∗ WPi (k tt) @ H {{ Φ }}) -∗
+    ▷ (state_interp s' -∗ WPi (k tt) @ H {{ Φ }}) -∗
     WPi (vis (ESetState s') k) @ H {{ Φ }}.
   Proof.
     iIntros "Hown Hwp". iApply wpi_vis. iApply is_inH. iNext.
     do 2 iLeft. iRight. iExists eq_refl. iExists s, s'.
+    iSplit; first done. iFrame. iIntros "Hinterp Hown".
     eauto with iFrame.
   Qed.
 
@@ -98,5 +87,13 @@ Section wp_state.
   Proof.
     iIntros "[Hwp1 Hwp2]". iApply wpi_vis. iNext. iApply is_inH.
     iRight. iExists eq_refl. iFrame.
+  Qed.
+
+  Lemma wp_yield {R} (k : unit → itree E R) (Φ : R → iProp Σ) :
+    (▷ |={⊤}=> WPi (k tt) @ H {{ Φ }}) -∗
+    WPi (vis EYield k) @ H {{ Φ }}.
+  Proof.
+    iIntros "Hwp". iApply wpi_vis. iNext. iApply is_inH.
+    iLeft. iRight. iExists eq_refl. eauto with iFrame.
   Qed.
 End wp_state.
