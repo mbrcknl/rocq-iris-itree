@@ -252,33 +252,8 @@ Section wp_itree.
     * done.
   Qed.
 
-  (** Rule of consequence. *)
-  Lemma wpi_opt_wand {R} (t : itree E (option R)) Φ Ψ:
-    (∀ r, Φ r -∗ Ψ r) -∗
-    wpi_opt H t Φ -∗
-    wpi_opt H t Ψ.
-  Proof.
-    iIntros "Hwand Hwp".
-    iLöb as "IH" forall (t).
-    rewrite /wpi !wpi_opt_unfold.
-    iMod "Hwp" as "[[%Ht >_]|[[%r [Hret Hr]]|[[%t' [% ?]]|(%A&%e&%k&%&Hwp)]]]".
-    - iLeft. iApply fupd_mask_intro; first done. iIntros "Hfupd". by iSplit.
-    - iModIntro. iRight. iLeft. iExists _. iSplit; [done|]. by iApply "Hwand".
-    - iModIntro. iRight. iRight. iLeft. iExists _. iSplit; [done|]. iModIntro.
-      by iApply ("IH" with "Hwand").
-    - iModIntro. iRight. iRight. iRight. iExists A, e, k. iSplit; first done.
-      iApply (bi_mono1_mono with "[Hwand] Hwp").
-      iIntros (a) "Hwp". iNext. by iApply ("IH" with "Hwand").
-  Qed.
-  Lemma wpi_wand {R} (t : itree E R) Φ Ψ:
-    (∀ r, Φ r -∗ Ψ r) -∗
-    WPi t @ H {{ Φ }} -∗
-    WPi t @ H {{ Ψ }}.
-  Proof.
-    rewrite /wpi. iApply wpi_opt_wand.
-  Qed.
+  (* Internal helper lemmata. *)
 
-  (* Independence of post-condition if all termination is safe termination. *)
   Lemma safe_termination_independent_post {T R R'} (t : itree E T) (Φ : R → iProp Σ) (Ψ : R' → iProp Σ) :
     wpi_opt H (ITree.map (const None) t) Φ -∗ wpi_opt H (ITree.map (const None) t) Ψ.
   Proof.
@@ -368,7 +343,6 @@ Section wp_itree.
           ++ iIntros (a) "Hwp". iNext. iApply "IH". by rewrite /ITree.map -Hbind.
         + apply eqitree_inv_Vis_r in Hcontr as [t0 [[=] _]].
   Qed.
-
   Lemma wpi_wpi_opt_always_None {R R'} Φ (t : itree E R) :
     (WPi t @ H {{ const (|={∅,⊤}=> True) }}) -∗
     (wpi_opt H (ITree.map (const (@None R')) t) Φ).
@@ -379,57 +353,7 @@ Section wp_itree.
     - rewrite map_map. by apply eqit_map with (RR:=(=)).
   Qed.
 
-  Lemma wpi_update {R} Φ (t : itree E R) :
-    (|={∅}=> WPi t @ H {{ Φ }}) -∗
-    (WPi t @ H {{ Φ }}).
-  Proof.
-    iIntros "Hwp". rewrite /wpi wpi_opt_unfold. by iMod "Hwp".
-  Qed.
-
-  (* Monadic rules. *)
-
-  Lemma wpi_opt_bind {R R'} (t : itree E (option R)) (k : R → itree E (option R')) Φ :
-    wpi_opt H t (λ r, wpi_opt H (k r) Φ) -∗
-    wpi_opt H (ITree.bind t (λ r, match r with
-                                | None => Ret None
-                                | Some r => k r
-                                end)) Φ.
-  Proof.
-    iIntros "Hwp".
-    iLöb as "IH" forall (t Φ).
-    rewrite /wpi !wpi_opt_unfold.
-    iMod "Hwp" as "[[%Ht >_]|[[%r [%Hret Hwp]]|[[%t' [%Heq ?]]|(%A&%e&%k'&%Heq&Hwp)]]]".
-    - iLeft. iApply fupd_mask_intro; first done. iIntros "Hfupd". iFrame. iPureIntro.
-      rewrite Ht bind_ret_l //.
-    - rewrite wpi_opt_unfold.
-      iMod "Hwp" as "[[%Ht >_]|[[%r' [%Hret' Hwp]]|[[%t' [% ?]]|(%A&%e&%k'&%&Hwp)]]]".
-      * iLeft. iApply fupd_mask_intro; first done. iIntros "Hfupd". iFrame. iPureIntro.
-        rewrite Hret bind_ret_l //.
-      * iModIntro. iRight. iLeft. iExists _. iSplit; [iPureIntro|done]. by rewrite Hret bind_ret_l.
-      * iModIntro. iRight. iRight. iLeft. iExists _. iSplit; [iPureIntro|done].
-        by rewrite Hret bind_ret_l.
-      * iModIntro. iRight. iRight. iRight. iExists _,_,_. iSplit; [iPureIntro|done].
-        by rewrite Hret bind_ret_l.
-    - iModIntro. iRight. iRight. iLeft. iExists _. iSplit. { iPureIntro. by rewrite Heq bind_tau. }
-      iModIntro. by iApply "IH".
-    - iModIntro. iRight. iRight. iRight. iExists _, _, _. iSplit.
-      { iPureIntro. by rewrite Heq bind_vis. }
-      iApply bi_mono1_mono_l; [|iApply (bi_mono1_mono with "[] Hwp")].
-      * iIntros (Q) "Hwp". iApply bi_mono1_pers_mono; last done. iModIntro.
-        iIntros (a) "Hwp". iNext. iMod "Hwp". iModIntro.
-        by iApply safe_termination_independent_post.
-      * iIntros (a) "Hwp". iNext. by iApply "IH".
-  Qed.
-  Lemma wpi_bind {R T} (t : itree E T) (k : T → itree E R) Φ :
-    WPi t @ H {{ r, WPi (k r) @ H {{ Φ }} }} -∗
-    WPi (ITree.bind t k) @ H {{ Φ }}.
-  Proof.
-    rewrite /wpi.
-    iIntros "Hwp".
-    rewrite (_ : ITree.map Some (ITree.bind t k) ≅ _).
-    - by iApply wpi_opt_bind.
-    - rewrite bind_map /ITree.map bind_bind //.
-  Qed.
+  (* Stepping rules. *)
 
   Lemma wpi_ret {R} Φ (r : R):
     Φ r -∗
@@ -438,8 +362,6 @@ Section wp_itree.
     iIntros "HΦ". rewrite /wpi wpi_opt_unfold. iIntros "!>".
     iRight. iLeft. iExists _. iFrame. rewrite map_ret //.
   Qed.
-
-  (* Other basic cases. *)
 
   Lemma wpi_tau {R} Φ (t : itree E R):
     ▷ WPi t @ H {{ Φ }} -∗
@@ -451,22 +373,90 @@ Section wp_itree.
     - done.
   Qed.
 
-  Lemma wpi_vis {R} Φ A (e : E A) (k : A → itree E R):
-    H E A (subevent A e) (λ r, ▷ WPi k r @ H {{ Φ }}) (λ t, ▷ |={⊤, ∅}=> WPi t @ H {{ const (|={∅, ⊤}=> True) }}) -∗
+  Lemma wpi_vis' {R} Φ A (e : E A) (k : A → itree E R):
+    bi_mono1
+      (λ f,
+        bi_mono1_pers
+          (λ g, H E A (subevent A e) f g)
+          (λ t, ▷ |={⊤, ∅}=> WPi t @ H {{ const (|={∅, ⊤}=> True) }})
+      )
+      (λ r, ▷ WPi k r @ H {{ Φ }}) -∗
     WPi (Vis e k) @ H {{ Φ }}.
   Proof.
     iIntros "Hwp". rewrite /wpi !wpi_opt_unfold. iIntros "!>".
     iRight. iRight. iRight. iExists _, _, _. iSplit.
-    * iPureIntro. rewrite /ITree.map bind_vis //.
-    * iApply (bi_mono1_mono with "[] [Hwp]"); first shelve.
-      iApply (bi_mono1_intro with "[] [Hwp]"). { iIntros (a) "Hgoal". done. }
-      iApply (bi_mono1_pers_mono with "[] [Hwp]"); first shelve.
-      iApply (bi_mono1_pers_intro with "[] [Hwp]"). { iModIntro. iIntros (a) "Hgoal". done. }
-      done.
-      Unshelve.
-      + by iIntros (a) "Hwp".
-      + iModIntro. iIntros (t) "Hwp". iNext. iMod "Hwp". iModIntro.
-        rewrite /ITree.map. by iApply wpi_wpi_opt_always_None.
+    - iPureIntro. rewrite /ITree.map bind_vis //.
+    - iApply (bi_mono1_mono_l with "[] [Hwp]"); last done.
+      iIntros (Q) "Hwp".
+      iApply (bi_mono1_pers_mono with "[] [Hwp]"); last done.
+      iModIntro. iIntros (t) "Hwp". by iApply wpi_wpi_opt_always_None.
+  Qed.
+  Lemma wpi_vis {R} Φ A (e : E A) (k : A → itree E R):
+    H E A (subevent A e) (λ r, ▷ WPi k r @ H {{ Φ }}) (λ t, ▷ |={⊤, ∅}=> WPi t @ H {{ const (|={∅, ⊤}=> True) }}) -∗
+    WPi (Vis e k) @ H {{ Φ }}.
+  Proof.
+    iIntros "Hwp".
+    iApply wpi_vis'.
+    iApply bi_mono1_intro0.
+    by iApply bi_mono1_pers_intro0.
+  Qed.
+
+  (* Structural rules. *)
+
+  Lemma wpi_update {R} Φ (t : itree E R) :
+    (|={∅}=> WPi t @ H {{ Φ }}) -∗
+    (WPi t @ H {{ Φ }}).
+  Proof.
+    iIntros "Hwp". rewrite /wpi wpi_opt_unfold. by iMod "Hwp".
+  Qed.
+
+  Lemma wpi_opt_wand {R} (t : itree E (option R)) Φ Ψ:
+    (∀ r, Φ r -∗ Ψ r) -∗
+    wpi_opt H t Φ -∗
+    wpi_opt H t Ψ.
+  Proof.
+    iIntros "Hwand Hwp".
+    iLöb as "IH" forall (t).
+    rewrite /wpi !wpi_opt_unfold.
+    iMod "Hwp" as "[[%Ht >_]|[[%r [Hret Hr]]|[[%t' [% ?]]|(%A&%e&%k&%&Hwp)]]]".
+    - iLeft. iApply fupd_mask_intro; first done. iIntros "Hfupd". by iSplit.
+    - iModIntro. iRight. iLeft. iExists _. iSplit; [done|]. by iApply "Hwand".
+    - iModIntro. iRight. iRight. iLeft. iExists _. iSplit; [done|]. iModIntro.
+      by iApply ("IH" with "Hwand").
+    - iModIntro. iRight. iRight. iRight. iExists A, e, k. iSplit; first done.
+      iApply (bi_mono1_mono with "[Hwand] Hwp").
+      iIntros (a) "Hwp". iNext. by iApply ("IH" with "Hwand").
+  Qed.
+  Lemma wpi_wand {R} (t : itree E R) Φ Ψ:
+    (∀ r, Φ r -∗ Ψ r) -∗
+    WPi t @ H {{ Φ }} -∗
+    WPi t @ H {{ Ψ }}.
+  Proof.
+    rewrite /wpi. iApply wpi_opt_wand.
+  Qed.
+
+  Lemma wpi_bind {R T} (t : itree E T) (k : T → itree E R) Φ :
+    WPi t @ H {{ r, WPi (k r) @ H {{ Φ }} }} -∗
+    WPi (ITree.bind t k) @ H {{ Φ }}.
+  Proof.
+    iIntros "Hwp".
+    iLöb as "IH" forall (t Φ).
+    iApply wpi_update. rewrite /wpi wpi_opt_unfold.
+    iMod "Hwp" as "[[%Ht Hfupd]|[[%r [%Hret Hwp]]|[[%t' [%Heq Hwp]]|(%A&%e&%k'&%Heq&Hwp)]]]".
+    - iModIntro. apply eqit_inv_bind_ret in Ht as [r [_ [=]%eqitree_inv_Ret]].
+    - iModIntro. apply eqit_inv_bind_ret in Hret as [r' [-> [=->]%eqitree_inv_Ret]].
+      by rewrite bind_ret_l.
+    - apply eqitree_inv_bind_tau in Heq as [[t'' [-> Hbind]] | [t'' [_ Hcontr]]].
+      * rewrite bind_tau. iApply wpi_tau. rewrite -Hbind. iModIntro. iNext. by iApply "IH".
+      * apply eqitree_inv_Tau_r in Hcontr as [t0 [[=] _]].
+    - apply eqitree_inv_bind_vis in Heq as [[t'' [Ht Hbind]] | [t'' [_ Hcontr]]].
+      * rewrite Ht bind_vis. iApply wpi_vis'. iModIntro.
+        iApply bi_mono1_mono_l; [|iApply (bi_mono1_mono with "[] Hwp")].
+        + iIntros (Q) "Hwp". iApply bi_mono1_pers_mono; last done. iModIntro.
+          iIntros (t') "Hwp". iNext. iMod "Hwp". iModIntro.
+          rewrite /wpi wpi_opt_always_None map_map //.
+        + iIntros (a) "Hwp". iNext. iApply "IH". rewrite -Hbind //.
+      * apply eqitree_inv_Vis_r in Hcontr as [t0 [[=] _]].
   Qed.
 
   (* Derived rules. *)
@@ -523,13 +513,13 @@ Section translation.
     iMod "Hwp" as "[[%Ht Hfupd]|[[%r [%Hret Hwp]]|[[%t' [%Heq Hwp]]|(%A&%e&%k'&%Heq&Hwp)]]]";
     iModIntro.
     - apply eqit_inv_bind_ret in Ht as [_ [_ [=]%eqitree_inv_Ret]].
-    - apply eqit_inv_bind_ret in Hret as [r' [-> [=Heq]%eqitree_inv_Ret]].
-      rewrite interp_ret Heq. by iApply wpi_ret.
-    - apply eqitree_inv_bind_tau in Heq as [[t'' [Ht Hbind]] | [t'' [_ Hcontr]]].
-      * rewrite Ht interp_tau -Hbind. iApply wpi_tau. iNext. by iApply "IH".
+    - apply eqit_inv_bind_ret in Hret as [r' [-> [=->]%eqitree_inv_Ret]].
+      rewrite interp_ret. by iApply wpi_ret.
+    - apply eqitree_inv_bind_tau in Heq as [[t'' [-> Hbind]] | [t'' [_ Hcontr]]].
+      * rewrite interp_tau -Hbind. iApply wpi_tau. iNext. by iApply "IH".
       * apply eqitree_inv_Tau_r in Hcontr as [t0 [[=] _]].
-    - apply eqitree_inv_bind_vis in Heq as [[t'' [Ht Hbind]] | [t'' [_ Hcontr]]].
-      * rewrite Ht interp_vis. iApply wpi_bind. iApply "HH".
+    - apply eqitree_inv_bind_vis in Heq as [[t'' [-> Hbind]] | [t'' [_ Hcontr]]].
+      * rewrite interp_vis. iApply wpi_bind. iApply "HH".
         iDestruct (bi_mono1_elim with "[] Hwp") as "Hwp".
         + iIntros (Q) "HQ Hwp". iDestruct (bi_mono1_pers_elim with "[] Hwp") as "Hwp".
           ++ iModIntro. iIntros (Q') "HQ'". iApply "Hmons". iApply "HQ'".
