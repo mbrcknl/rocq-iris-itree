@@ -100,10 +100,10 @@ Section bi_mono1_pers.
   Qed.
 
   Lemma bi_mono1_pers_elim P Q :
-    □ (∀ Q', (∀ x, Q' x -∗ Q x) -∗ P Q' -∗ P Q) -∗
+    (∀ Q', □ (∀ x, Q' x -∗ Q x) -∗ P Q' -∗ P Q) -∗
     bi_mono1_pers P Q -∗
     P Q.
-  Proof. iIntros "#HP [% [?#?]]". iApply ("HP" with "[$] [$]"). Qed.
+  Proof. iIntros "HP [% [?#?]]". iApply ("HP" with "[$] [$]"). Qed.
 
   Lemma bi_mono1_pers_intro P Q Q' :
     □ (∀ x, Q' x -∗ Q x) -∗
@@ -497,7 +497,7 @@ Section translation.
   sufficient conditions for when one implies the other. *)
   Lemma wp_translation {R} :
     □ (∀ A e Φ Φ' s, (∀ v, Φ v -∗ Φ' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ' s) -∗
-    □ (∀ A e Φ s s', (∀ v, s v -∗ s' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ s') -∗
+    □ (∀ A e Φ s s', □ (∀ v, s v -∗ s' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ s') -∗
     □ (∀ A (e : E1 A) ψ,
          H1 E1 A (subevent A e)
            (λ a, ▷ ψ a)
@@ -522,13 +522,13 @@ Section translation.
       * rewrite interp_vis. iApply wpi_bind. iApply "HH".
         iDestruct (bi_mono1_elim with "[] Hwp") as "Hwp".
         + iIntros (Q) "HQ Hwp". iDestruct (bi_mono1_pers_elim with "[] Hwp") as "Hwp".
-          ++ iModIntro. iIntros (Q') "HQ'". iApply "Hmons". iApply "HQ'".
+          ++ iIntros (Q') "#HQ'". iApply "Hmons". iApply "HQ'".
           ++ iApply bi_mono1_pers_intro0. by iApply ("HmonΦ" with "[HQ]").
         + iDestruct (bi_mono1_pers_elim with "[] Hwp") as "Hwp".
-          ++ iModIntro. iIntros (Q') "HQ'". iApply "Hmons". iApply "HQ'".
+          ++ iIntros (Q') "#HQ'". iApply "Hmons". iApply "HQ'".
           ++ iApply "HmonΦ"; last iApply "Hmons"; last done.
              +++ iIntros (a) "Hwp". iNext. iApply wpi_tau. iApply "IH". by rewrite -!Hbind.
-             +++ iIntros (t''') "Hwp". iNext. iMod "Hwp". iModIntro.
+             +++ iModIntro. iIntros (t''') "Hwp". iNext. iMod "Hwp". iModIntro.
                  iApply "IH". by rewrite wpi_opt_always_None map_map.
       * apply eqitree_inv_Vis_r in Hcontr as [t0 [[=] _]].
   Qed.
