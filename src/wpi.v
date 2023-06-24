@@ -495,7 +495,7 @@ Section translation.
   [E1] to [E2], then you may want to relate [WPI t @ H1 {{ Φ }}] to [WPI
   interp f t @ H1 {{ Φ }}] for itrees [t]. The following statement gives you
   sufficient conditions for when one implies the other. *)
-  Lemma wp_translation {R} :
+  Lemma wpi_translation {R} :
     □ (∀ A e Φ Φ' s, (∀ v, Φ v -∗ Φ' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ' s) -∗
     □ (∀ A e Φ s s', □ (∀ v, s v -∗ s' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ s') -∗
     □ (∀ A (e : E1 A) ψ,
