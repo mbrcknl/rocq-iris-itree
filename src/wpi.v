@@ -504,59 +504,6 @@ Section wp_itree.
   Qed.
 End wp_itree.
 
-Section translation.
-  Context {Σ : gFunctors} `{!invGS_gen HasNoLc Σ}.
-  Context `{!EventFixpoint EF1 E1} `{!EventFixpoint EF2 E2}.
-  Context {H1 : iHandler Σ EF1} {H2 : iHandler Σ EF2}.
-  Context {f : E1 ~> itree E2}.
-
-  (* Translation lemma. *)
-
-  (** The following lemma allow you to relate weakest preconditions across
-  [iHandler]s. Specifically, if you have a function [f] that interprets each
-  event [E1 A] as an [itree E2 A], that is, a way to "translate" from events
-  [E1] to [E2], then you may want to relate [WPI t @ H1 {{ Φ }}] to [WPI
-  interp f t @ H1 {{ Φ }}] for itrees [t]. The following statement gives you
-  sufficient conditions for when one implies the other. *)
-  Lemma wpi_translation_emp_mask {R} (t : itree E1 R) Φ :
-    □ (∀ A e Φ Φ' s,   (∀ v, Φ v -∗ Φ' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ' s ) -∗
-    □ (∀ A e Φ s s', □ (∀ v, s v -∗ s' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ  s') -∗
-    □ (∀ A (e : E1 A) ψ,
-         H1 E1 A (subevent A e)
-           (λ a, ▷ ψ a)
-           (λ t', ▷ |={⊤, ∅}=> WPi interp f t' @ H2 {{ λ _, |={∅, ⊤}=> True }}) -∗
-         WPi (f A e) @ H2 {{ v, ψ v }}
-      ) -∗
-    WPi t @ H1 {{ Φ }} -∗ WPi (interp f t) @ H2 {{ Φ }}.
-  Proof.
-    iIntros "#HmonΦ #Hmons #HH". iLöb as "IH" forall (R t Φ).
-    iIntros "Hwp".
-    rewrite /wpi wpi_opt_unfold.
-    iApply wpi_update_emp_mask.
-    iMod "Hwp" as "[[%Ht Hfupd]|[[%r [%Hret Hwp]]|[[%t' [%Heq Hwp]]|(%A&%e&%k'&%Heq&Hwp)]]]";
-    iModIntro.
-    - apply eqit_inv_bind_ret in Ht as [_ [_ [=]%eqitree_inv_Ret]].
-    - apply eqit_inv_bind_ret in Hret as [r' [-> [=->]%eqitree_inv_Ret]].
-      rewrite interp_ret. by iApply wpi_ret_emp_mask.
-    - apply eqitree_inv_bind_tau in Heq as [[t'' [-> Hbind]] | [t'' [_ Hcontr]]].
-      * rewrite interp_tau -Hbind. iApply wpi_tau_emp_mask. iNext. by iApply "IH".
-      * apply eqitree_inv_Tau_r in Hcontr as [t0 [[=] _]].
-    - apply eqitree_inv_bind_vis in Heq as [[t'' [-> Hbind]] | [t'' [_ Hcontr]]].
-      * rewrite interp_vis. iApply wpi_bind_emp_mask. iApply "HH".
-        iDestruct (bi_mono1_elim with "[] Hwp") as "Hwp".
-        + iIntros (Q) "HQ Hwp". iDestruct (bi_mono1_pers_elim with "[] Hwp") as "Hwp".
-          ++ iIntros (Q') "#HQ'". iApply "Hmons". iApply "HQ'".
-          ++ iApply bi_mono1_pers_intro0. by iApply ("HmonΦ" with "[HQ]").
-        + iDestruct (bi_mono1_pers_elim with "[] Hwp") as "Hwp".
-          ++ iIntros (Q') "#HQ'". iApply "Hmons". iApply "HQ'".
-          ++ iApply "HmonΦ"; last iApply "Hmons"; last done.
-             +++ iIntros (a) "Hwp". iNext. iApply wpi_tau_emp_mask. iApply "IH". by rewrite -!Hbind.
-             +++ iModIntro. iIntros (t''') "Hwp". iNext. iMod "Hwp". iModIntro.
-                 iApply "IH". by rewrite wpi_opt_always_None map_map.
-      * apply eqitree_inv_Vis_r in Hcontr as [t0 [[=] _]].
-  Qed.
-End translation.
-
 Notation "'WPi' t @ H ; M {{ v , Q } }" := (|={M, ∅}=> wpi H t%itree (λ v, |={∅, M}=> Q))%I
   (at level 20, t, Q at level 200,
    format "'[hv' 'WPi'  t  '/' @  '[' H ; M ']'  '/' {{  '[' v ,  '/' Q  ']' } } ']'") : bi_scope.
@@ -702,14 +649,57 @@ Section wp_itree_mask.
   Qed.
 End wp_itree_mask.
 
-(* TODO: Why is unification failing?
-Section translation_mask.
+Section translation.
   Context {Σ : gFunctors} `{!invGS_gen HasNoLc Σ}.
   Context `{!EventFixpoint EF1 E1} `{!EventFixpoint EF2 E2}.
   Context {H1 : iHandler Σ EF1} {H2 : iHandler Σ EF2}.
   Context {f : E1 ~> itree E2}.
 
   (* Translation lemma. *)
+
+  (** The following lemma allow you to relate weakest preconditions across
+  [iHandler]s. Specifically, if you have a function [f] that interprets each
+  event [E1 A] as an [itree E2 A], that is, a way to "translate" from events
+  [E1] to [E2], then you may want to relate [WPI t @ H1 {{ Φ }}] to [WPI
+  interp f t @ H1 {{ Φ }}] for itrees [t]. The following statement gives you
+  sufficient conditions for when one implies the other. *)
+  Lemma wpi_translation_emp_mask {R} (t : itree E1 R) Φ :
+    □ (∀ A e Φ Φ' s,   (∀ v, Φ v -∗ Φ' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ' s ) -∗
+    □ (∀ A e Φ s s', □ (∀ v, s v -∗ s' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ  s') -∗
+    □ (∀ A (e : E1 A) ψ,
+         H1 E1 A (subevent A e)
+           (λ a, ▷ ψ a)
+           (λ t', ▷ |={⊤, ∅}=> WPi interp f t' @ H2 {{ λ _, |={∅, ⊤}=> True }}) -∗
+         WPi (f A e) @ H2 {{ v, ψ v }}
+      ) -∗
+    WPi t @ H1 {{ Φ }} -∗ WPi (interp f t) @ H2 {{ Φ }}.
+  Proof.
+    iIntros "#HmonΦ #Hmons #HH". iLöb as "IH" forall (R t Φ).
+    iIntros "Hwp".
+    rewrite /wpi wpi_opt_unfold.
+    iApply wpi_update_emp_mask.
+    iMod "Hwp" as "[[%Ht Hfupd]|[[%r [%Hret Hwp]]|[[%t' [%Heq Hwp]]|(%A&%e&%k'&%Heq&Hwp)]]]";
+    iModIntro.
+    - apply eqit_inv_bind_ret in Ht as [_ [_ [=]%eqitree_inv_Ret]].
+    - apply eqit_inv_bind_ret in Hret as [r' [-> [=->]%eqitree_inv_Ret]].
+      rewrite interp_ret. by iApply wpi_ret_emp_mask.
+    - apply eqitree_inv_bind_tau in Heq as [[t'' [-> Hbind]] | [t'' [_ Hcontr]]].
+      * rewrite interp_tau -Hbind. iApply wpi_tau_emp_mask. iNext. by iApply "IH".
+      * apply eqitree_inv_Tau_r in Hcontr as [t0 [[=] _]].
+    - apply eqitree_inv_bind_vis in Heq as [[t'' [-> Hbind]] | [t'' [_ Hcontr]]].
+      * rewrite interp_vis. iApply wpi_bind_emp_mask. iApply "HH".
+        iDestruct (bi_mono1_elim with "[] Hwp") as "Hwp".
+        + iIntros (Q) "HQ Hwp". iDestruct (bi_mono1_pers_elim with "[] Hwp") as "Hwp".
+          ++ iIntros (Q') "#HQ'". iApply "Hmons". iApply "HQ'".
+          ++ iApply bi_mono1_pers_intro0. by iApply ("HmonΦ" with "[HQ]").
+        + iDestruct (bi_mono1_pers_elim with "[] Hwp") as "Hwp".
+          ++ iIntros (Q') "#HQ'". iApply "Hmons". iApply "HQ'".
+          ++ iApply "HmonΦ"; last iApply "Hmons"; last done.
+             +++ iIntros (a) "Hwp". iNext. iApply wpi_tau_emp_mask. iApply "IH". by rewrite -!Hbind.
+             +++ iModIntro. iIntros (t''') "Hwp". iNext. iMod "Hwp". iModIntro.
+                 iApply "IH". by rewrite wpi_opt_always_None map_map.
+      * apply eqitree_inv_Vis_r in Hcontr as [t0 [[=] _]].
+  Qed.
 
   Lemma wpi_translation {R} (t : itree E1 R) M Φ :
     □ (∀ A e Φ Φ' s,   (∀ v, Φ v -∗ Φ' v) -∗ H1 E1 A e Φ s -∗ H1 E1 A e Φ' s ) -∗
@@ -722,9 +712,10 @@ Section translation_mask.
       ) -∗
     WPi t @ H1; M {{ Φ }} -∗ WPi (interp f t) @ H2; M {{ Φ }}.
   Proof.
-    iIntros "#HmonΦ #Hmons #HH Hwp".
+    iIntros "#HmonΦ #Hmons #Hwand Hwp".
     iMod "Hwp". iModIntro.
-    iApply wpi_translation_emp_mask.
+    iApply wpi_translation_emp_mask; try done.
+    iModIntro. iIntros (A e Ψ) "HH". iApply wpi_update_post_emp_mask.
+    iApply wpi_update_emp_mask. by iApply "Hwand".
   Qed.
-End translation_mask.
- *)
+End translation.
