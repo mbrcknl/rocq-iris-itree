@@ -411,6 +411,29 @@ Section wp_itree.
     iIntros "Hwp". rewrite /wpi wpi_opt_unfold. by iMod "Hwp".
   Qed.
 
+  Lemma wpi_opt_update_post_emp_mask {R} Φ (t : itree E (option R)) :
+    wpi_opt H t (λ v, |={∅}=> Φ v) -∗
+    wpi_opt H t Φ.
+  Proof.
+    iIntros "Hwp". rewrite /wpi wpi_opt_unfold.
+    iLöb as "IH" forall (t).
+    rewrite /wpi !wpi_opt_unfold.
+    iMod "Hwp" as "[[%Ht >_]|[[%r [Hret >Hr]]|[[%t' [% ?]]|(%A&%e&%k&%&Hwp)]]]".
+    - iLeft. iApply fupd_mask_intro; first done. iIntros "Hfupd". by iSplit.
+    - iModIntro. iRight. iLeft. iExists _. by iSplit.
+    - iModIntro. iRight. iRight. iLeft. iExists _. iSplit; [done|]. iModIntro.
+      iApply "IH". rewrite -wpi_opt_unfold //.
+    - iModIntro. iRight. iRight. iRight. iExists A, e, k. iSplit; first done.
+      iApply (bi_mono1_mono with "[] Hwp").
+      iIntros (a) "Hwp". iNext. iApply "IH". rewrite -wpi_opt_unfold //.
+  Qed.
+  Lemma wpi_update_post_emp_mask {R} Φ (t : itree E R) :
+    (WPi t @ H {{ v, |={∅}=> Φ v }}) -∗
+    (WPi t @ H {{ Φ }}).
+  Proof.
+    iIntros "Hwp". by iApply wpi_opt_update_post_emp_mask.
+  Qed.
+
   Lemma wpi_opt_wand {R} (t : itree E (option R)) Φ Ψ:
     (∀ r, Φ r -∗ Ψ r) -∗
     wpi_opt H t Φ -∗
@@ -544,39 +567,6 @@ Section wp_itree_mask.
   Context {Σ : gFunctors} `{!EventFixpoint EF E} `{!invGS_gen HasNoLc Σ}.
   Context {H : iHandler Σ EF}.
 
-  (* Stepping rules. *)
-
-  Lemma wpi_ret {R} M Φ (r : R):
-    Φ r -∗
-    WPi Ret r @ H; M {{ Φ }}.
-  Proof.
-    iIntros "HΦ". iApply wpi_ret_emp_mask. iFrame. iApply fupd_mask_subseteq. apply empty_subseteq.
-  Qed.
-
-  Lemma wpi_tau {R} M Φ (t : itree E R) :
-    ▷ WPi t @ H; M {{ Φ }} -∗
-    WPi Tau t @ H; M {{ Φ }}.
-  Proof.
-    iIntros "Hwp". iApply wpi_tau_emp_mask.
-    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iNext. iDestruct (fupd_frame_r ∅ M with "[Hfupd Hwp]") as "Hwp".
-    - iFrame. iApply "Hwp".
-    - iApply wpi_update_emp_mask. by iMod "Hwp" as "[_ Hwp]".
-  Qed.
-
-  Lemma wpi_vis {R} M Φ A (e : E A) (k : A → itree E R):
-    H E A (subevent A e) (λ r, ▷ WPi k r @ H {{ Φ }}) (λ t, ▷ WPi t @ H; ⊤ {{ const True }}) -∗
-    WPi (Vis e k) @ H; M {{ Φ }}.
-  Proof.
-    iIntros "HH". iApply wpi_vis'_emp_mask.
-    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iApply (bi_mono1_mono with "[Hfupd]").
-    * iIntros (a) "Hgoal". iApply (wpi_wand_emp_mask with "[Hfupd]").
-      + iMod "Hfupd". iIntros (r) "Hgoal". iModIntro. iExact "Hgoal".
-      + done.
-    * iApply bi_mono1_intro0. by iApply bi_mono1_pers_intro0.
-  Qed.
-
   (* Structural rules. *)
 
   Lemma wpi_update {R} M Φ (t : itree E R) :
@@ -605,6 +595,92 @@ Section wp_itree_mask.
     Unshelve. iIntros (r) "Hwp". iApply wpi_update_emp_mask. by iMod "Hwp".
   Qed.
 
+  (* Manipulating masks and invariants. *)
+
+  (* TODO: Rename from "reduce" to something else. *)
+  Lemma wpi_reduce_mask {R} M' M (Φ : R → iProp Σ) t :
+    (|={M, M'}=> WPi t @ H; M' {{ v, |={M', M}=> Φ v }}) -∗
+    WPi t @ H; M {{ Φ }}.
+  Proof.
+    iIntros "Hwp". iMod "Hwp". iMod "Hwp". iModIntro.
+    iApply wpi_wand_emp_mask; last done.
+    iIntros (r) "Hgoal". iMod "Hgoal". by iMod "Hgoal".
+  Qed.
+
+  Lemma wpi_clear_mask {R} M (Φ : R → iProp Σ) t :
+    (|={M, ∅}=> WPi t @ H; ∅ {{ v, |={∅, M}=> Φ v }}) ⊣⊢
+    WPi t @ H; M {{ Φ }}.
+  Proof.
+    iSplit.
+    - iIntros "Hwp". by iApply wpi_reduce_mask.
+    - iIntros "Hwp". iMod "Hwp". iModIntro. iApply wpi_wand_emp_mask; last done.
+      by iIntros (r) "HΦ".
+  Qed.
+
+  Lemma wpi_mask_mono {R} M M' (Φ : R → iProp Σ) t :
+    M ⊆ M' →
+    WPi t @ H; M {{ Φ }} -∗
+    WPi t @ H; M' {{ Φ }}.
+  Proof.
+    iIntros (Hsubset) "Hwp". iApply (wpi_reduce_mask M).
+    iApply fupd_mask_intro; first done. iIntros "Hfupd".
+    iApply (wpi_wand with "[Hfupd]"); last done.
+    iIntros (r) "Hgoal". iMod "Hfupd". iModIntro. iApply "Hgoal".
+  Qed.
+
+  (* TODO: Make this rule derived. *)
+  Lemma wpi_open_invariant {R} N M (Φ : R → iProp Σ) t P :
+    ↑N ⊆ M →
+    (▷ P -∗ WPi t @ H; M ∖ ↑N {{ v, ▷ P ∗ Φ v }}) -∗
+    own_inv N P -∗ WPi t @ H; M {{ Φ }}.
+  Proof.
+    iIntros (Hsubset) "Hwp Hinv".
+    iMod (own_inv_acc _ with "Hinv") as "[HP Hclose]"; first done.
+    iSpecialize ("Hwp" with "HP").
+    iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp]"); last done.
+    iIntros (r) "HP". iMod "HP" as "[HP HΦ]". by iMod ("Hclose" with "HP").
+  Qed.
+
+  (* Stepping rules. *)
+
+  Lemma wpi_ret {R} M Φ (r : R):
+    Φ r -∗
+    WPi Ret r @ H; M {{ Φ }}.
+  Proof.
+    iIntros "HΦ". iApply wpi_ret_emp_mask. iFrame. iApply fupd_mask_subseteq. apply empty_subseteq.
+  Qed.
+
+  Lemma wpi_tau {R} M Φ (t : itree E R) :
+    ▷ WPi t @ H; M {{ Φ }} -∗
+    WPi Tau t @ H; M {{ Φ }}.
+  Proof.
+    iIntros "Hwp". iApply wpi_tau_emp_mask.
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iNext. iDestruct (fupd_frame_r ∅ M with "[Hfupd Hwp]") as "Hwp".
+    - iFrame. iApply "Hwp".
+    - iApply wpi_update_emp_mask. by iMod "Hwp" as "[_ Hwp]".
+  Qed.
+
+  Lemma wpi_vis {R} M Φ A (e : EF E A) (k : A → itree E R):
+    (|={M, ∅}=> H E A e (λ r, ▷ WPi k r @ H; ∅ {{ v, |={∅, M}=> Φ v }}) (λ t, ▷ WPi t @ H; ⊤ {{ const True }})) -∗
+    WPi (visF e k) @ H; M {{ Φ }}.
+  Proof.
+    iIntros "HH". rewrite -wpi_clear_mask. iMod "HH". iModIntro. iApply wpi_vis'_emp_mask.
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iApply (bi_mono1_mono with "[Hfupd]").
+    - iIntros (a) "Hgoal". iApply (wpi_wand_emp_mask with "[Hfupd]").
+      + iMod "Hfupd". iIntros (r) "Hgoal". iModIntro. iExact "Hgoal".
+      + done.
+    - rewrite /subevent /resum /subeventF_subevent /incl /subeventF_id /subevent_fixpoint rew_compose eq_trans_sym_inv_l.
+      simpl (H E A _).
+      iApply bi_mono1_intro; last iApply bi_mono1_pers_intro; last done.
+      * iIntros (a) "Hwp". iNext. iApply wpi_update_emp_mask. iMod "Hwp". iModIntro.
+        iApply wpi_update_post_emp_mask. iApply wpi_wand_emp_mask; last done.
+      by iIntros (r) "HΦ".
+      * iModIntro. iIntros (t) "Hwp". iNext. iApply (wpi_reduce_mask ⊤). iModIntro.
+        iApply wpi_wand; last done. by iIntros (r) "_".
+  Qed.
+
   (* Derived rules. *)
 
   Lemma wpi_frame_l {R} M Φ (t : itree E R) (P : iProp Σ) :
@@ -623,47 +699,6 @@ Section wp_itree_mask.
     iIntros "[Hwp HP]".
     iApply (wpi_wand with "[HP]"); last exact.
     eauto with iFrame.
-  Qed.
-
-  (* Manipulating masks and invariants. *)
-
-  Lemma wpi_reduce_mask {R} M' M (Φ : R → iProp Σ) t :
-    (|={M, M'}=> WPi t @ H; M' {{ v, |={M', M}=> Φ v }}) -∗
-    WPi t @ H; M {{ Φ }}.
-  Proof.
-    iIntros "Hwp". iMod "Hwp". iMod "Hwp". iModIntro.
-    iApply wpi_wand_emp_mask; last done.
-    iIntros (r) "Hgoal". iMod "Hgoal". by iMod "Hgoal".
-  Qed.
-
-  Lemma wpi_clear_mask {R} M (Φ : R → iProp Σ) t :
-    (|={M, ∅}=> WPi t @ H; ∅ {{ v, |={∅, M}=> Φ v }}) -∗
-    WPi t @ H; M {{ Φ }}.
-  Proof.
-    iIntros "Hwp". by iApply wpi_reduce_mask.
-  Qed.
-
-  Lemma wpi_mask_mono {R} M M' (Φ : R → iProp Σ) t :
-    M ⊆ M' →
-    WPi t @ H; M {{ Φ }} -∗
-    WPi t @ H; M' {{ Φ }}.
-  Proof.
-    iIntros (Hsubset) "Hwp". iApply (wpi_reduce_mask M).
-    iApply fupd_mask_intro; first done. iIntros "Hfupd".
-    iApply (wpi_wand with "[Hfupd]"); last done.
-    iIntros (r) "Hgoal". iMod "Hfupd". iModIntro. iApply "Hgoal".
-  Qed.
-
-  Lemma wpi_open_invariant {R} N M (Φ : R → iProp Σ) t P :
-    ↑N ⊆ M →
-    (▷ P -∗ WPi t @ H; M ∖ ↑N {{ v, ▷ P ∗ Φ v }}) -∗
-    own_inv N P -∗ WPi t @ H; M {{ Φ }}.
-  Proof.
-    iIntros (Hsubset) "Hwp Hinv".
-    iMod (own_inv_acc _ with "Hinv") as "[HP Hclose]"; first done.
-    iSpecialize ("Hwp" with "HP").
-    iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp]"); last done.
-    iIntros (r) "HP". iMod "HP" as "[HP HΦ]". by iMod ("Hclose" with "HP").
   Qed.
 End wp_itree_mask.
 
