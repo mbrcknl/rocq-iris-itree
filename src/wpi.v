@@ -533,13 +533,13 @@ Section wp_itree_mask.
     - done.
   Qed.
 
-  Lemma wpi_bind {R T} (t : itree E T) (k : T → itree E R) Φ :
-    WPi t @ H; ∅ {{ r, WPi (k r) @ H; ∅ {{ Φ }} }} -∗
-    WPi (ITree.bind t k) @ H; ∅ {{ Φ }}.
+  Lemma wpi_bind {R A} (t : itree E A) (k : A → itree E R) M Φ :
+    WPi t @ H; M {{ r, WPi (k r) @ H; M {{ Φ }} }} -∗
+    WPi (ITree.bind t k) @ H; M {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_bind_emp_mask. iModIntro. iApply wpi_wand_emp_mask; first shelve.
-    iApply wpi_update_emp_mask. iMod "Hwp". by iModIntro.
-    Unshelve. iIntros (r) "Hwp". iApply wpi_update_emp_mask. by iMod "Hwp".
+    iIntros "Hwp". iApply wpi_bind_emp_mask. iMod "Hwp".
+    iApply wpi_wand_emp_mask; last done.
+    iIntros (a) "Hwp". iApply wpi_update_emp_mask. by iMod "Hwp".
   Qed.
 
   (* Manipulating masks and invariants. *)
