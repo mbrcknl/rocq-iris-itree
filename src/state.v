@@ -100,6 +100,10 @@ Section wp_state.
     iNext. rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp1".
   Qed.
 
+  (** Note here crucially that the mask has to be full for the rule to apply.
+  This means that you cannot step over an [EYield] if there are open
+  invariants. It amounts to the typical requirement of atomicity in the
+  invariant opening rule known from "normal Iris". *)
   Lemma wpi_yield {R} (k : unit → itree E R) (M : coPset) (Φ : R → iProp Σ) :
     (▷ WPi (k tt) @ H; ⊤ {{ Φ }}) -∗
     WPi (visF (EYield E) k) @ H; ⊤ {{ Φ }}.
