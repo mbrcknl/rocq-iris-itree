@@ -17,7 +17,7 @@ Record iHandler Σ (EF : (Type → Type) → Type → Type) := IHandler {
     → (A → iProp Σ)
       (* Conditions for spawning threads [λ a, ▷ WPi t @ H; ⊤ {{ True }}] *)
     → (itree preE unit → iProp Σ)
-      (* Condition [WPi Vis e k @ H; M {{ Φ }}] *)
+      (* Condition [WPi Vis e k @ H; ∅ {{ Φ }}] *)
     → iProp Σ;
 }.
 Arguments IHandler {_ _} _.
