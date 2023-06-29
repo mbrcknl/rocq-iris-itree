@@ -44,22 +44,24 @@ Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
 Definition state_ro {S} `{!stateInterp Σ S} (s : S) : iProp Σ :=
   ∀ s', state_interp s' -∗ state_interp s' ∗ ⌜ s = s' ⌝.
 
-(* Handlers for [stateE]. *)
-Definition get_stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} : iHandler Σ (stateEF S) :=
-  IHandlerT (λ preE e Φ s,
-      ⌜e = EGetState preE⌝ ∗ (∀ s, state_interp s -∗ (state_interp s ∗ Φ s)))%I.
-Definition set_stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateEF S) :=
-  IHandlerT (λ preE e Φ s, ∃ s',
-    ⌜e = ESetState preE s'⌝ ∗ (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt)))%I.
-(** At each [EYield], we re-assert all invariants as well as the [state_interp]. *)
-Definition yieldH {Σ} (S : Type) `{!stateHGS Σ S} `{!invGS_gen HasNoLc Σ} `{!stateInterp Σ S} : iHandler Σ (stateEF S) :=
-  IHandlerT (λ preE e Φ s, ⌜e = EYield preE⌝ ∗
-    |={∅, ⊤}=> |={⊤, ∅}=> Φ tt)%I.
-Definition forkH {Σ} (S : Type) `{!stateHGS Σ S} : iHandler Σ (stateEF S) :=
-  IHandlerT (λ preE e Φ s, ∃ t, ⌜e = EFork preE t⌝ ∗ Φ tt ∗ s t)%I.
-
-Definition stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateEF S) :=
-  get_stateH S ∪ set_stateH S ∪ yieldH S ∪ forkH S.
+Program Definition stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateEF S) :=
+  IHandler (λ preE A e,
+    match e with
+    | EGetState _    => λ Φ s, (∀ s, state_interp s -∗ (state_interp s ∗ Φ s))
+    | ESetState _ s' => λ Φ s, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt))
+    | EYield _       => λ Φ s, |={∅, ⊤}=> |={⊤, ∅}=> Φ tt
+    | EFork _ t      => λ Φ s, Φ tt ∗ s t
+    end
+  )%I _.
+Next Obligation.
+  iIntros (??????? e ????) "HΦwand Hswand". destruct e.
+  - iIntros "Hget" (?) "Hstate". iDestruct ("Hget" with "Hstate") as "[$ HΦ]". by iApply "HΦwand".
+  - iIntros "Hset" (?) "Hstate". iDestruct ("Hset" with "Hstate") as ">[$ HΦ]". by iApply "HΦwand".
+  - iIntros "HΦfupd". by iApply "HΦwand".
+  - iIntros "[HΦ Hs]". iSplitL "HΦ HΦwand".
+    * by iApply "HΦwand".
+    * by iApply "Hswand".
+Qed.
 
 Section wp_state.
   Context {S : Type} `{!stateHGS Σ S} `{!EventFixpoint EF E} `{!invGS_gen HasNoLc Σ}.
@@ -72,9 +74,8 @@ Section wp_state.
   Proof.
     iIntros "Hwp". iApply wpi_vis.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iApply is_inH.
-    do 3 iLeft. iExists eq_refl. iSplit; first done.
-    iIntros (s) "Hs". iDestruct ("Hwp" with "Hs") as "[Hs Hwp]". iFrame. iNext.
-    rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp".
+    rewrite /stateH. iIntros (s) "Hs". iDestruct ("Hwp" with "Hs") as "[Hs Hwp]". iFrame.
+    iNext. rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp".
   Qed.
 
   Lemma wpi_set {R} (s' : S) (k : unit → itree E R) (M : coPset) (Φ : R → iProp Σ) :
@@ -83,8 +84,7 @@ Section wp_state.
   Proof.
     iIntros "Hwp". iApply wpi_vis.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iApply is_inH.
-    do 2 iLeft. iRight. iExists eq_refl. iExists _.
-    iSplit; first done. iIntros (s) "Hs". simpl. iMod "Hfupd" as "_".
+    rewrite /stateH. iIntros (s) "Hs". simpl. iMod "Hfupd" as "_".
     iDestruct ("Hwp" with "Hs") as ">[Hs Hwp]". iFrame.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
     iNext. rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp".
@@ -95,8 +95,8 @@ Section wp_state.
     WPi (visF (EFork E t) k) @ H; M {{ Φ }}.
   Proof.
     iIntros "[Hwp1 Hwp2]". iApply wpi_vis.
-    iApply is_inH. iRight. iExists eq_refl, t. iFrame.
-    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iSplit; first done.
+    iApply is_inH. rewrite /stateH. iFrame.
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
     iNext. rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp1".
   Qed.
 
@@ -109,9 +109,7 @@ Section wp_state.
     WPi (visF (EYield E) k) @ H; ⊤ {{ Φ }}.
   Proof.
     iIntros "Hwp". iApply wpi_vis. iApply is_inH.
-    iLeft. iRight. iExists eq_refl.
-    iApply fupd_frame_l. iSplit; first done.
-    iApply fupd_mask_intro_subseteq; first done.
+    rewrite /stateH. simpl. iApply fupd_mask_intro_subseteq; first done.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
     iNext. rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp".
   Qed.
