@@ -3,4 +3,3 @@
 src/handler.v
 src/state.v
 src/wpi.v
-src/event.v
