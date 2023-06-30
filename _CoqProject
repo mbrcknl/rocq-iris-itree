@@ -2,4 +2,5 @@
 
 src/handler.v
 src/state.v
+src/threadpool.v
 src/wpi.v
