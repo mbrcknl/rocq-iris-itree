@@ -37,6 +37,6 @@ Proof.
     * by apply Hs.
 Qed.
 
-(** [inH H1 H2] means that, on events [E1], [H1] is stronger than [H2]. *)
+(** [inH H1 H2] means that, on events [E1], [H1] is equivalent to [H2]. *)
 Class inH {Σ E1 E2} `{f : E1 -< E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :=
-  is_inH : ∀ A e Φ s, H1 A e Φ (λ t, s (translate (λ A e', subevent A e') t)) -∗ H2 A (subevent A e) Φ s.
+  is_inH : ∀ A e Φ s, H1 A e Φ (λ t, s (translate (λ A e', subevent A e') t)) ⊣⊢ H2 A (subevent A e) Φ s.

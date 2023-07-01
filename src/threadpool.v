@@ -45,6 +45,12 @@ Next Obligation.
     * by iApply "Hswand".
 Qed.
 
+Global Instance threadpoolE_inH `{!invGS_gen HasNoLc Σ} (E : Type → Type) (H : iHandler Σ E) :
+  inH H (threadpoolH H).
+Proof.
+  by intros.
+Qed.
+
 Section wp_threadpool.
   Context `{!invGS_gen HasNoLc Σ} {E : Type → Type} {H : iHandler Σ E}.
 
@@ -73,6 +79,29 @@ Section wp_threadpool.
   Qed.
 End wp_threadpool.
 
+Lemma ret_observe_eqit {E R} (r : R) (t : itree E R) :
+  RetF r = observe t →
+  Ret r ≅ t.
+Proof.
+  intros Heq. rewrite /eq_itree /eqit. pfold. rewrite /eqit_ -Heq. by constructor.
+Qed.
+
+Lemma tau_observe_eqit {E R} (t t' : itree E R) :
+  TauF t' = observe t →
+  Tau t' ≅ t.
+Proof.
+  intros Heq. rewrite /eq_itree /eqit. pfold. rewrite /eqit_ -Heq. constructor.
+  rewrite /upaco2 /bot2. left. by apply Reflexive_eqit.
+Qed.
+
+Lemma vis_observe_eqit {E A R} (e : E A) (k : A → itree E R) (t : itree E R) :
+  VisF e k = observe t →
+  Vis e k ≅ t.
+Proof.
+  intros Heq. rewrite /eq_itree /eqit. pfold. rewrite /eqit_ -Heq. constructor.
+  rewrite /upaco2 /bot2. left. by apply Reflexive_eqit.
+Qed.
+
 Section interleaving.
   Context `{!invGS_gen HasNoLc Σ} {E : Type → Type} {H : iHandler Σ E}.
 
@@ -89,13 +118,14 @@ Section interleaving.
     interleaves (delete new_current tp) (nth new_current tp (Ret tt)) interleaving' →
     interleavesF interleaves tp (RetF tt) (TauF interleaving')
   | Steps current' tp interleaving' :
+    interleaves tp current' interleaving' →
     interleavesF interleaves tp (TauF current') (TauF interleaving')
   | Emits tp A e k k' :
     (∀ a, interleaves tp (k' a) (k a)) →
     interleavesF interleaves tp (VisF (EEmit E A e) k') (VisF e k)
   | Yields tp k new_current interleaving' :
     new_current < length tp →
-    interleaves (cons (k tt) (delete new_current tp)) (nth new_current tp (Ret tt)) interleaving' →
+    interleaves (cons (Tau (k tt)) (delete new_current tp)) (nth new_current tp (Ret tt)) interleaving' →
     interleavesF interleaves tp (VisF EYield k) (TauF interleaving')
   | Forks tp t k interleaving' :
     interleaves (cons t tp) (k tt) interleaving' →
@@ -128,21 +158,90 @@ Section interleaving.
     list (itree (threadpoolE E) unit) -> itree (threadpoolE E) unit -> itree E unit -> Prop :=
     paco3 interleaves_ bot3.
 
-  Theorem interleaving
+  Lemma big_sepL_delete' A (Φ : A → iProp Σ) l i x :
+    l !! i = Some x →
+    ([∗ list] y ∈ l, Φ y) ⊣⊢
+    Φ x ∗ [∗ list] y ∈ (delete i l), Φ y.
+  Proof.
+    intros Hidx. rewrite -(take_drop_middle l i x) // !big_sepL_app.
+    rewrite assoc -!(comm _ (Φ _)) -assoc -big_sepL_app. do 2 f_equiv.
+    rewrite -delete_take_drop. f_equiv. rewrite take_drop_middle //.
+  Qed.
+
+  Theorem wpi_interleaving'
     (tp : list (itree (threadpoolE E) unit))
     (current : itree (threadpoolE E) unit)
     (interleaving : itree E unit) :
     interleaves tp current interleaving →
     ([∗ list] thread ∈ tp, WPi thread @ threadpoolH H; ⊤ {{ _, True }}) -∗
     WPi current @ threadpoolH H; ∅ {{ _, |={∅, ⊤}=> True }} -∗
-    WPi interleaving @ H; ⊤ {{ _, True }}.
+    WPi interleaving @ H; ∅ {{ _, |={∅, ⊤}=> True }}.
   Proof.
     iIntros "%Hinter Htp Hcurrent".
-    punfold Hinter. induction Hinter.
-  Admitted.
-
-  Corollary interleaving_simple (concurrent : itree (threadpoolE E) unit) (interleaving : itree E unit) :
+    iLöb as "IH" forall (tp current interleaving Hinter). punfold Hinter.
+    inversion Hinter as [Heqtp Heqcurrent Heqinterleaving|tp' new_current interleaving' Hlen Hinter' Heqtp Heqcurrent Heqinterleaving|current' tp' interleaving' Hinter' Heqtp Heqcurrent Heqinterleaving|tp' A e k k' Hinter' Heqtp Heqcurrent Heqinterleaving|tp' k new_current interleaving' Hlen Hinter' Heqtp Heqcurrent Heqinterleaving|tp' t k interleaving' Hinter' Heqtp Heqcurrent Heqinterleaving].
+    - apply ret_observe_eqit in Heqcurrent as <-. apply ret_observe_eqit in Heqinterleaving as <-.
+      by rewrite -!wpi_ret'.
+    - apply ret_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+      iApply wpi_tau. iNext.
+      destruct (lookup_lt_is_Some_2 tp new_current Hlen) as [new_current' Hnew_current_lookup].
+      iDestruct (big_sepL_delete' _ _ _ new_current with "Htp") as "[Hcurrent' Htp']"; first done.
+      unfold bot3, upaco3 in Hinter'. destruct Hinter' as [Hinter'|]; last contradiction.
+      iApply ("IH" with "[] [Htp']").
+      * done.
+      * done.
+      * rewrite -wpi_ret'. iMod "Hcurrent". iMod "Hcurrent".
+        rewrite nth_lookup Hnew_current_lookup. simpl.
+        iDestruct (wpi_clear_mask with "Hcurrent'") as "Hcurrent'". by do 2 iMod "Hcurrent'".
+    - apply tau_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+      rewrite -!wpi_tau'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
+      iModIntro. iNext. iMod "Hfupd".
+      iEval (rewrite wpi_update_post). iApply ("IH" with "[] [Htp]").
+      * unfold bot3, upaco3 in Hinter'. by destruct Hinter'.
+      * done.
+      * rewrite !wpi_update_post //.
+    - apply vis_observe_eqit in Heqcurrent as <-. apply vis_observe_eqit in Heqinterleaving as <-.
+      rewrite -!wpi_vis'. simpl. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
+      iApply (mono with "[Hfupd Htp] [] [Hcurrent]"); last done.
+      * iIntros (a) "Hwp". iNext. iMod "Hfupd".
+        iEval (rewrite wpi_update_post). iApply ("IH" with "[] Htp").
+        + unfold bot3, upaco3 in Hinter'. by destruct (Hinter' a).
+        + rewrite wpi_update_post //.
+      * iModIntro. iIntros (t) "Hwp". iNext. by iApply wpi_inH.
+    - apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+      iApply wpi_tau'. rewrite -wpi_vis'. simpl. do 2 iMod "Hcurrent".
+      rewrite wpi_update_post wpi_tau'.
+      destruct (lookup_lt_is_Some_2 tp new_current Hlen) as [new_current' Hnew_current_lookup].
+      iDestruct (big_sepL_delete' _ _ _ new_current with "Htp") as "[Hcurrent' Htp']"; first done.
+      iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iModIntro. iNext.
+      iApply wpi_update_post. iApply ("IH" with "[] [Hcurrent Htp']").
+      * unfold bot3, upaco3 in Hinter'. by destruct Hinter'.
+      * iApply big_sepL_cons.
+        iSplitL "Hcurrent".
+        + iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. by iMod "Hfupd".
+        + done.
+      * rewrite nth_lookup Hnew_current_lookup. simpl.
+        iDestruct (wpi_clear_mask with "Hcurrent'") as "Hcurrent'".
+        iApply wpi_update. by iMod "Hfupd".
+    - apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+      iApply wpi_tau'. rewrite -wpi_vis'. simpl. iMod "Hcurrent" as "[Hforked Hcurrent']".
+      iModIntro. iNext. iApply wpi_update_post. iApply ("IH" with "[] [Hcurrent' Htp]").
+      * unfold bot3, upaco3 in Hinter'. by destruct Hinter'.
+      * iApply big_sepL_cons. iFrame.
+      * rewrite wpi_update_post //.
+  Qed.
+  Corollary wpi_interleaving
+    (concurrent : itree (threadpoolE E) unit)
+    (interleaving : itree E unit) :
     interleaves [] concurrent interleaving →
     WPi concurrent @ threadpoolH H; ⊤ {{ _, True }} -∗
     WPi interleaving @ H; ⊤ {{ _, True }}.
+  Proof.
+    iIntros "%Hinter Hwp". iApply wpi_clear_mask.
+    iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iModIntro.
+    iApply (wpi_interleaving' []).
+    - done.
+    - by iApply big_sepL_nil.
+    - iDestruct (wpi_clear_mask with "Hwp") as "Hwp". iApply wpi_update. by iMod "Hfupd".
+  Qed.
 End interleaving.
