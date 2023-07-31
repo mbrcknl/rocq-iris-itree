@@ -19,17 +19,18 @@ CoInductive threadpoolE (E : Type → Type) : Type → Type :=
   (** Split the thread into two threads corresponding to the answers [true]
   and [false]. *)
   | EFork (t : itree (threadpoolE E) unit) : threadpoolE E unit.
+Arguments EEmit {_ _} _.
 Arguments EYield {_}.
 Arguments EFork {_} _.
 
 Global Instance E_threadpoolE (E : Type → Type) : Subevent E (threadpoolE E) :=
-  { resum := λ A e, EEmit _ A e }.
+  { resum := λ A e, EEmit e }.
 
 (** [iHandler] transformer for [threadpoolE]. *)
 Program Definition threadpoolH {Σ E} `{!invGS_gen HasNoLc Σ} (H : iHandler Σ E) : iHandler Σ (threadpoolE E) :=
   IHandler (λ A e,
     match e with
-    | EEmit _ _ e' => λ Φ s, H _ e' Φ (λ t, s (translate (EEmit _) t))
+    | EEmit e' => λ Φ s, H _ e' Φ (λ t, s (translate (@EEmit _) t))
     | EYield       => λ Φ s, |={∅, ⊤}=> |={⊤, ∅}=> Φ tt
     | EFork t      => λ Φ s, Φ tt ∗ s t
     end
@@ -132,7 +133,7 @@ Section interleaving.
     interleavesF interleaves tp (TauF current') (TauF interleaving')
   | Emits tp A e k k' :
     (∀ a, interleaves tp (k' a) (k a)) →
-    interleavesF interleaves tp (VisF (EEmit E A e) k') (VisF e k)
+    interleavesF interleaves tp (VisF (@EEmit E A e) k') (VisF e k)
   | Yields tp k new_current_tid new_current interleaving' :
     tp !! new_current_tid = Some new_current →
     interleaves (cons (Tau (k tt)) (delete new_current_tid tp)) new_current interleaving' →
