@@ -13,10 +13,11 @@ Record iHandler Σ (E : Type → Type) := IHandler {
       E A
       (* Continuation conditions [λ a, ▷ WPi k a @ H; ∅ {{ Φ }}] *)
     → (A → iProp Σ)
-      (* Conditions for spawning threads [λ a, ▷ WPi t @ H; ⊤ {{ True }}] *)
+      (* Conditions for spawning threads [λ t, ▷ WPi t @ H; ⊤ {{ True }}] *)
     → (itree E unit → iProp Σ)
       (* Condition [WPi Vis e k @ H; ∅ {{ Φ }}] *)
     → iProp Σ;
+    (* TODO: Rename (scope is global). *)
     mono : ∀ A e Φ Φ' s s',
         (∀ a, Φ a -∗ Φ' a) -∗
       □ (∀ t, s t -∗ s' t) -∗
