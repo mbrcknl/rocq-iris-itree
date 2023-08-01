@@ -134,9 +134,9 @@ Section interleaving.
     -> itree' (threadpoolE +' E) unit
     -> itree' E unit
     -> Prop :=
-  | Terminates :
+  | Terminate :
     interleavesF interleaves [] (RetF tt) (RetF tt)
-  | ThreadEnds tp new_current_tid new_current interleaving' :
+  | EndThread tp new_current_tid new_current interleaving' :
     tp !! new_current_tid = Some new_current →
     interleaves (delete new_current_tid tp) new_current interleaving' →
     interleavesF interleaves tp (RetF tt) (TauF interleaving')
@@ -144,14 +144,14 @@ Section interleaving.
     tp !! new_current_tid = Some new_current →
     interleaves (delete new_current_tid tp) new_current interleaving' →
     interleavesF interleaves tp (VisF (inl1 EKillThread) k) (TauF interleaving')
-  | Steps current' tp interleaving' :
+  | Step current' tp interleaving' :
     interleaves tp current' interleaving' →
     interleavesF interleaves tp (TauF current') (TauF interleaving')
-  | Yields tp k new_current_tid new_current interleaving' :
+  | Yield tp k new_current_tid new_current interleaving' :
     tp !! new_current_tid = Some new_current →
     interleaves (cons (Tau (k tt)) (delete new_current_tid tp)) new_current interleaving' →
     interleavesF interleaves tp (VisF (inl1 EYield) k) (TauF interleaving')
-  | Forks tp k interleaving' :
+  | Fork tp k interleaving' :
     interleaves (cons (k NewThread) tp) (k CurrentThread) interleaving' →
     interleavesF interleaves tp (VisF (inl1 EFork) k) (TauF interleaving').
   Hint Constructors interleavesF : iris_itree.
