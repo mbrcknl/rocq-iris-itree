@@ -40,8 +40,8 @@ Definition state_ro {S} `{!stateInterp Σ S} (s : S) : iProp Σ :=
 Program Definition stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateE S) :=
   IHandler (λ A e,
     match e with
-    | EGetState    => λ Φ s, (∀ s, state_interp s -∗ (state_interp s ∗ Φ s))
-    | ESetState s' => λ Φ s, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt))
+    | EGetState    => λ Φ _, (∀ s, state_interp s -∗ (state_interp s ∗ Φ s))
+    | ESetState s' => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt))
     end
   )%I _.
 Next Obligation.

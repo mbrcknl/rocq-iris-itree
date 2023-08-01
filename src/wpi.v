@@ -515,7 +515,7 @@ Section translation.
     iIntros (a) "Hwp". iApply wpi_update_post_emp_mask. by iApply wpi_update_emp_mask.
   Qed.
 
-  (* A special case of above translation lemma which has a nicer statement at the
+  (** A special case of above translation lemma which has a nicer statement at the
   expense of its weaker hypothesis typically not holding for events that spawn
   new threads. *)
   Lemma wpi_translation_seq {R} (t : itree E1 R) M Φ :

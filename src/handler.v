@@ -40,3 +40,34 @@ Qed.
 (** [inH H1 H2] means that, on events [E1], [H1] is equivalent to [H2]. *)
 Class inH {Σ E1 E2} `{f : E1 -< E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :=
   is_inH : ∀ A e Φ s, H1 A e Φ s ⊣⊢ H2 A (subevent A e) Φ s.
+
+(** An [iHandler] for sum events [E1 +' E2] delegating to respective [iHandler]s. *)
+Program Definition sumH {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2)
+  : iHandler Σ (E1 +' E2) :=
+  IHandler (λ A e,
+    match e with
+    | inl1 e1 => H1 A e1
+    | inr1 e2 => H2 A e2
+    end
+  ) _.
+Next Obligation.
+  iIntros (?????? e ????) "HΦwand #Hswand HH".
+  destruct e; by iApply (ihandler_mono with "HΦwand Hswand").
+Qed.
+Notation "H1 ⊕ H2" := (sumH H1 H2)
+  (at level 59, right associativity) : type_scope.
+
+Global Instance sumH_inH_l {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :
+  inH H1 (H1 ⊕ H2).
+Proof.
+  intros ????. iSplit.
+  - by iIntros "?".
+  - by iIntros "?".
+Qed.
+Global Instance sumH_inH_r {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :
+  inH H2 (H1 ⊕ H2).
+Proof.
+  intros ????. iSplit.
+  - by iIntros "?".
+  - by iIntros "?".
+Qed.
