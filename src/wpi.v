@@ -49,22 +49,21 @@ Section wp_itree.
   in addition to [itree E R] also [itree E unit], which is needed for e.g.
   spawning new threads. *)
   Definition wpiF (H : iHandler Σ E)
-    (wpi : discreteO (itree E (option R)) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ) :
-           discreteO (itree E (option R)) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ :=
+    (wpi : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ) :
+           discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ :=
     λ t Φ,
       (|={∅}=>
         match observe t with
         (* Used to terminate forked threads. *)
-        | RetF None     => |={∅, ⊤}=> True
-        | RetF (Some r) => Φ r
-        | TauF t'       => ▷ wpi t' Φ
+        | RetF r  => Φ r
+        | TauF t' => ▷ wpi t' Φ
         (* To deal with the fact that [iHandler]s need not be monotonic in the
         continuations, we close [H] so as to make it monotonic. Without this,
         the weakest precondition may fail to satisfy desirable properties such
         as the rule of consequence and the frame rule. *)
-        | VisF e k      => H _ e
+        | VisF e k => H _ e
             (λ a, ▷ wpi (k a) Φ)
-            (λ t', ▷ |={⊤, ∅}=> wpi (ITree.map (const None) t') (λ _, (* unreachable *) False))
+            (λ a, ▷ |={⊤, ∅}=> wpi (k a) (λ _, False))
         end
       )%I.
 
@@ -77,32 +76,28 @@ Section wp_itree.
     - intros t1 t2 ->. f_contractive. repeat f_equiv.
   Qed.
 
-  Definition wpi_opt (H : iHandler Σ E) : itree E (option R) → (R → iProp Σ) → iProp Σ :=
+  Definition wpi (H : iHandler Σ E) : itree E R → (R → iProp Σ) → iProp Σ :=
     fixpoint (wpiF H).
-  Definition wpi (H : iHandler Σ E) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
-    wpi_opt H (ITree.map Some t) Φ.
 
-  Lemma wpi_opt_unfold H (t : itree E (option R)) Φ :
-    wpi_opt H t Φ ⊣⊢ wpiF H (wpi_opt H) t Φ.
+  Lemma wpi_unfold H (t : itree E R) Φ :
+    wpi H t Φ ⊣⊢ wpiF H (wpi H) t Φ.
   Proof.
-    rewrite /wpi_opt. apply (fixpoint_unfold (wpiF H)).
+    rewrite /wpi. apply (fixpoint_unfold (wpiF H)).
   Qed.
 
   Global Instance wpi_opt_proper H :
-    Proper ((eqit (=) false false) ==> ((=) ==> (⊢)) ==> (⊢)) (wpi_opt H).
+    Proper ((eqit (=) false false) ==> ((=) ==> (⊢)) ==> (⊢)) (wpi H).
   Proof.
     intros t1 t2 Hbisim Φ1 Φ2 HΦ.
-    iLöb as "IH" forall (t1 t2 Hbisim).
-    rewrite /wpi !wpi_opt_unfold /wpiF.
+    iLöb as "IH" forall (t1 t2 Hbisim Φ1 Φ2 HΦ).
+    rewrite !wpi_unfold /wpiF.
     rewrite /dist in Hbisim. unfold ofe_dist in Hbisim.
     rewrite /discrete_dist /equiv /itree_equiv in Hbisim.
     rewrite /eq_itree /eqit in Hbisim.
     punfold Hbisim.
     rewrite /eqit_ in Hbisim.
     destruct (observe t1), (observe t2).
-    - dependent destruction Hbisim. iIntros "Hwp". iMod "Hwp". iModIntro. destruct r0.
-      * by iApply HΦ.
-      * done.
+    - dependent destruction Hbisim. iIntros "Hwp". iMod "Hwp". iModIntro. by iApply HΦ.
     - dependent destruction Hbisim. rewrite /is_true // in CHECK.
     - dependent destruction Hbisim.
     - dependent destruction Hbisim. rewrite /is_true // in CHECK.
@@ -116,13 +111,15 @@ Section wp_itree.
     - dependent destruction Hbisim. rewrite /is_true // in CHECK.
     - dependent destruction Hbisim.
       iIntros "HH". iMod "HH". iModIntro. iApply (mono with "[] [] [HH]"); last done.
-      + iIntros (a) "Hwp". iNext.
+      * iIntros (a) "Hwp". iNext.
         rewrite /upaco2 /bot2 in REL. destruct (REL a) as [Hk|?]; last contradiction.
         by iApply "IH".
-      + iModIntro. by iIntros (t) "Hwp".
+      * iModIntro. iIntros (a) "Hwp". iNext. iApply "IH"; last done.
+        + iPureIntro. destruct (REL a) as [Hk|?]; last contradiction. apply Hk.
+        + iPureIntro. by intros ?.
   Qed.
   Global Instance wpi_opt_proper_bidirectional H :
-    Proper ((eqit (=) false false) ==> ((=) ==> (⊣⊢)) ==> (⊣⊢)) (wpi_opt H).
+    Proper ((eqit (=) false false) ==> ((=) ==> (⊣⊢)) ==> (⊣⊢)) (wpi H).
   Proof.
     intros t1 t2 Hbisim Φ1 Φ2 HΦ.
     iSplit.
@@ -132,25 +129,6 @@ Section wp_itree.
     - iIntros "Hwp". iApply wpi_opt_proper; last done.
       * done.
       * iIntros (r1 r2 Heq) "HΦ1". iApply HΦ; done.
-  Qed.
-
-  Global Instance wpi_proper H :
-    Proper ((eqit (=) false false) ==> ((=) ==> (⊢)) ==> (⊢)) (wpi H).
-  Proof.
-    rewrite /wpi.
-    intros t1 t2 Hbisim Φ1 Φ2 HΦ.
-    apply wpi_opt_proper.
-    - by f_equiv.
-    - done.
-  Qed.
-  Global Instance wpi_proper_bidirectional H :
-    Proper ((eqit (=) false false) ==> ((=) ==> (⊣⊢)) ==> (⊣⊢)) (wpi H).
-  Proof.
-    rewrite /wpi.
-    intros t1 t2 Hbisim Φ1 Φ2 HΦ.
-    apply wpi_opt_proper_bidirectional.
-    - by f_equiv.
-    - done.
   Qed.
 End wp_itree.
 
@@ -164,55 +142,13 @@ Section wp_itree.
   Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
   Context {H : iHandler Σ E}.
 
-  (* Internal helper lemmata. *)
-
-  Lemma safe_termination_independent_post {T R R'} (t : itree E T) (Φ : R → iProp Σ) (Ψ : R' → iProp Σ) :
-    wpi_opt H (ITree.map (const None) t) Φ -∗ wpi_opt H (ITree.map (const None) t) Ψ.
-  Proof.
-    iIntros "Hwp". iLöb as "IH" forall (T t Φ Ψ).
-    destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k ->]]]]].
-    - rewrite !map_ret !wpi_opt_unfold /wpiF //.
-    - rewrite !map_tau !wpi_opt_unfold /wpiF. simpl. iMod "Hwp". iModIntro. iNext. by iApply "IH".
-    - rewrite /ITree.map !bind_vis !wpi_opt_unfold /wpiF. simpl. iMod "Hwp". iModIntro.
-      iApply (mono with "[] [] [Hwp]"); last done.
-      * iIntros (a) "Hwp". iNext. by iApply "IH".
-      * iModIntro. iIntros (t') "Hwp". iNext. by iApply "IH".
-  Qed.
-  Lemma wpi_opt_always_None {R R'} Φ (t : itree E (option R)) :
-    (wpi_opt H t (const (|={∅,⊤}=> True))) ⊣⊢
-    (wpi_opt H (ITree.map (const (@None R')) t) Φ).
-  Proof.
-    iSplit.
-    - iLöb as "IH" forall (R R' Φ t).
-      destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k ->]]]]].
-      * rewrite /wpi map_ret !wpi_opt_unfold /wpiF. simpl. destruct r; eauto.
-      * rewrite map_tau !wpi_opt_unfold /wpiF. simpl. iIntros "Hwp". iMod "Hwp". iModIntro.
-        iNext. by iApply "IH".
-      * rewrite /wpi /ITree.map bind_vis !wpi_opt_unfold /wpiF. simpl. iIntros "Hwp".
-        iMod "Hwp". iModIntro. iApply (mono with "[] [] [Hwp]"); last done.
-        + iIntros (a) "Hwp". iNext. by iApply "IH".
-        + iModIntro. iIntros (t') "Hwp". iNext. iMod "Hwp". iModIntro.
-          by iApply safe_termination_independent_post.
-    (* TODO: Is there a way to repeat a proof twice? *)
-    - iLöb as "IH" forall (R R' Φ t).
-      destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k ->]]]]].
-      * rewrite /wpi map_ret !wpi_opt_unfold /wpiF. simpl. destruct r; eauto.
-      * rewrite map_tau !wpi_opt_unfold /wpiF. simpl. iIntros "Hwp". iMod "Hwp". iModIntro.
-        iNext. by iApply "IH".
-      * rewrite /wpi /ITree.map bind_vis !wpi_opt_unfold /wpiF. simpl. iIntros "Hwp".
-        iMod "Hwp". iModIntro. iApply (mono with "[] [] [Hwp]"); last done.
-        + iIntros (a) "Hwp". iNext. by iApply "IH".
-        + iModIntro. iIntros (t') "Hwp". iNext. iMod "Hwp". iModIntro.
-          by iApply safe_termination_independent_post.
-  Qed.
-
   (* Stepping rules. *)
 
   Lemma wpi_ret_emp_mask' {R} Φ (r : R):
     (|={∅}=> Φ r) ⊣⊢
     WPi Ret r @ H {{ Φ }}.
   Proof.
-    rewrite /wpi map_ret wpi_opt_unfold /wpiF //.
+    rewrite wpi_unfold //.
   Qed.
   Lemma wpi_ret_emp_mask {R} Φ (r : R):
     Φ r -∗
@@ -225,7 +161,7 @@ Section wp_itree.
     (|={∅}=> ▷ WPi t @ H {{ Φ }}) ⊣⊢
     WPi Tau t @ H {{ Φ }}.
   Proof.
-    rewrite /wpi map_tau !wpi_opt_unfold /wpiF. simpl. f_equiv. f_equiv. rewrite wpi_opt_unfold //.
+    rewrite !wpi_unfold /wpiF. simpl. f_equiv. f_equiv. rewrite wpi_unfold //.
   Qed.
   Lemma wpi_tau_emp_mask {R} Φ (t : itree E R):
     ▷ WPi t @ H {{ Φ }} -∗
@@ -235,26 +171,20 @@ Section wp_itree.
   Qed.
 
   Lemma wpi_vis_emp_mask' {R} Φ A (e : E A) (k : A → itree E R):
-    (|={∅}=> H A (subevent A e) (λ r, ▷ WPi k r @ H {{ Φ }}) (λ t, ▷ |={⊤, ∅}=> WPi t @ H {{ const (|={∅, ⊤}=> True) }})) ⊣⊢
+    (|={∅}=> H A (subevent A e) (λ a, ▷ WPi k a @ H {{ Φ }}) (λ a, ▷ |={⊤, ∅}=> WPi k a @ H {{ const False }})) ⊣⊢
     WPi (Vis e k) @ H {{ Φ }}.
   Proof.
-    rewrite /wpi /ITree.map bind_vis !wpi_opt_unfold /wpiF. simpl. f_equiv.
+    rewrite !wpi_unfold /wpiF. simpl. f_equiv.
     iSplit.
     - iIntros "HH". iApply (mono with "[] [] [HH]"); last done.
       * eauto.
-      * iModIntro. iIntros (t) "Hwp". iNext. iMod "Hwp". iModIntro.
-        rewrite (_ : ITree.map (const None) t ≅ ITree.map (const None) (ITree.map Some t)).
-        + by iApply wpi_opt_always_None.
-        + rewrite map_map. f_equiv.
+      * iModIntro. by iIntros (t) "Hwp".
     - iIntros "HH". iApply (mono with "[] [] [HH]"); last done.
       * eauto.
-      * iModIntro. iIntros (t) "Hwp". iNext. iMod "Hwp". iModIntro.
-        rewrite (_ : ITree.map (const None) t ≅ ITree.map (const None) (ITree.map Some t)).
-        + by iApply wpi_opt_always_None.
-        + rewrite map_map. f_equiv.
+      * iModIntro. by iIntros (t) "Hwp".
   Qed.
   Lemma wpi_vis_emp_mask {R} Φ A (e : E A) (k : A → itree E R):
-    H A (subevent A e) (λ r, ▷ WPi k r @ H {{ Φ }}) (λ t, ▷ |={⊤, ∅}=> WPi t @ H {{ const (|={∅, ⊤}=> True) }}) -∗
+    H A (subevent A e) (λ a, ▷ WPi k a @ H {{ Φ }}) (λ a, ▷ |={⊤, ∅}=> WPi k a @ H {{ const False }}) -∗
     WPi (Vis e k) @ H {{ Φ }}.
   Proof.
     iIntros "Hwp". by iApply wpi_vis_emp_mask'.
@@ -267,8 +197,8 @@ Section wp_itree.
     (WPi t @ H {{ Φ }}).
   Proof.
     iSplit.
-    - iIntros "Hwp". rewrite /wpi wpi_opt_unfold. by iMod "Hwp".
-    - iIntros "Hwp". rewrite /wpi wpi_opt_unfold. by iMod "Hwp".
+    - iIntros "Hwp". rewrite wpi_unfold. by iMod "Hwp".
+    - iIntros "Hwp". rewrite wpi_unfold. by iMod "Hwp".
   Qed.
 
   Lemma wpi_update_post_emp_mask {R} Φ (t : itree E R) :
@@ -313,14 +243,15 @@ Section wp_itree.
     WPi t @ H {{ r, WPi (k r) @ H {{ Φ }} }} -∗
     WPi (ITree.bind t k) @ H {{ Φ }}.
   Proof.
-    iIntros "Hwp". iLöb as "IH" forall (t).
+    iIntros "Hwp". iLöb as "IH" forall (t Φ).
     destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k' ->]]]]].
     - rewrite bind_ret_l -!wpi_ret_emp_mask'. by iApply wpi_update_emp_mask.
     - rewrite bind_tau -!wpi_tau_emp_mask'. iMod "Hwp". iModIntro. iNext. by iApply "IH".
     - rewrite bind_vis -!wpi_vis_emp_mask'. iMod "Hwp". iModIntro.
       iApply (mono with "[] [] [Hwp]"); last done.
       * iIntros (a) "Hwp". iNext. by iApply "IH".
-      * iModIntro. by iIntros (t') "Hwp".
+      * iModIntro. iIntros (t') "Hwp". iNext. iMod "Hwp". iModIntro.
+        iApply "IH". iApply wpi_wand_emp_mask; last done. by iIntros (r) "Hfalse".
   Qed.
 
   (* Derived rules. *)
@@ -481,7 +412,7 @@ Section wp_itree_mask.
   Qed.
 
   Lemma wpi_vis' {R} M Φ A (e : E A) (k : A → itree E R) :
-    (|={M, ∅}=> H A (subevent A e) (λ r, ▷ WPi k r @ H; ∅ {{ v, |={∅, M}=> Φ v }}) (λ t, ▷ WPi t @ H; ⊤ {{ _, True }})) ⊣⊢
+    (|={M, ∅}=> H A (subevent A e) (λ a, ▷ WPi k a @ H; ∅ {{ v, |={∅, M}=> Φ v }}) (λ a, ▷ WPi k a @ H; ⊤ {{ _, False }})) ⊣⊢
     WPi (Vis e k) @ H; M {{ Φ }}.
   Proof.
     rewrite -wpi_vis_emp_mask'.
@@ -490,14 +421,16 @@ Section wp_itree_mask.
       iApply (mono with "[] [] [HH]"); last done.
       * iIntros (a) "Hwp". iNext. iApply wpi_update_emp_mask. iMod "Hwp". iModIntro.
         by iApply wpi_update_post_emp_mask.
-      * iModIntro. iIntros (t) "Hwp". iNext. by iMod "Hwp".
+      * iModIntro. iIntros (t) "Hwp". iApply wpi_update_post_emp_mask.
+        iApply wpi_wand_emp_mask; last done. iIntros (r) "Hfalse". by iMod "Hfalse".
     - iIntros "HH". do 2 iMod "HH". iModIntro.
       iApply (mono with "[] [] [HH]"); last done.
       * iIntros (a) "Hwp". iNext. by iApply wpi_update_post_emp_mask.
-      * iModIntro. iIntros (t) "Hwp". iNext. by iMod "Hwp".
+      * iModIntro. iIntros (t) "Hwp". iApply wpi_update_post_emp_mask.
+        iApply wpi_wand_emp_mask; last done. by iIntros (r) "Hfalse".
   Qed.
   Lemma wpi_vis {R} M Φ A (e : E A) (k : A → itree E R):
-    (|={M, ∅}=> H A e (λ r, ▷ WPi k r @ H; ∅ {{ v, |={∅, M}=> Φ v }}) (λ t, ▷ WPi t @ H; ⊤ {{ const True }})) -∗
+    (|={M, ∅}=> H A e (λ a, ▷ WPi k a @ H; ∅ {{ v, |={∅, M}=> Φ v }}) (λ a, ▷ WPi k a @ H; ⊤ {{ const False }})) -∗
     WPi (Vis e k) @ H; M {{ Φ }}.
   Proof.
     iIntros "HH". iApply wpi_vis'. iMod "HH". by iModIntro.
@@ -539,15 +472,15 @@ Section translation.
   interp f t @ H1 {{ Φ }}] for itrees [t]. The following statement gives you
   sufficient conditions for when one implies the other. *)
   Lemma wpi_translation_emp_mask {R} (t : itree E1 R) Φ :
-    □ (∀ A (e : E1 A) ψ,
+    □ (∀ A (e : E1 A) (k : A → itree E1 R) Q,
          H1 A (subevent A e)
-           (λ a, ▷ ψ a)
-           (λ t', ▷ |={⊤, ∅}=> WPi interp f t' @ H2 {{ λ _, |={∅, ⊤}=> True }}) -∗
-         WPi (f A e) @ H2 {{ v, ▷ ψ v }}
+           (λ a, ▷ WPi interp f (k a) @ H2 {{ Q }})
+           (λ a, ▷ |={⊤, ∅}=> WPi interp f (k a) @ H2 {{ λ _, False }}) -∗
+         WPi (f A e) @ H2 {{ a, ▷ WPi interp f (k a) @ H2 {{ Q }} }}
       ) -∗
     WPi t @ H1 {{ Φ }} -∗ WPi (interp f t) @ H2 {{ Φ }}.
   Proof.
-    iIntros "#HH". iLöb as "IH" forall (R t Φ).
+    iIntros "#HH". iLöb as "IH" forall (t Φ).
     destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k' ->]]]]].
     - iIntros "Hwp". rewrite interp_ret -!wpi_ret_emp_mask' //.
     - iIntros "Hwp". rewrite interp_tau -!wpi_tau_emp_mask'. iMod "Hwp". iModIntro. iNext.
@@ -555,25 +488,49 @@ Section translation.
     - iIntros "Hwp". rewrite interp_vis. iApply wpi_bind_emp_mask.
       rewrite -wpi_vis_emp_mask'. iApply wpi_update_emp_mask. iMod "Hwp". iModIntro.
       iApply wpi_wand_emp_mask; last iApply "HH".
-      + iIntros (r) "Hr". iApply wpi_tau_emp_mask. iNext. by iApply "IH".
+      + iIntros (r) "Hr". iApply wpi_tau_emp_mask. iNext. done.
       + iApply (mono with "[] [] [Hwp]"); last done.
-        * by iIntros (a) "Hwp".
+        * iIntros (a) "Hwp". iNext. by iApply "IH".
         * iModIntro. iIntros (t') "Hwp". iNext. by iApply "IH".
   Qed.
 
   Lemma wpi_translation {R} (t : itree E1 R) M Φ :
+    □ (∀ A (e : E1 A) (k : A → itree E1 R) Q,
+         H1 A (subevent A e)
+           (λ a, ▷ WPi interp f (k a) @ H2; ∅ {{ Q }})
+           (λ a, ▷ WPi interp f (k a) @ H2; ⊤ {{ λ _, False }}) -∗
+         WPi (f A e) @ H2; ∅ {{ a, ▷ WPi interp f (k a) @ H2; ∅ {{ Q }} }}
+      ) -∗
+    WPi t @ H1; M {{ Φ }} -∗ WPi (interp f t) @ H2; M {{ Φ }}.
+  Proof.
+    iIntros "#Hwand Hwp". iApply wpi_translation_emp_mask; try done.
+    iModIntro. iIntros (A e k Q) "HH".
+    iApply wpi_update_emp_mask. iApply wpi_update_post_emp_mask.
+    iApply wpi_wand_emp_mask; first shelve.
+    iApply "Hwand". iApply mono; last done.
+    - iIntros (a) "Hwp". iNext. rewrite -wpi_update_post_emp_mask //.
+    - iModIntro. iIntros (a) "Hwp". iNext. iApply wpi_wand_emp_mask; last done.
+      by iIntros (r) "?".
+  Unshelve.
+    iIntros (a) "Hwp". iApply wpi_update_post_emp_mask. by iApply wpi_update_emp_mask.
+  Qed.
+
+  (* A special case of above translation lemma which has a nicer statement at the
+  expense of its weaker hypothesis typically not holding for events that spawn
+  new threads. *)
+  Lemma wpi_translation_seq {R} (t : itree E1 R) M Φ :
     □ (∀ A (e : E1 A) ψ,
          H1 A (subevent A e)
            (λ a, ▷ ψ a)
-           (λ t', ▷ WPi interp f t' @ H2; ⊤ {{ λ _, True }}) -∗
+           (λ _, True) -∗
          WPi (f A e) @ H2; ∅ {{ v, ▷ ψ v }}
       ) -∗
     WPi t @ H1; M {{ Φ }} -∗ WPi (interp f t) @ H2; M {{ Φ }}.
   Proof.
-    iIntros "#Hwand Hwp".
-    iApply wpi_translation_emp_mask; try done.
-    iModIntro. iIntros (A e Ψ) "HH". iApply wpi_update_post_emp_mask.
-    iApply wpi_update_emp_mask. by iApply "Hwand".
+    iIntros "#Hwand Hwp". iApply wpi_translation; last done.
+    iModIntro. iIntros (A e k Q) "HH". iApply "Hwand". iApply mono; last done.
+    - by iIntros (a) "?".
+    - iModIntro. by iIntros (a) "?".
   Qed.
 End translation.
 
@@ -583,12 +540,6 @@ Section inH.
   Context {H1 : iHandler Σ E1} {H2 : iHandler Σ E2}.
   Context `{f : E1 -< E2} `{inH (f := f) Σ E1 E2 H1 H2}.
 
-  (* TODO: Ideally the following lemma would be an easy consequence of the
-  translation lemmata above. However, the ITree library's definition of
-  [interp] is peculiar in that it inserts these [Tau]s, which means that you
-  can't define [translate] in terms of [interp] as opposed to what you may have
-  expected. This is also why the ▷ in the post-condition appears in the
-  lemmata above. *)
   Lemma wpi_inH {R} (t : itree E1 R) M Φ :
     WPi t @ H1; M {{ Φ }} ⊣⊢
     WPi translate (λ A e', subevent A e') t @ H2; M {{ Φ }}.

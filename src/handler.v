@@ -13,8 +13,8 @@ Record iHandler Σ (E : Type → Type) := IHandler {
       E A
       (* Continuation conditions [λ a, ▷ WPi k a @ H; ∅ {{ Φ }}] *)
     → (A → iProp Σ)
-      (* Conditions for spawning threads [λ t, ▷ WPi t @ H; ⊤ {{ True }}] *)
-    → (itree E unit → iProp Σ)
+      (* Conditions for spawning threads [λ a, ▷ WPi k a @ H; ⊤ {{ False }}] *)
+    → (A → iProp Σ)
       (* Condition [WPi Vis e k @ H; ∅ {{ Φ }}] *)
     → iProp Σ;
     (* TODO: Rename (scope is global). *)
@@ -40,4 +40,4 @@ Qed.
 
 (** [inH H1 H2] means that, on events [E1], [H1] is equivalent to [H2]. *)
 Class inH {Σ E1 E2} `{f : E1 -< E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :=
-  is_inH : ∀ A e Φ s, H1 A e Φ (λ t, s (translate (λ A e', subevent A e') t)) ⊣⊢ H2 A (subevent A e) Φ s.
+  is_inH : ∀ A e Φ s, H1 A e Φ s ⊣⊢ H2 A (subevent A e) Φ s.
