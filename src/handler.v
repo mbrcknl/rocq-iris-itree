@@ -17,8 +17,7 @@ Record iHandler Σ (E : Type → Type) := IHandler {
     → (A → iProp Σ)
       (* Condition [WPi Vis e k @ H; ∅ {{ Φ }}] *)
     → iProp Σ;
-    (* TODO: Rename (scope is global). *)
-    mono : ∀ A e Φ Φ' s s',
+    ihandler_mono : ∀ A e Φ Φ' s s',
         (∀ a, Φ a -∗ Φ' a) -∗
       □ (∀ t, s t -∗ s' t) -∗
       ihandle A e Φ s -∗ ihandle A e Φ' s';
@@ -32,7 +31,7 @@ Proof.
   assert (Hmon : ∀ Φ s, (H A e1 Φ s ⊣⊢ ∃ Φ' s', (∀ a, Φ' a -∗ Φ a) ∗ □ (∀ a, s' a -∗ s a) ∗ H A e1 Φ' s')).
   - iIntros (Φ s). iSplit.
     * iIntros "HH". iExists Φ, s. iSplitR; first eauto. iSplitR; first eauto. done.
-    * iIntros "[%Φ' [%s' [HmonΦ [Hmons HH]]]]". iApply (mono with "[HmonΦ] [Hmons]"); eauto.
+    * iIntros "[%Φ' [%s' [HmonΦ [Hmons HH]]]]". iApply (ihandler_mono with "[HmonΦ] [Hmons]"); eauto.
   - rewrite !Hmon. repeat f_equiv.
     * by apply HΦ.
     * by apply Hs.
