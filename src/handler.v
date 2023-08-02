@@ -30,7 +30,7 @@ Proof.
   intros e1 e2 <- Φ1 Φ2 HΦ s1 s2 Hs.
   assert (Hmon : ∀ Φ s, (H A e1 Φ s ⊣⊢ ∃ Φ' s', (∀ a, Φ' a -∗ Φ a) ∗ □ (∀ a, s' a -∗ s a) ∗ H A e1 Φ' s')).
   - iIntros (Φ s). iSplit.
-    * iIntros "HH". iExists Φ, s. iSplitR; first eauto. iSplitR; first eauto. done.
+    * iIntros "HH". iExists Φ, s. iSplitR; first eauto. by iSplitR; first eauto.
     * iIntros "[%Φ' [%s' [HmonΦ [Hmons HH]]]]". iApply (ihandler_mono with "[HmonΦ] [Hmons]"); eauto.
   - rewrite !Hmon. repeat f_equiv.
     * by apply HΦ.
@@ -70,4 +70,17 @@ Proof.
   intros ????. iSplit.
   - by iIntros "?".
   - by iIntros "?".
+Qed.
+
+(** This class covers "sequential" [iHandler]s which are insensitive to the
+thread spawning continuation, that is, [iHandler]s that do not do concurrency. *)
+Class Sequential {Σ E} (H : iHandler Σ E) :=
+  is_seq : ∀ A e Φ s s', H A e Φ s -∗ H A e Φ s'.
+Global Instance sumH_Sequential {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2)
+  `{!Sequential H1} `{!Sequential H2} :
+  Sequential (H1 ⊕ H2).
+Proof.
+  iIntros (A e Φ s s') "HH". destruct e.
+  - by iApply Sequential0.
+  - by iApply Sequential1.
 Qed.

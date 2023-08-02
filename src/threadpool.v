@@ -81,10 +81,9 @@ Section wp_threadpool.
   Qed.
 
   Lemma wpi_kill {R} (k : Empty_set → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    (|={∅, ⊤}=> True) -∗
-    WPi (vis EKillThread k) @ H; ⊤ {{ Φ }}.
+    ⊢ WPi (vis EKillThread k) @ H; ⊤ {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_vis. iApply is_inH. simpl.
+    iApply wpi_vis. iApply is_inH. simpl.
     by iApply fupd_mask_intro_subseteq; first done.
   Qed.
 End wp_threadpool.
@@ -123,40 +122,56 @@ Proof.
 Qed.
 
 Section interleaving.
-  Context `{!invGS_gen HasNoLc Σ} {E : Type → Type} {H : iHandler Σ E}.
+  Context `{!invGS_gen HasNoLc Σ} {E : Type → Type} {H : iHandler Σ E} `{!Sequential H} {R : Type}.
 
+  (** The interleaving relation, prior to taking the fixpoint is taken. This
+  relation encodes what it means for an [itree E R] to refine an itree
+  [itree (threadpoolE +' E) R] that can emit events [threadpoolE] regarding
+  concurrency. *)
   Variant interleavesF
-    (interleaves : list (itree (threadpoolE +' E) unit) -> itree (threadpoolE +' E) unit -> itree E unit -> Prop)
-    :  list (itree (threadpoolE +' E) unit)
-    -> itree' (threadpoolE +' E) unit
-    -> itree' E unit
+    (interleaves : list (itree (threadpoolE +' E) R) → itree (threadpoolE +' E) R → itree E R → Prop)
+    :  list (itree (threadpoolE +' E) R)
+    -> itree' (threadpoolE +' E) R
+    -> itree' E R
     -> Prop :=
-  | Terminate :
-    interleavesF interleaves [] (RetF tt) (RetF tt)
-  | EndThread tp new_current_tid new_current interleaving' :
-    tp !! new_current_tid = Some new_current →
-    interleaves (delete new_current_tid tp) new_current interleaving' →
-    interleavesF interleaves tp (RetF tt) (TauF interleaving')
+  (** If a thread returns, the interleaved [itree] ends. *)
+  | Return tp r :
+    interleavesF interleaves tp (RetF r) (RetF r)
+  (** If a thread emits the [EKillThread] event, the thread ends and control is
+  yielded to some other thread in the threadpool. The interleaved [itree] takes
+  a silent step in place of the [EKillThread]. *)
   | KillThread tp k new_current_tid new_current interleaving' :
     tp !! new_current_tid = Some new_current →
     interleaves (delete new_current_tid tp) new_current interleaving' →
     interleavesF interleaves tp (VisF (inl1 EKillThread) k) (TauF interleaving')
+  (** If the current thread steps, so does the interleaved [itree]. *)
   | Step current' tp interleaving' :
     interleaves tp current' interleaving' →
     interleavesF interleaves tp (TauF current') (TauF interleaving')
+  (** The [EYield] event yields control to another thread placing the current
+  thread in the threadpool to be resumed. Resumption costs a step. The
+  interleaved [itree] takes a silent step in place of the [EYield]. *)
   | Yield tp k new_current_tid new_current interleaving' :
     tp !! new_current_tid = Some new_current →
     interleaves (cons (Tau (k tt)) (delete new_current_tid tp)) new_current interleaving' →
     interleavesF interleaves tp (VisF (inl1 EYield) k) (TauF interleaving')
+  (** The [EFork] event adds a new thread to the threadpool and continues
+  executing the current thread. The interleaved [itree] takes a silent step in
+  place of the [EFork]. *)
   | Fork tp k interleaving' :
     interleaves (cons (k NewThread) tp) (k CurrentThread) interleaving' →
-    interleavesF interleaves tp (VisF (inl1 EFork) k) (TauF interleaving').
+    interleavesF interleaves tp (VisF (inl1 EFork) k) (TauF interleaving')
+  (** If an event of type [E] is emitted, the interleaved [itree] also
+  emits this event. *)
+  | Emit tp A (e : E A) k k' :
+    (∀ a, interleaves tp (k a) (k' a)) →
+    interleavesF interleaves tp (VisF (inr1 e) k) (VisF e k').
   Hint Constructors interleavesF : iris_itree.
   Definition interleaves_
-    (interleaves : list (itree (threadpoolE +' E) unit) -> itree (threadpoolE +' E) unit -> itree E unit -> Prop)
-    :  list (itree (threadpoolE +' E) unit)
-    -> itree (threadpoolE +' E) unit
-    -> itree E unit
+    (interleaves : list (itree (threadpoolE +' E) R) -> itree (threadpoolE +' E) R -> itree E R -> Prop)
+    :  list (itree (threadpoolE +' E) R)
+    -> itree (threadpoolE +' E) R
+    -> itree E R
     -> Prop :=
     fun tp current interleaving =>
     interleavesF interleaves tp (observe current) (observe interleaving).
@@ -175,39 +190,35 @@ Section interleaving.
   Qed.
   Hint Resolve interleaves__mono : paco.
 
+  (** The interleaving relation. (See comments above.) *)
   Definition interleaves :
-    list (itree (threadpoolE +' E) unit) -> itree (threadpoolE +' E) unit -> itree E unit -> Prop :=
+    list (itree (threadpoolE +' E) R) -> itree (threadpoolE +' E) R -> itree E R -> Prop :=
     paco3 interleaves_ bot3.
 
+  (** A technical version of adequacy, amenable to induction. See corollary below for a
+  more meaningful statement. *)
   Theorem wpi_interleaving'
-    (tp : list (itree (threadpoolE +' E) unit))
-    (current : itree (threadpoolE +' E) unit)
-    (interleaving : itree E unit) :
+    (tp : list (itree (threadpoolE +' E) R))
+    (current : itree (threadpoolE +' E) R)
+    (interleaving : itree E R)
+    (Φ : R → iProp Σ) :
     interleaves tp current interleaving →
-    ([∗ list] thread ∈ tp, WPi thread @ threadpoolH ⊕ H; ⊤ {{ _, True }}) -∗
-    WPi current @ threadpoolH ⊕ H; ∅ {{ _, |={∅, ⊤}=> True }} -∗
-    WPi interleaving @ H; ∅ {{ _, |={∅, ⊤}=> True }}.
+    ([∗ list] thread ∈ tp, WPi thread @ threadpoolH ⊕ H; ⊤ {{ Φ }}) -∗
+    WPi current @ threadpoolH ⊕ H; ∅ {{ r, |={∅, ⊤}=> Φ r }} -∗
+    WPi interleaving @ H; ∅ {{ r, |={∅, ⊤}=> Φ r }}.
   Proof.
     iIntros "%Hinter Htp Hcurrent".
-    iLöb as "IH" forall (tp current interleaving Hinter). punfold Hinter.
+    iLöb as "IH" forall (tp current interleaving Hinter Φ). punfold Hinter.
     inversion Hinter as
-      [Heqtp Heqcurrent Heqinterleaving
-      |tp' new_current_tid new_current interleaving' Hidx Hinter' Heqtp Heqcurrent Heqinterleaving
+      [tp' r Heqtp Heqcurrent Heqinterleaving
       |tp' k new_current_tid new_current interleaving' Hidx Hinter' Heqtp Heqcurrent Heqinterleaving
       |current' tp' interleaving' Hinter' Heqtp Heqcurrent Heqinterleaving
       |tp' k new_current_tid new_current interleaving' Hidx Hinter' Heqtp Heqcurrent Heqinterleaving
       |tp' k interleaving' Hinter' Heqtp Heqcurrent Heqinterleaving
+      |tp' A e k k' Hinter' Heqtp Heqcurrent Heqinterleaving
       ].
     - apply ret_observe_eqit in Heqcurrent as <-. apply ret_observe_eqit in Heqinterleaving as <-.
       by rewrite -!wpi_ret'.
-    - apply ret_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
-      iApply wpi_tau. iNext.
-      iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
-      pclearbot. iApply ("IH" with "[] [Htp']").
-      * done.
-      * done.
-      * rewrite -wpi_ret'. iMod "Hcurrent". iMod "Hcurrent".
-        iDestruct (wpi_clear_mask with "Hcurrent'") as "Hcurrent'". by do 2 iMod "Hcurrent'".
     - apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
       rewrite -wpi_vis'. simpl. iApply wpi_tau. iNext.
       iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
@@ -242,13 +253,25 @@ Section interleaving.
       * by destruct Hinter'.
       * iApply big_sepL_cons. iFrame. iApply wpi_wand; last done. by iIntros (?) "?".
       * rewrite wpi_update_post //.
+    - apply vis_observe_eqit in Heqcurrent as <-. apply vis_observe_eqit in Heqinterleaving as <-.
+      rewrite -!wpi_vis'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
+      iApply is_seq. iApply (ihandler_mono with "[Hfupd Htp] [] [Hcurrent]"); last done.
+      * pclearbot. iIntros (a) "Hwp". iNext. iMod "Hfupd".
+        iEval (rewrite wpi_update_post). iApply ("IH" with "[] Htp").
+        + by destruct (Hinter' a).
+        + rewrite wpi_update_post //.
+      * iModIntro. by iIntros (t) "Hwp".
   Qed.
+  (** Adequacy for [threadpoolH ⊕ H]. This says that if you can prove the
+  weakest precondition an [itree (threadpoolE +' E) R] then you get weakest
+  preconditions for every interleaving [itree E R]. *)
   Corollary wpi_interleaving
-    (concurrent : itree (threadpoolE +' E) unit)
-    (interleaving : itree E unit) :
+    (concurrent : itree (threadpoolE +' E) R)
+    (interleaving : itree E R)
+    (Φ : R → iProp Σ) :
     interleaves [] concurrent interleaving →
-    WPi concurrent @ threadpoolH ⊕ H; ⊤ {{ _, True }} -∗
-    WPi interleaving @ H; ⊤ {{ _, True }}.
+    WPi concurrent @ threadpoolH ⊕ H; ⊤ {{ Φ }} -∗
+    WPi interleaving @ H; ⊤ {{ Φ }}.
   Proof.
     iIntros "%Hinter Hwp". iApply wpi_clear_mask.
     iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iModIntro.

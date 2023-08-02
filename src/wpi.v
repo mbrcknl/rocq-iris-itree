@@ -42,25 +42,15 @@ Section wp_itree.
 
   Import EqNotations.
 
-  (** The definition of the weakest precondition, prior to taking the fixpoint.
-
-  The result is of type [option R]. [None] represents safe termination. This is
-  a workaround to avoid dependent typing while still allowing us to consider
-  in addition to [itree E R] also [itree E unit], which is needed for e.g.
-  spawning new threads. *)
+  (** The definition of the weakest precondition, prior to taking the fixpoint. *)
   Definition wpiF (H : iHandler Σ E)
     (wpi : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ) :
            discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ :=
     λ t Φ,
       (|={∅}=>
         match observe t with
-        (* Used to terminate forked threads. *)
         | RetF r  => Φ r
         | TauF t' => ▷ wpi t' Φ
-        (* To deal with the fact that [iHandler]s need not be monotonic in the
-        continuations, we close [H] so as to make it monotonic. Without this,
-        the weakest precondition may fail to satisfy desirable properties such
-        as the rule of consequence and the frame rule. *)
         | VisF e k => H _ e
             (λ a, ▷ wpi (k a) Φ)
             (λ a, ▷ |={⊤, ∅}=> wpi (k a) (λ _, False))

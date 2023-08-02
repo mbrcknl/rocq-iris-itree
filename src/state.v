@@ -36,19 +36,29 @@ Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
 Definition state_ro {S} `{!stateInterp Σ S} (s : S) : iProp Σ :=
   ∀ s', state_interp s' -∗ state_interp s' ∗ ⌜ s = s' ⌝.
 
-(** [iHandler] for [stateE]. *)
-Program Definition stateH {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ} : iHandler Σ (stateE S) :=
-  IHandler (λ A e,
-    match e with
-    | EGetState    => λ Φ _, (∀ s, state_interp s -∗ (state_interp s ∗ Φ s))
-    | ESetState s' => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt))
-    end
-  )%I _.
-Next Obligation.
-  iIntros (?????? e ????) "HΦwand Hswand". destruct e.
-  - iIntros "Hget" (?) "Hstate". iDestruct ("Hget" with "Hstate") as "[$ HΦ]". by iApply "HΦwand".
-  - iIntros "Hset" (?) "Hstate". iDestruct ("Hset" with "Hstate") as ">[$ HΦ]". by iApply "HΦwand".
-Qed.
+Section stateH.
+  Context {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ}.
+
+  (** [iHandler] for [stateE]. *)
+  Program Definition stateH : iHandler Σ (stateE S) :=
+    IHandler (λ A e,
+      match e with
+      | EGetState    => λ Φ _, (∀ s, state_interp s -∗ (state_interp s ∗ Φ s))
+      | ESetState s' => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt))
+      end
+    )%I _.
+  Next Obligation.
+    iIntros (? e ????) "HΦwand Hswand". destruct e.
+    - iIntros "Hget" (?) "Hstate". iDestruct ("Hget" with "Hstate") as "[$ HΦ]". by iApply "HΦwand".
+    - iIntros "Hset" (?) "Hstate". iDestruct ("Hset" with "Hstate") as ">[$ HΦ]". by iApply "HΦwand".
+  Qed.
+
+  Global Instance stateH_Sequential :
+    Sequential stateH.
+  Proof.
+    iIntros (A e Φ s s') "HH". by destruct e.
+  Qed.
+End stateH.
 
 Section wp_state.
   Context {S : Type} `{!stateHGS Σ S} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
