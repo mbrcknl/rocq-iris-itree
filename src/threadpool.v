@@ -26,9 +26,6 @@ Variant threadpoolE : Type → Type :=
   | EYield : threadpoolE unit
   (** (Safely) kill the current thread and yield. *)
   | EKillThread : threadpoolE Empty_set.
-Arguments EYield.
-Arguments EFork.
-Arguments EKillThread.
 
 (** [iHandler] for [threadpoolE]. *)
 Program Definition threadpoolH {Σ} `{!invGS_gen HasNoLc Σ} : iHandler Σ threadpoolE :=
@@ -206,7 +203,7 @@ Section interleaving.
     - apply ret_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
       iApply wpi_tau. iNext.
       iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
-      destruct Hinter' as [Hinter'|]; last contradiction. iApply ("IH" with "[] [Htp']").
+      pclearbot. iApply ("IH" with "[] [Htp']").
       * done.
       * done.
       * rewrite -wpi_ret'. iMod "Hcurrent". iMod "Hcurrent".
@@ -214,8 +211,7 @@ Section interleaving.
     - apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
       rewrite -wpi_vis'. simpl. iApply wpi_tau. iNext.
       iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
-      destruct Hinter' as [Hinter'|]; last contradiction.
-      iApply ("IH" with "[] [Htp']").
+      pclearbot. iApply ("IH" with "[] [Htp']").
       * done.
       * done.
       * iMod "Hcurrent". simpl. iMod "Hcurrent".

@@ -102,20 +102,18 @@ Section wp_itree.
     - dependent destruction Hbisim.
     - dependent destruction Hbisim. rewrite /is_true // in CHECK.
     - dependent destruction Hbisim.
-      * rewrite /upaco2 /bot2 in REL. destruct REL as [REL|?]; last contradiction.
-        iIntros "Hwp". iMod "Hwp". iModIntro. iNext. by iApply "IH".
+      * pclearbot. iIntros "Hwp". iMod "Hwp". iModIntro. iNext. by iApply "IH".
       * rewrite /is_true // in CHECK.
       * rewrite /is_true // in CHECK.
     - dependent destruction Hbisim. rewrite /is_true // in CHECK.
     - dependent destruction Hbisim.
     - dependent destruction Hbisim. rewrite /is_true // in CHECK.
     - dependent destruction Hbisim.
-      iIntros "HH". iMod "HH". iModIntro. iApply (ihandler_mono with "[] [] [HH]"); last done.
-      * iIntros (a) "Hwp". iNext.
-        rewrite /upaco2 /bot2 in REL. destruct (REL a) as [Hk|?]; last contradiction.
-        by iApply "IH".
+      iIntros "HH". iMod "HH". iModIntro.
+      iApply (ihandler_mono with "[] [] [HH]"); last done.
+      * iIntros (a) "Hwp". iNext. pclearbot. specialize (REL a). by iApply "IH".
       * iModIntro. iIntros (a) "Hwp". iNext. iApply "IH"; last done.
-        + iPureIntro. destruct (REL a) as [Hk|?]; last contradiction. apply Hk.
+        + iPureIntro. pclearbot. apply REL.
         + iPureIntro. by intros ?.
   Qed.
   Global Instance wpi_opt_proper_bidirectional H :
