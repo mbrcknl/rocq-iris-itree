@@ -31,7 +31,7 @@ Proof.
   assert (Hmon : ∀ Φ s, (H A e1 Φ s ⊣⊢ ∃ Φ' s', (∀ a, Φ' a -∗ Φ a) ∗ □ (∀ a, s' a -∗ s a) ∗ H A e1 Φ' s')).
   - iIntros (Φ s). iSplit.
     * iIntros "HH". iExists Φ, s. iSplitR; first eauto. by iSplitR; first eauto.
-    * iIntros "[%Φ' [%s' [HmonΦ [Hmons HH]]]]". iApply (ihandler_mono with "[HmonΦ] [Hmons]"); eauto.
+    * iIntros "[%Φ' [%s' [HmonΦ [Hmons HH]]]]". by iApply (ihandler_mono with "HmonΦ Hmons").
   - rewrite !Hmon. repeat f_equiv.
     * by apply HΦ.
     * by apply Hs.
