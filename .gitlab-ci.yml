@@ -1,0 +1,38 @@
+image: ralfjung/opam-ci:opam2
+
+stages:
+  - build
+
+variables:
+  CPU_CORES: "8"
+  OCAML: "ocaml-base-compiler.4.14.0"
+
+.branches_and_mr: &branches_and_mr
+  only:
+  - master@ou-plf/iris-itree
+  - /^ci/@ou-plf/iris-itree
+  - merge_requests
+
+.template: &template
+  <<: *only_branches
+  stage: build
+  tags:
+  - fp
+  script:
+  - git clone https://gitlab.mpi-sws.org/iris/ci.git ci -b opam2
+  - ci/buildjob
+  cache:
+    key: "$CI_JOB_NAME"
+    paths:
+    - _opam/
+  except:
+  - triggers
+  - schedules
+  - api
+
+## Build jobs
+
+build-coq.8.17.0:
+  <<: *template
+  variables:
+    OPAM_PINS: "coq version 8.17.0"
