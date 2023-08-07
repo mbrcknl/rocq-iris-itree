@@ -122,7 +122,10 @@ Proof.
 Qed.
 
 Section interleaving.
-  Context `{!invGS_gen HasNoLc Σ} {E : Type → Type} {H : iHandler Σ E} `{!Sequential H} {R : Type}.
+  Context `{!invGS_gen HasNoLc Σ} {E : Type → Type} {H : iHandler Σ E} {R : Type}.
+  (* This sequentiality assumption is used for the [Emit] case in the adequacy
+  proof below. *)
+  Context `{!Sequential H}.
 
   (** The interleaving relation, prior to taking the fixpoint is taken. This
   relation encodes what it means for an [itree E R] to refine an itree
@@ -137,6 +140,15 @@ Section interleaving.
   (** If a thread returns, the interleaved [itree] ends. *)
   | Return tp r :
     interleavesF interleaves tp (RetF r) (RetF r)
+  (** If the current thread steps, so does the interleaved [itree]. *)
+  | Step current' tp interleaving' :
+    interleaves tp current' interleaving' →
+    interleavesF interleaves tp (TauF current') (TauF interleaving')
+  (** If an event of type [E] is emitted, the interleaved [itree] also
+  emits this event. *)
+  | Emit tp A (e : E A) k k' :
+    (∀ a, interleaves tp (k a) (k' a)) →
+    interleavesF interleaves tp (VisF (inr1 e) k) (VisF e k')
   (** If a thread emits the [EKillThread] event, the thread ends and control is
   yielded to some other thread in the threadpool. The interleaved [itree] takes
   a silent step in place of the [EKillThread]. *)
@@ -144,10 +156,6 @@ Section interleaving.
     tp !! new_current_tid = Some new_current →
     interleaves (delete new_current_tid tp) new_current interleaving' →
     interleavesF interleaves tp (VisF (inl1 EKillThread) k) (TauF interleaving')
-  (** If the current thread steps, so does the interleaved [itree]. *)
-  | Step current' tp interleaving' :
-    interleaves tp current' interleaving' →
-    interleavesF interleaves tp (TauF current') (TauF interleaving')
   (** The [EYield] event yields control to another thread placing the current
   thread in the threadpool to be resumed. Resumption costs a step. The
   interleaved [itree] takes a silent step in place of the [EYield]. *)
@@ -160,12 +168,7 @@ Section interleaving.
   place of the [EFork]. *)
   | Fork tp k interleaving' :
     interleaves (cons (k NewThread) tp) (k CurrentThread) interleaving' →
-    interleavesF interleaves tp (VisF (inl1 EFork) k) (TauF interleaving')
-  (** If an event of type [E] is emitted, the interleaved [itree] also
-  emits this event. *)
-  | Emit tp A (e : E A) k k' :
-    (∀ a, interleaves tp (k a) (k' a)) →
-    interleavesF interleaves tp (VisF (inr1 e) k) (VisF e k').
+    interleavesF interleaves tp (VisF (inl1 EFork) k) (TauF interleaving').
   Hint Constructors interleavesF : iris_itree.
   Definition interleaves_
     (interleaves : list (itree (threadpoolE +' E) R) -> itree (threadpoolE +' E) R -> itree E R -> Prop)
@@ -211,15 +214,34 @@ Section interleaving.
     iLöb as "IH" forall (tp current interleaving Hinter Φ). punfold Hinter.
     inversion Hinter as
       [tp' r Heqtp Heqcurrent Heqinterleaving
-      |tp' k new_current_tid new_current interleaving' Hidx Hinter' Heqtp Heqcurrent Heqinterleaving
       |current' tp' interleaving' Hinter' Heqtp Heqcurrent Heqinterleaving
+      |tp' A e k k' Hinter' Heqtp Heqcurrent Heqinterleaving
+      |tp' k new_current_tid new_current interleaving' Hidx Hinter' Heqtp Heqcurrent Heqinterleaving
       |tp' k new_current_tid new_current interleaving' Hidx Hinter' Heqtp Heqcurrent Heqinterleaving
       |tp' k interleaving' Hinter' Heqtp Heqcurrent Heqinterleaving
-      |tp' A e k k' Hinter' Heqtp Heqcurrent Heqinterleaving
       ].
-    - apply ret_observe_eqit in Heqcurrent as <-. apply ret_observe_eqit in Heqinterleaving as <-.
+    - (* Return tp' r *)
+      apply ret_observe_eqit in Heqcurrent as <-. apply ret_observe_eqit in Heqinterleaving as <-.
       by rewrite -!wpi_ret'.
-    - apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+    - (* Step current' tp' interleaving' *)
+      apply tau_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+      rewrite -!wpi_tau'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
+      iModIntro. iNext. iMod "Hfupd".
+      iEval (rewrite wpi_update_post). iApply ("IH" with "[] [Htp]").
+      * by destruct Hinter'.
+      * done.
+      * rewrite !wpi_update_post //.
+    - (* Emit tp' A e k k' *)
+      apply vis_observe_eqit in Heqcurrent as <-. apply vis_observe_eqit in Heqinterleaving as <-.
+      rewrite -!wpi_vis'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
+      iApply is_seq. iApply (ihandler_mono with "[Hfupd Htp] [] [Hcurrent]"); last done.
+      * pclearbot. iIntros (a) "Hwp". iNext. iMod "Hfupd".
+        iEval (rewrite wpi_update_post). iApply ("IH" with "[] Htp").
+        + by destruct (Hinter' a).
+        + rewrite wpi_update_post //.
+      * iModIntro. by iIntros (t) "Hwp".
+    - (* KillThread tp' k new_current_tid new_current interleaving' *)
+      apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
       rewrite -wpi_vis'. simpl. iApply wpi_tau. iNext.
       iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
       pclearbot. iApply ("IH" with "[] [Htp']").
@@ -227,14 +249,8 @@ Section interleaving.
       * done.
       * iMod "Hcurrent". simpl. iMod "Hcurrent".
         iDestruct (wpi_clear_mask with "Hcurrent'") as "Hcurrent'". by do 2 iMod "Hcurrent'".
-    - apply tau_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
-      rewrite -!wpi_tau'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
-      iModIntro. iNext. iMod "Hfupd".
-      iEval (rewrite wpi_update_post). iApply ("IH" with "[] [Htp]").
-      * by destruct Hinter'.
-      * done.
-      * rewrite !wpi_update_post //.
-    - apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+    - (* Yield tp' k new_current_tid new_current interleaving' *)
+      apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
       iApply wpi_tau'. rewrite -wpi_vis'. simpl. do 2 iMod "Hcurrent".
       rewrite wpi_update_post wpi_tau'.
       iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
@@ -247,20 +263,13 @@ Section interleaving.
         + done.
       * iDestruct (wpi_clear_mask with "Hcurrent'") as "Hcurrent'".
         iApply wpi_update. by iMod "Hfupd".
-    - apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
-      iApply wpi_tau'. rewrite -wpi_vis'. simpl. iMod "Hcurrent" as "[Hforked Hcurrent']".
-      iModIntro. iNext. iApply wpi_update_post. iApply ("IH" with "[] [Hcurrent' Htp]").
+    - (* Fork tp' k interleaving' *)
+      apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
+      iApply wpi_tau'. rewrite -wpi_vis'. simpl. iMod "Hcurrent" as "[Hcurrent' Hforked]".
+      iModIntro. iNext. iApply wpi_update_post. iApply ("IH" with "[] [Hforked Htp]").
       * by destruct Hinter'.
       * iApply big_sepL_cons. iFrame. iApply wpi_wand; last done. by iIntros (?) "?".
       * rewrite wpi_update_post //.
-    - apply vis_observe_eqit in Heqcurrent as <-. apply vis_observe_eqit in Heqinterleaving as <-.
-      rewrite -!wpi_vis'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
-      iApply is_seq. iApply (ihandler_mono with "[Hfupd Htp] [] [Hcurrent]"); last done.
-      * pclearbot. iIntros (a) "Hwp". iNext. iMod "Hfupd".
-        iEval (rewrite wpi_update_post). iApply ("IH" with "[] Htp").
-        + by destruct (Hinter' a).
-        + rewrite wpi_update_post //.
-      * iModIntro. by iIntros (t) "Hwp".
   Qed.
   (** Adequacy for [threadpoolH ⊕ H]. This says that if you can prove the
   weakest precondition an [itree (threadpoolE +' E) R] then you get weakest
