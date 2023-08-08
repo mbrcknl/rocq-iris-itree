@@ -4,7 +4,7 @@ stages:
   - build
 
 variables:
-  CPU_CORES: "8"
+  CPU_CORES: "4"
   OCAML: "ocaml-base-compiler.4.14.0"
 
 .branches_and_mr: &branches_and_mr
