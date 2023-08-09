@@ -133,10 +133,10 @@ Section interleaving.
   concurrency. *)
   Variant interleavesF
     (interleaves : list (itree (threadpoolE +' E) R) → itree (threadpoolE +' E) R → itree E R → Prop)
-    :  list (itree (threadpoolE +' E) R)
-    -> itree' (threadpoolE +' E) R
-    -> itree' E R
-    -> Prop :=
+    : list (itree (threadpoolE +' E) R)
+    → itree' (threadpoolE +' E) R
+    → itree' E R
+    → Prop :=
   (** If a thread returns, the interleaved [itree] ends. *)
   | Return tp r :
     interleavesF interleaves tp (RetF r) (RetF r)
@@ -171,11 +171,11 @@ Section interleaving.
     interleavesF interleaves tp (VisF (inl1 EFork) k) (TauF interleaving').
   Hint Constructors interleavesF : iris_itree.
   Definition interleaves_
-    (interleaves : list (itree (threadpoolE +' E) R) -> itree (threadpoolE +' E) R -> itree E R -> Prop)
-    :  list (itree (threadpoolE +' E) R)
-    -> itree (threadpoolE +' E) R
-    -> itree E R
-    -> Prop :=
+    (interleaves : list (itree (threadpoolE +' E) R) → itree (threadpoolE +' E) R → itree E R → Prop)
+    : list (itree (threadpoolE +' E) R)
+    → itree (threadpoolE +' E) R
+    → itree E R
+    → Prop :=
     fun tp current interleaving =>
     interleavesF interleaves tp (observe current) (observe interleaving).
 
@@ -195,7 +195,7 @@ Section interleaving.
 
   (** The interleaving relation. (See comments above.) *)
   Definition interleaves :
-    list (itree (threadpoolE +' E) R) -> itree (threadpoolE +' E) R -> itree E R -> Prop :=
+    list (itree (threadpoolE +' E) R) → itree (threadpoolE +' E) R → itree E R → Prop :=
     paco3 interleaves_ bot3.
 
   (** A technical version of adequacy, amenable to induction. See corollary below for a
@@ -234,7 +234,7 @@ Section interleaving.
     - (* Emit tp' A e k k' *)
       apply vis_observe_eqit in Heqcurrent as <-. apply vis_observe_eqit in Heqinterleaving as <-.
       rewrite -!wpi_vis'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
-      iApply is_seq. iApply (ihandler_mono with "[Hfupd Htp] [] [Hcurrent]"); last done.
+      iApply is_seq. iApply (ihandler_mono with "[Hfupd Htp] [] [Hcurrent //]").
       * pclearbot. iIntros (a) "Hwp". iNext. iMod "Hfupd".
         iEval (rewrite wpi_update_post). iApply ("IH" with "[] Htp").
         + by destruct (Hinter' a).

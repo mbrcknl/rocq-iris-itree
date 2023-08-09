@@ -100,7 +100,7 @@ Section wp_itree.
     - dependent destruction Hbisim. rewrite /is_true // in CHECK.
     - dependent destruction Hbisim.
       iIntros "HH". iMod "HH". iModIntro.
-      iApply (ihandler_mono with "[] [] [HH]"); last done.
+      iApply (ihandler_mono with "[] [] [HH //]").
       * iIntros (a) "Hwp". iNext. pclearbot. specialize (REL a). by iApply "IH".
       * iModIntro. iIntros (a) "Hwp". iNext. iApply "IH"; last done.
         + iPureIntro. pclearbot. apply REL.
@@ -164,10 +164,10 @@ Section wp_itree.
   Proof.
     rewrite !wpi_unfold /wpiF. simpl. f_equiv.
     iSplit.
-    - iIntros "HH". iApply (ihandler_mono with "[] [] [HH]"); last done.
+    - iIntros "HH". iApply (ihandler_mono with "[] [] [HH //]").
       * eauto.
       * iModIntro. by iIntros (t) "Hwp".
-    - iIntros "HH". iApply (ihandler_mono with "[] [] [HH]"); last done.
+    - iIntros "HH". iApply (ihandler_mono with "[] [] [HH //]").
       * eauto.
       * iModIntro. by iIntros (t) "Hwp".
   Qed.
@@ -199,7 +199,7 @@ Section wp_itree.
       * rewrite -!wpi_ret_emp_mask'. by iMod "Hwp".
       * rewrite -!wpi_tau_emp_mask'. iMod "Hwp". iModIntro. iNext. by iApply "IH".
       * rewrite -!wpi_vis_emp_mask'. iMod "Hwp". iModIntro.
-        iApply (ihandler_mono with "[] [] [Hwp]"); last done.
+        iApply (ihandler_mono with "[] [] [Hwp //]").
         + iIntros (a) "Hwp". iNext. by iApply "IH".
         + iModIntro. by iIntros (t') "Hwp".
     - iIntros "Hwp". iLöb as "IH" forall (t).
@@ -207,7 +207,7 @@ Section wp_itree.
       * rewrite -!wpi_ret_emp_mask'. by iMod "Hwp".
       * rewrite -!wpi_tau_emp_mask'. iMod "Hwp". iModIntro. iNext. by iApply "IH".
       * rewrite -!wpi_vis_emp_mask'. iMod "Hwp". iModIntro.
-        iApply (ihandler_mono with "[] [] [Hwp]"); last done.
+        iApply (ihandler_mono with "[] [] [Hwp //]").
         + iIntros (a) "Hwp". iNext. by iApply "IH".
         + iModIntro. by iIntros (t') "Hwp".
   Qed.
@@ -222,7 +222,7 @@ Section wp_itree.
     - rewrite -!wpi_ret_emp_mask'. by iApply "Hwand".
     - rewrite -!wpi_tau_emp_mask'. iMod "Hwp". iModIntro. iNext. by iApply ("IH" with "Hwand").
     - rewrite -!wpi_vis_emp_mask'. iMod "Hwp". iModIntro.
-      iApply (ihandler_mono with "[Hwand] [] [Hwp]"); last done.
+      iApply (ihandler_mono with "[Hwand] [] [Hwp //]").
       * iIntros (a) "Hwp". iNext. by iApply ("IH" with "Hwand").
       * iModIntro. by iIntros (t') "Hwp".
   Qed.
@@ -236,7 +236,7 @@ Section wp_itree.
     - rewrite bind_ret_l -!wpi_ret_emp_mask'. by iApply wpi_update_emp_mask.
     - rewrite bind_tau -!wpi_tau_emp_mask'. iMod "Hwp". iModIntro. iNext. by iApply "IH".
     - rewrite bind_vis -!wpi_vis_emp_mask'. iMod "Hwp". iModIntro.
-      iApply (ihandler_mono with "[] [] [Hwp]"); last done.
+      iApply (ihandler_mono with "[] [] [Hwp //]").
       * iIntros (a) "Hwp". iNext. by iApply "IH".
       * iModIntro. iIntros (t') "Hwp". iNext. iMod "Hwp". iModIntro.
         iApply "IH". iApply wpi_wand_emp_mask; last done. by iIntros (r) "Hfalse".
@@ -356,7 +356,7 @@ Section wp_itree_mask.
     iIntros (Hsubset) "Hwp Hinv".
     iMod (own_inv_acc _ with "Hinv") as "[HP Hclose]"; first done.
     iSpecialize ("Hwp" with "HP").
-    iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp]"); last done.
+    iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp //]").
     iIntros (r) "HP". iMod "HP" as "[HP HΦ]". by iMod ("Hclose" with "HP").
   Qed.
 
@@ -406,13 +406,13 @@ Section wp_itree_mask.
     rewrite -wpi_vis_emp_mask'.
     iSplit.
     - iIntros "HH". iMod "HH". iModIntro. iModIntro.
-      iApply (ihandler_mono with "[] [] [HH]"); last done.
+      iApply (ihandler_mono with "[] [] [HH //]").
       * iIntros (a) "Hwp". iNext. iApply wpi_update_emp_mask. iMod "Hwp". iModIntro.
         by iApply wpi_update_post_emp_mask.
       * iModIntro. iIntros (t) "Hwp". iApply wpi_update_post_emp_mask.
         iApply wpi_wand_emp_mask; last done. iIntros (r) "Hfalse". by iMod "Hfalse".
     - iIntros "HH". do 2 iMod "HH". iModIntro.
-      iApply (ihandler_mono with "[] [] [HH]"); last done.
+      iApply (ihandler_mono with "[] [] [HH //]").
       * iIntros (a) "Hwp". iNext. by iApply wpi_update_post_emp_mask.
       * iModIntro. iIntros (t) "Hwp". iApply wpi_update_post_emp_mask.
         iApply wpi_wand_emp_mask; last done. by iIntros (r) "Hfalse".
@@ -477,7 +477,7 @@ Section translation.
       rewrite -wpi_vis_emp_mask'. iApply wpi_update_emp_mask. iMod "Hwp". iModIntro.
       iApply wpi_wand_emp_mask; last iApply "HH".
       + iIntros (r) "Hr". iApply wpi_tau_emp_mask. iNext. done.
-      + iApply (ihandler_mono with "[] [] [Hwp]"); last done.
+      + iApply (ihandler_mono with "[] [] [Hwp //]").
         * iIntros (a) "Hwp". iNext. by iApply "IH".
         * iModIntro. iIntros (t') "Hwp". iNext. by iApply "IH".
   Qed.
