@@ -4,31 +4,29 @@ stages:
   - build
 
 variables:
-  CPU_CORES: "8"
+  CPU_CORES: "4"
   OCAML: "ocaml-base-compiler.4.14.0"
 
 .branches_and_mr: &branches_and_mr
   only:
-  - master@ou-plf/iris-itree
-  - /^ci/@ou-plf/iris-itree
-  - merge_requests
+    - master@ou-plf/iris-itree
+    - /^ci/@ou-plf/iris-itree
+    - merge_requests
 
 .template: &template
-  <<: *only_branches
+  <<: *branches_and_mr
   stage: build
-  tags:
-  - fp
   script:
-  - git clone https://gitlab.mpi-sws.org/iris/ci.git ci -b opam2
-  - ci/buildjob
+    - git clone https://gitlab.mpi-sws.org/iris/ci.git ci -b opam2
+    - ci/buildjob
   cache:
     key: "$CI_JOB_NAME"
     paths:
-    - _opam/
+      - _opam/
   except:
-  - triggers
-  - schedules
-  - api
+    - triggers
+    - schedules
+    - api
 
 ## Build jobs
 
