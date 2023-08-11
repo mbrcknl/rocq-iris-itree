@@ -40,8 +40,6 @@ Qed.
 Section wp_itree.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
 
-  Import EqNotations.
-
   (** The definition of the weakest precondition, prior to taking the fixpoint. *)
   Definition wpiF (H : iHandler Σ E)
     (wpi : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -d> iPropO Σ) :

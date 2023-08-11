@@ -9,7 +9,6 @@ From ITree Require Import Eq.
 From stdpp Require Import list.
 From Paco Require Import paco.
 From Paco Require Import paco3.
-Import EqNotations.
 
 (** Thread continuation. *)
 Variant thread :=
