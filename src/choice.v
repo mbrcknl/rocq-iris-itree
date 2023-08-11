@@ -1,5 +1,6 @@
 From iris.base_logic.lib Require Import iprop.
 From iris.proofmode Require Import proofmode.
+From iris.itree Require Import axioms.
 From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
 From iris.bi Require Import fixpoint.
@@ -57,6 +58,36 @@ Section monad.
     paco2 (eq_choiceMF eq_T) bot2.
 
   Global Instance choiceM_Eq1 : Eq1 choiceM := λ _, eq_choiceM (=).
+
+  Global Instance eq_choiceM_equivalence {T} (eq_T : relation T) `{!Equivalence eq_T} :
+    Equivalence (eq_choiceM eq_T).
+  Proof.
+    constructor.
+    - pcofix CIH. intros x. destruct x; pfold; constructor.
+      * by right.
+      * by right.
+      * done.
+    - pcofix CIH. intros x y Heq. punfold Heq.
+      destruct Heq as [B k k' Heq|B k k' Heq|x].
+      * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
+      * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
+      * pfold. by constructor.
+      * apply eq_choiceMF_monotone.
+    - pcofix CIH. intros x y z Hxy Hyz. punfold Hxy. punfold Hyz.
+      * pfold.
+        destruct Hxy; inversion Hyz; simplify_K.
+        + constructor. right. pclearbot. apply CIH with (y := k' a).
+          ++ apply H.
+          ++ apply H3.
+        + constructor. right. pclearbot. apply CIH with (y := k' a).
+          ++ apply H.
+          ++ apply H3.
+        + constructor. by etrans.
+      * apply eq_choiceMF_monotone.
+      * apply eq_choiceMF_monotone.
+  Qed.
+
+  (* TODO: continue adapting the following *)
 
   (* TODO: A more principled statement would be
   > Global Instance eq_choiceM_equivalence `{Equivalence T eq_T} : Equivalence (eq_choiceM eq_T).
@@ -201,7 +232,7 @@ Section choiceMiPropO.
   Definition choiceM_ofe_mixin : OfeMixin (choiceM T).
   Proof.
     split.
-    - 
+    -
 
 (* TODO: Add this if necessary.
 Section eq_iProp.
@@ -379,7 +410,7 @@ Section choiceA.
     iIntros (x) "[%y [Hchoice %Heq]]". destruct Heq.
     iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
     iApply choiceAF_proper_ent; last done.
-    - clear x y. iIntros (x y Heq) "Hchoice". iExists 
+    - clear x y. iIntros (x y Heq) "Hchoice". iExists
   Lemma choiceA_monotone {R} (x : choiceM R) Φ Ψ :
     (∀ r, Φ r -∗ Ψ r) -∗
     choiceA (bind x (λ r, ret (Φ r))) -∗
