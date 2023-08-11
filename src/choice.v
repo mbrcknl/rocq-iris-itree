@@ -68,7 +68,7 @@ Section monad.
       * by right.
       * done.
     - pcofix CIH. intros x y Heq. punfold Heq.
-      destruct Heq as [B k k' Heq|B k k' Heq|x].
+      destruct Heq as [A k k' Heq|A k k' Heq|x].
       * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
       * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
       * pfold. by constructor.
@@ -87,50 +87,45 @@ Section monad.
       * apply eq_choiceMF_monotone.
   Qed.
 
-  (* TODO: continue adapting the following *)
-
-  (* TODO: A more principled statement would be
-  > Global Instance eq_choiceM_equivalence `{Equivalence T eq_T} : Equivalence (eq_choiceM eq_T).
-  but I couldnt prove this without running into all sorts of trouble with
-  dependent types, so instead we will essentially reprove this statement a
-  few times. Monkey mathematics. *)
-  Require Import Coq.Program.Equality.
-  Global Instance choiceM_Equivalence {T : Type} : Equivalence (choiceM_Eq1 T).
-  Proof.
-    constructor.
-    - pcofix CIH. intros x. destruct x; pfold; constructor.
-      * by right.
-      * by right.
-      * done.
-    - pcofix CIH. intros x y Heq. punfold Heq.
-      destruct Heq as [B k k' Heq|B k k' Heq|x].
-      * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
-      * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
-      * pfold. by constructor.
-      * apply eq_choiceMF_monotone.
-    - pcofix CIH. intros x y z Hxy Hyz. punfold Hxy. punfold Hyz.
-      * pfold. dependent destruction Hxy; dependent destruction Hyz.
-        + constructor. right. pclearbot. apply CIH with (y := k' a).
-          ++ apply H.
-          ++ apply H0.
-        + constructor. right. pclearbot. apply CIH with (y := k' a).
-          ++ apply H.
-          ++ apply H0.
-        + by constructor.
-      * apply eq_choiceMF_monotone.
-      * apply eq_choiceMF_monotone.
-  Qed.
-
   Global Instance choiceM_equiv `{Equiv T} : Equiv (choiceM T) := eq_choiceM (≡).
 
-  (* This definition is necessary due to strange universe issues. *)
-  Definition ent (P Q : Prop) : Prop := P → Q.
-  Local Instance eq_choiceM_proper_ent {T} :
-    Proper (((=) ==> (=) ==> (ent)) ==> (=) ==> (=) ==> (ent)) (eq_choiceM (T:=T)).
-  Proof. Admitted.
-  Lemma forall_eq_choiceM {A T} (f : A → T → T → Prop) x y :
-    (∀ a, eq_choiceM (f a) x y) ↔ (eq_choiceM (λ x' y', ∀ a, f a x' y') x y).
-  Proof. Admitted.
+  Lemma eq_choiceM_mono {T} (f : T → T → Prop) (g : T → T → Prop) (x y : choiceM T) :
+    (∀ x' y', f x' y' → g x' y') →
+    eq_choiceM f x y → eq_choiceM g x y.
+  Proof.
+    intros Himply. generalize x y. clear x y. pcofix CIH. intros x y Heqf.
+    pfold. punfold Heqf; last apply eq_choiceMF_monotone.
+    destruct Heqf as [A k k' Heq|A k k' Heq|x]; constructor; pclearbot.
+    - right. apply CIH. apply Heq.
+    - right. apply CIH. apply Heq.
+    - by apply Himply.
+  Qed.
+  Local Instance eq_choiceM_proper {T} :
+    Proper (((=) ==> (=) ==> (↔)) ==> (=) ==> (=) ==> (↔)) (eq_choiceM (T:=T)).
+  Proof.
+    intros eq_T eq_T' Heq_T x x' <- y y' <-. split.
+    - intros Heq. eapply eq_choiceM_mono; last done. intros. eapply Heq_T; done.
+    - intros Heq. eapply eq_choiceM_mono; last done. intros. eapply Heq_T; done.
+  Qed.
+  Lemma forall_eq_choiceM {I T} (eq_T : I → T → T → Prop) x y `{Inhabited I} :
+    (∀ i, eq_choiceM (eq_T i) x y) ↔ (eq_choiceM (λ x' y', ∀ i, eq_T i x' y') x y).
+  Proof.
+    split.
+    - generalize x y. clear x y. pcofix CIH. intros x y Heq. pfold.
+      specialize (Heq inhabitant) as Heqi. punfold Heqi. destruct Heqi; constructor.
+      * intros a. right. apply CIH. intros i. specialize (Heq i).
+        punfold Heq; last apply eq_choiceMF_monotone.
+        inversion Heq as [A2 k2 k'2 Heq2| |]; simplify_K.
+        pclearbot. apply Heq2.
+      * intros a. right. apply CIH. intros i. specialize (Heq i).
+        punfold Heq; last apply eq_choiceMF_monotone.
+        inversion Heq as [|A2 k2 k'2 Heq2|]; simplify_K.
+        pclearbot. apply Heq2.
+      * intros i. specialize (Heq i). punfold Heq; last apply eq_choiceMF_monotone.
+        by inversion Heq.
+      * apply eq_choiceMF_monotone.
+    - intros Heq. intros i. eapply eq_choiceM_mono; last done. done.
+  Qed.
 
   Definition choiceM_id {T : Type} (x : choiceM T) : choiceM T :=
     match x with
@@ -192,47 +187,22 @@ Section monad.
   Qed.
 End monad.
 
-Section choiceMiPropO.
-  (* TODO: It would be more principled for this module to regard an OFE
-  [choiceMO T] for [T] a generic OFE, as opposed to specializing to the
-  [T = iProp Σ] case, but such generalization is obstructed by the lack of
-  generalization of [choiceM_Equivalence] mentioned in an earlier TODO. *)
-  Context {Σ : gFunctors}.
+Section choiceMO.
+  Context {T : ofe}.
 
-  Require Import Coq.Program.Equality.
-  Global Instance choiceM_iProp_Equivalence : Equivalence (eq_choiceM (≡@{iProp Σ})).
-  Proof.
-    constructor.
-    - pcofix CIH. intros x. destruct x; pfold; constructor.
-      * by right.
-      * by right.
-      * done.
-    - pcofix CIH. intros x y Heq. punfold Heq.
-      destruct Heq as [B k k' Heq|B k k' Heq|x].
-      * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
-      * pfold. constructor. right. pclearbot. apply CIH. apply Heq.
-      * pfold. by constructor.
-      * apply eq_choiceMF_monotone.
-    - pcofix CIH. intros x y z Hxy Hyz. punfold Hxy. punfold Hyz.
-      * pfold. dependent destruction Hxy; dependent destruction Hyz.
-        + constructor. right. pclearbot. apply CIH with (y := k' a).
-          ++ apply H.
-          ++ apply H0.
-        + constructor. right. pclearbot. apply CIH with (y := k' a).
-          ++ apply H.
-          ++ apply H0.
-        + by constructor.
-      * apply eq_choiceMF_monotone.
-      * apply eq_choiceMF_monotone.
-  Qed.
-
-
-  Local Instance choiceMiProp_dist : Dist (choiceM (iProp Σ)) := λ n, eq_choiceM (dist n).
+  Local Instance choiceM_dist : Dist (choiceM T) := λ n, eq_choiceM (dist n).
 
   Definition choiceM_ofe_mixin : OfeMixin (choiceM T).
   Proof.
     split.
-    -
+    - intros x y. rewrite forall_eq_choiceM. apply eq_choiceM_proper; try done.
+      intros a a' <- b b' <-. apply equiv_dist.
+    - apply _.
+    - intros n m x y Hdist Hleq. eapply eq_choiceM_mono; last done.
+      intros x' y' Hdist'. eapply dist_lt; done.
+  Qed.
+  Canonical Structure choiceMO : ofe := Ofe (choiceM T) choiceM_ofe_mixin.
+End choiceMO.
 
 (* TODO: Add this if necessary.
 Section eq_iProp.
