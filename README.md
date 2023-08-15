@@ -9,7 +9,6 @@ dependencies.  This requires the following two repositories:
 
     opam repo add coq-released https://coq.inria.fr/opam/released
     opam repo add iris-dev https://gitlab.mpi-sws.org/iris/opam.git
-    opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
 
 Once you got opam set up, run `make build-dep` to install the right versions of the dependencies.
 

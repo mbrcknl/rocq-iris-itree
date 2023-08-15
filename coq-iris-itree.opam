@@ -5,7 +5,7 @@ synopsis: "Scaling reasoning about operational semantics using itrees."
 
 depends: [
   "coq" { (>= "8.13" & < "8.18~") | (= "dev") }
-  "coq-iris" { (= "dev.2023-08-04.2.b9e591f8") | (= "dev") }
+  "coq-iris" { (= "dev.2023-08-11.1.81f394da") }
   "coq-itree" { (= "5.1.1") }
 ]
 
