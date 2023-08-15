@@ -89,6 +89,38 @@ Section monad.
 
   Global Instance choiceM_equiv `{Equiv T} : Equiv (choiceM T) := eq_choiceM (≡).
 
+  Definition choiceM_id {T : Type} (x : choiceM T) : choiceM T :=
+    match x with
+    | Demonic _ k => Demonic _ k
+    | Angelic _ k => Angelic _ k
+    | Always x => Always x
+    end.
+  Lemma choiceM_id_id {T : Type} (x : choiceM T) :
+    x = choiceM_id x.
+  Proof.
+    by destruct x.
+  Qed.
+
+  Global Instance ret_proper {T : Type} equiv :
+    Proper (equiv ==> eq_choiceM (T:=T) equiv) ret.
+  Proof.
+    intros t1 t2 Heq. pfold. by constructor.
+  Qed.
+  Global Instance bind_proper {A B} equiv1 equiv2 :
+    Proper (eq_choiceM equiv1 ==> (equiv1 ==> eq_choiceM equiv2) ==> eq_choiceM equiv2)
+           (bind : choiceM A → (A → choiceM B) → choiceM B).
+  Proof.
+    pcofix CIH. intros ma1 ma2 Heqma f1 f2 Heqf. punfold Heqma; last apply eq_choiceMF_monotone.
+    pfold. destruct Heqma as [X k k' Heq|X k k' Heq|x y Heq].
+    - setoid_rewrite choiceM_id_id. constructor. right. apply CIH; last done. pclearbot. apply Heq.
+    - setoid_rewrite choiceM_id_id. constructor. right. apply CIH; last done. pclearbot. apply Heq.
+    - setoid_rewrite choiceM_id_id. specialize (Heqf x y Heq). punfold Heqf. simpl. destruct Heqf.
+      * constructor. left. pclearbot. eapply paco2_mon; done.
+      * constructor. left. pclearbot. eapply paco2_mon; done.
+      * by constructor.
+      * apply eq_choiceMF_monotone.
+  Qed.
+
   Lemma eq_choiceM_mono {T} (f : T → T → Prop) (g : T → T → Prop) (x y : choiceM T) :
     (∀ x' y', f x' y' → g x' y') →
     eq_choiceM f x y → eq_choiceM g x y.
@@ -125,18 +157,6 @@ Section monad.
         by inversion Heq.
       * apply eq_choiceMF_monotone.
     - intros Heq. intros i. eapply eq_choiceM_mono; last done. done.
-  Qed.
-
-  Definition choiceM_id {T : Type} (x : choiceM T) : choiceM T :=
-    match x with
-    | Demonic _ k => Demonic _ k
-    | Angelic _ k => Angelic _ k
-    | Always x => Always x
-    end.
-  Lemma choiceM_id_id {T : Type} (x : choiceM T) :
-    x = choiceM_id x.
-  Proof.
-    by destruct x.
   Qed.
 
   Global Instance MonadLawsE_choiceM : MonadLawsE choiceM.
@@ -188,7 +208,7 @@ Section monad.
 End monad.
 
 Section choiceMO.
-  Context {T : ofe}.
+  Context (T : ofe).
 
   Local Instance choiceM_dist : Dist (choiceM T) := λ n, eq_choiceM (dist n).
 
@@ -202,116 +222,87 @@ Section choiceMO.
       intros x' y' Hdist'. eapply dist_lt; done.
   Qed.
   Canonical Structure choiceMO : ofe := Ofe (choiceM T) choiceM_ofe_mixin.
-End choiceMO.
 
-(* TODO: Add this if necessary.
-Section eq_iProp.
-  Context {Σ : gFunctors}.
-
-  Import EqNotations.
-  (* TODO: Fix OFE structure. *)
-  Definition eq_choiceM_iPropF
-    (eq_choiceM_iProp : prodO (leibnizO (choiceM (iProp Σ))) (leibnizO (choiceM (iProp Σ))) -d> iProp Σ)
-    : prodO (leibnizO (choiceM (iProp Σ))) (leibnizO (choiceM (iProp Σ))) -d> iProp Σ := λ p,
-    match p with
-    | (@Demonic _ A k, @Demonic _ A' k') =>
-        (∃ eq : A = A', ∀ a, eq_choiceM_iProp (k a, k' (rew eq in a)))%I
-    | (@Angelic _ A k, @Angelic _ A' k') =>
-        (∃ eq : A = A', ∀ a, eq_choiceM_iProp (k a, k' (rew eq in a)))%I
-    | (Always Φ, Always Ψ) => (Φ ≡ Ψ)%I
-    | _ => False%I
-    end.
-
-  Local Instance eq_choiceM_iPropF_mono :
-    BiMonoPred eq_choiceM_iPropF.
+  Global Instance internal_eq_proper_strict {Σ} :
+    Proper (eq_choiceM (=) ==> eq_choiceM (=) ==> (⊣⊢))
+           (internal_eq : choiceM T → choiceM T → iProp Σ).
   Proof.
-    constructor.
-    - iIntros (choiceA1 choiceA2 Hne1 Hne2) "#Hchoicewand". iIntros (x) "Hchoice".
-      destruct x.
-      * iIntros (a). by iApply "Hchoicewand".
-      * iDestruct "Hchoice" as "[%a Hchoice]". iExists _. iApply "Hchoicewand". iApply "Hchoice".
-      * done.
-    - intros choiceA Hne. intros n x y Heq. by rewrite Heq.
+    intros x1 x2 Hx y1 y2 Hy. apply eq_choiceM_mono with (g:=(≡)) in Hx, Hy.
+    - rewrite Hx Hy //.
+    - by intros ? ? ->.
+    - by intros ? ? ->.
   Qed.
-
-  Definition choiceA : choiceM (iProp Σ) → iProp Σ :=
-    bi_greatest_fixpoint choiceAF.
-End eq_iProp.
-*)
+End choiceMO.
 
 Section choiceA.
   Context {Σ : gFunctors}.
 
-  (* TODO: Fix OFE structure. *)
-  Definition choiceAF (choiceA : leibnizO (choiceM (iProp Σ)) -d> iProp Σ)
-    : choiceM (iProp Σ) -d> iProp Σ := λ x,
+  Definition choiceAF (choiceA : choiceMO (iProp Σ) -> iProp Σ)
+    : choiceMO (iProp Σ) -> iProp Σ := λ x,
     match x with
-    | Demonic k => (∀ a, choiceA (k a))%I
-    | Angelic k => (∃ a, choiceA (k a))%I
+    | Demonic _ k => (∀ a, choiceA (k a))%I
+    | Angelic _ k => (∃ a, choiceA (k a))%I
     | Always x => x
     end.
-
-  Local Instance choiceAF_monotone :
-    BiMonoPred choiceAF.
+  Global Instance choiceAF_ne n :
+    Proper ((dist n ==> dist n) ==> dist n ==> dist n) choiceAF.
   Proof.
-    constructor.
-    - iIntros (choiceA1 choiceA2 Hne1 Hne2) "#Hchoicewand". iIntros (x) "Hchoice".
-      destruct x.
-      * iIntros (a). by iApply "Hchoicewand".
-      * iDestruct "Hchoice" as "[%a Hchoice]". iExists _. iApply "Hchoicewand". iApply "Hchoice".
-      * done.
-    - intros choiceA Hne. intros n x y Heq. by rewrite Heq.
-  Qed.
-
-  Definition choiceA : choiceM (iProp Σ) → iProp Σ :=
-    bi_greatest_fixpoint choiceAF.
-
-  Global Instance choiceAF_proper_ent :
-    Proper ((eq_choiceM ==> (⊢)) ==> eq_choiceM ==> (⊢)) choiceAF.
-  Proof.
-    intros choiceA1 choiceA2 Hchoiceent x y Hxy.
-    iIntros "Hchoice1". punfold Hxy. destruct Hxy as [A k k' Heq|A k k' Heq|x].
-    - pclearbot. iIntros (a). rewrite -Hchoiceent.
-      * iApply "Hchoice1".
-      * apply Heq.
-    - pclearbot. iDestruct "Hchoice1" as "[%a Hchoice1]". rewrite Hchoiceent.
-      * iExists a. iApply "Hchoice1".
-      * apply Heq.
+    intros choiceA1 choiceA2 Hchoiceeq x1 x2 Hxeq.
+    punfold Hxeq. destruct Hxeq as [A k k' Heq|A k k' Heq|x].
+    - simpl. f_equiv. intros a. pclearbot. specialize (Heq a). apply Hchoiceeq. apply Heq.
+    - simpl. f_equiv. intros a. pclearbot. specialize (Heq a). apply Hchoiceeq. apply Heq.
     - done.
     - apply eq_choiceMF_monotone.
   Qed.
   Global Instance choiceAF_proper :
-    Proper ((eq_choiceM ==> (≡)) ==> eq_choiceM ==> (≡)) choiceAF.
+    Proper (((≡) ==> (≡)) ==> (≡) ==> (≡)) choiceAF.
   Proof.
-    intros choiceA1 choiceA2 Hchoiceeq x y Hxy.
-    iSplit.
-    - iApply choiceAF_proper_ent.
-      * intros x' y' Hx'y'. rewrite Hchoiceeq //.
-      * done.
-    - iApply choiceAF_proper_ent.
-      * intros x' y' Hx'y'. rewrite Hchoiceeq //.
-      * done.
+    intros choiceA1 choiceA2 Hchoiceeq x1 x2 Hxeq.
+    punfold Hxeq. destruct Hxeq as [A k k' Heq|A k k' Heq|x].
+    - simpl. f_equiv. intros a. pclearbot. specialize (Heq a). apply Hchoiceeq. apply Heq.
+    - simpl. f_equiv. intros a. pclearbot. specialize (Heq a). apply Hchoiceeq. apply Heq.
+    - done.
+    - apply eq_choiceMF_monotone.
   Qed.
-  Global Instance choiceA_proper_ent :
-    Proper (eq_choiceM ==> (⊢)) choiceA.
+  Lemma choiceAF_rew choiceA mΦ mΨ :
+    NonExpansive choiceA →
+    mΦ ≡ mΨ -∗
+    choiceAF choiceA mΦ -∗
+    choiceAF choiceA mΨ.
   Proof.
-    intros x y Hxy.
-    iAssert (∀ y, (∃ x, choiceA x ∧ ⌜eq_choiceM x y⌝) -∗ choiceA y)%I as "Hwand".
-    - clear x y Hxy. iApply (greatest_fixpoint_coiter choiceAF). iModIntro.
-      iIntros (y) "[%x [Hchoice %Hxy]]".
-      iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
-      iApply choiceAF_proper_ent; last done.
-      * iIntros (x' y' Hx'y') "Hgoal". iExists x'. by iSplit.
-      * apply Hxy.
-    - iIntros "Hx". iApply "Hwand". iExists x. iFrame. iPureIntro. apply Hxy.
+    iIntros (Hne) "Heq Hchoice". by iRewrite -"Heq".
   Qed.
+
+  Lemma choiceAF_mono f g :
+    (∀ x, f x -∗ g x) -∗ ∀ x, choiceAF f x -∗ choiceAF g x.
+  Proof.
+    iIntros "Hwand" (x) "Hchoice". destruct x.
+    - iIntros (a). by iApply "Hwand".
+    - iDestruct "Hchoice" as "[%a Hchoice]". iExists _. iApply "Hwand". iApply "Hchoice".
+    - done.
+  Qed.
+  Local Instance choiceAF_monotone :
+    BiMonoPred choiceAF.
+  Proof.
+    constructor.
+    - iIntros (choiceA1 choiceA2 Hne1 Hne2) "#Hchoicewand". by iApply choiceAF_mono.
+    - solve_proper.
+  Qed.
+
+  Definition choiceA : choiceM (iProp Σ) → iProp Σ :=
+    bi_greatest_fixpoint choiceAF.
+  
+  Global Instance choiceA_ne : NonExpansive choiceA.
+  Proof. solve_proper. Qed.
   Global Instance choiceA_proper :
-    Proper (eq_choiceM ==> (≡)) choiceA.
+    Proper ((≡) ==> (⊣⊢)) choiceA.
+  Proof. solve_proper. Qed.
+  Global Instance choiceA_proper_strict :
+    Proper (eq_choiceM (=) ==> (⊣⊢)) choiceA.
   Proof.
-    intros x y Hxy.
-    iSplit.
-    - by iApply choiceA_proper_ent.
-    - by iApply choiceA_proper_ent.
+    intros Φ1 Φ2 HΦ. apply eq_choiceM_mono with (g:=(≡)) in HΦ.
+    - by rewrite HΦ.
+    - by intros ? ? ->.
   Qed.
 
   Lemma choiceA_id x :
@@ -321,10 +312,11 @@ Section choiceA.
   Qed.
 
   Lemma choiceA_associative_dir1 :
-    ∀ z, (∃ x, choiceA (bind x id) ∧ ⌜bind x (λ y, ret (choiceA y)) = z⌝) -∗ choiceA z.
+    ∀ z, (∃ x, choiceA (bind x id) ∧ (bind x (λ y, ret (choiceA y)) ≡ z)) -∗ choiceA z.
   Proof.
-    iApply (greatest_fixpoint_coiter choiceAF). iModIntro. iIntros (z) "[%x [Hchoice %Heq]]".
-    destruct Heq. destruct x.
+    iApply (greatest_fixpoint_coiter choiceAF); first solve_proper. iModIntro.
+    iIntros (z) "[%x [Hchoice Heq]]". iApply (choiceAF_rew with "Heq"); first solve_proper.
+    destruct x.
     - iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
       rewrite /choiceAF /bind/Monad_Prop. iIntros (a). iExists (k a). iSplit.
       * iApply "Hchoice".
@@ -334,35 +326,32 @@ Section choiceA.
       iExists (k a). iSplit.
       * iApply "Hchoice".
       * done.
-    - rewrite bind_ret_l. iApply "Hchoice".
-  Qed.
+    - iEval (rewrite bind_ret_l) in "Hchoice". iApply (choiceAF_rew _ (Always (choiceA x))); first solve_proper.
+      * rewrite bind_ret_l //.
+      * done.
+  Qed.    
+
   Lemma choiceA_associative_dir2 :
-    ∀ z, (∃ x, choiceA (bind x (λ y, ret (choiceA y))) ∧ ⌜eq_choiceM (bind x id) z⌝) -∗ choiceA z.
+    ∀ z, (∃ x, choiceA (bind x (λ y, ret (choiceA y))) ∧ (bind x id ≡ z)) -∗ choiceA z.
   Proof.
-    iApply (greatest_fixpoint_coiter choiceAF). iModIntro. iIntros (z) "[%x [Hchoice %Heq]]".
-    iApply (choiceAF_proper
-      (λ z, (∃ x, choiceA (bind x (λ y, ret (choiceA y))) ∧ ⌜eq_choiceM (bind x id) z⌝)%I)
-      _ _ (bind x id) z
-    ). Unshelve.
-    - done.
-    - clear z Heq. destruct x.
-      * iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
-        rewrite /choiceAF /bind/Monad_Prop. iIntros (a). iExists (k a). iSplit.
-        + iApply "Hchoice".
-        + done.
-      * iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
-        rewrite /choiceAF /bind/Monad_Prop. iDestruct "Hchoice" as "[%a Hchoice]". iExists a.
-        iExists (k a). iSplit.
-        + iApply "Hchoice".
-        + done.
-      * iEval (rewrite bind_ret_l choiceA_id /choiceA greatest_fixpoint_unfold) in "Hchoice".
-        iApply choiceAF_proper_ent; last done.
-        + clear x. iIntros (x y Hxy) "Hchoice". iExists (ret x).
-          rewrite !bind_ret_l choiceA_id. eauto.
-        + rewrite bind_ret_l //.
-    - clear x z Heq. intros x y Hxy. iSplit.
-      + iIntros "H". iDestruct "H" as "[%y' H]". iExists y'. rewrite Hxy //.
-      + iIntros "H". iDestruct "H" as "[%y' H]". iExists y'. rewrite Hxy //.
+    iApply (greatest_fixpoint_coiter choiceAF); first solve_proper.
+    iModIntro. iIntros (z) "[%x [Hchoice Heq]]".
+    iApply (choiceAF_rew with "Heq"); first solve_proper.
+    clear z. destruct x.
+    - iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
+      rewrite /choiceAF /bind/Monad_Prop. iIntros (a). iExists (k a). iSplit.
+      * iApply "Hchoice".
+      * done.
+    - iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
+      rewrite /choiceAF /bind/Monad_Prop. iDestruct "Hchoice" as "[%a Hchoice]". iExists a.
+      iExists (k a). iSplit.
+      * iApply "Hchoice".
+      * done.
+    - iEval (rewrite bind_ret_l choiceA_id /choiceA greatest_fixpoint_unfold) in "Hchoice".
+      iApply bi_mono_pred; last done; first solve_proper. clear x.
+      iModIntro. iIntros (x) "Hchoice". iExists (ret x). iSplit.
+      * rewrite bind_ret_l. rewrite choiceA_id //.
+      * rewrite bind_ret_l //.
   Qed.
   Lemma choiceA_associative x :
     choiceA (bind x id) ≡ choiceA (bind x (λ y, ret (choiceA y))).
@@ -373,17 +362,21 @@ Section choiceA.
   Qed.
 
   Lemma choiceA_monotone' {R} (Φ : R → iProp Σ) (Ψ : R → iProp Σ) :
-    (∀ r, Φ r -∗ Ψ r) -∗
-    ∀ z, ((∃ x, choiceA (bind x (λ r, ret (Φ r))) ∧ ⌜z = bind x (λ r, ret (Φ r))⌝) -∗ choiceA z).
+    ∀ z, ((∃ x, choiceA (bind x (λ r, ret (Φ r))) ∗ (∀ r, Φ r -∗ Ψ r) ∗ (bind x (λ r, ret (Ψ r)) ≡ z)) -∗ choiceA z).
   Proof.
-    iIntros "Hwand". iApply (greatest_fixpoint_coiter choiceAF). iModIntro.
-    iIntros (x) "[%y [Hchoice %Heq]]". destruct Heq.
+    iApply (greatest_fixpoint_coiter choiceAF); first solve_proper. iModIntro.
+    iIntros (mΦ) "[%mr [Hchoice [Hwand #Heq]]]". iApply (choiceAF_rew with "Heq"); first solve_proper.
     iEval (rewrite /choiceA greatest_fixpoint_unfold) in "Hchoice".
-    iApply choiceAF_proper_ent; last done.
-    - clear x y. iIntros (x y Heq) "Hchoice". iExists
-  Lemma choiceA_monotone {R} (x : choiceM R) Φ Ψ :
+    destruct mr as [A k|A k|r].
+    - iIntros (a). iExists (k a). iSpecialize ("Hchoice" $! a). by iFrame.
+    - iDestruct "Hchoice" as "[%a Hchoice]". iExists a. iExists (k a). by iFrame.
+    - by iApply "Hwand".
+  Qed.
+  Lemma choiceA_monotone {R} (mr : choiceM R) Φ Ψ :
     (∀ r, Φ r -∗ Ψ r) -∗
-    choiceA (bind x (λ r, ret (Φ r))) -∗
-    choiceA (bind x (λ r, ret (Ψ r))).
+    choiceA (bind mr (λ r, ret (Φ r))) -∗
+    choiceA (bind mr (λ r, ret (Ψ r))).
   Proof.
+    iIntros "Hwand Hchoice". iApply choiceA_monotone'. iExists mr. by iFrame.
+  Qed.
 End choiceA.
