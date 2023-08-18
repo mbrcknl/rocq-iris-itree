@@ -4,6 +4,7 @@ From iris.base_logic.lib Require Import ghost_var.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
+From iris.itree Require Import itree.
 From ITree Require Import ITree.
 From ITree Require Import Eq.
 From stdpp Require Import list.
@@ -87,29 +88,6 @@ Section wp_threadpool.
   Qed.
 End wp_threadpool.
 
-Lemma ret_observe_eqit {E R} (r : R) (t : itree E R) :
-  RetF r = observe t →
-  Ret r ≅ t.
-Proof.
-  intros Heq. rewrite /eq_itree /eqit. pfold. rewrite /eqit_ -Heq. by constructor.
-Qed.
-
-Lemma tau_observe_eqit {E R} (t t' : itree E R) :
-  TauF t' = observe t →
-  Tau t' ≅ t.
-Proof.
-  intros Heq. rewrite /eq_itree /eqit. pfold. rewrite /eqit_ -Heq. constructor.
-  rewrite /upaco2 /bot2. left. by apply Reflexive_eqit.
-Qed.
-
-Lemma vis_observe_eqit {E A R} (e : E A) (k : A → itree E R) (t : itree E R) :
-  VisF e k = observe t →
-  Vis e k ≅ t.
-Proof.
-  intros Heq. rewrite /eq_itree /eqit. pfold. rewrite /eqit_ -Heq. constructor.
-  rewrite /upaco2 /bot2. left. by apply Reflexive_eqit.
-Qed.
-
 Lemma big_sepL_delete' {Σ} A (Φ : A → iProp Σ) l i x :
   l !! i = Some x →
   ([∗ list] y ∈ l, Φ y) ⊣⊢
@@ -175,8 +153,7 @@ Section interleaving.
     → itree (threadpoolE +' E) R
     → itree E R
     → Prop :=
-    fun tp current interleaving =>
-    interleavesF interleaves tp (observe current) (observe interleaving).
+    λ tp current interleaving, interleavesF interleaves tp (observe current) (observe interleaving).
 
   Lemma interleavesF_mono interleaves interleaves' tp current interleaving :
     interleaves <3= interleaves' →

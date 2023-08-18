@@ -5,6 +5,7 @@ From iris.base_logic.lib Require Import ghost_var.
 From iris.base_logic.lib Require Import fancy_updates.
 From iris.base_logic.lib Require Import invariants.
 From iris.itree Require Import handler.
+From iris.itree Require Import itree.
 From ITree Require Import ITree.
 From ITree Require Import CategoryFunctor.
 From ITree Require Import Interp.InterpFacts.
@@ -13,29 +14,6 @@ From ITree Require Import Eq.
 From ITree Require Import Eqit.
 From Paco Require Import paco.
 Require Import Coq.Program.Equality.
-
-Global Instance itree_equiv (E : Type → Type) R : Equiv (itree E R) := eq_itree (=).
-
-Global Instance eq_itree_iff {E R} (t' : itree E R) :
-  Proper (eq_itree (=) ==> iff) (λ t, t ≅ t').
-Proof.
-  intros t1 t2 Heqit. by rewrite Heqit.
-Qed.
-
-(** TODO: Is this to be found anywhere in the ITree library? *)
-Lemma itree_match {E R} (t : itree E R) :
-  (∃ r, t ≅ Ret r) ∨
-  (∃ t', t ≅ Tau t') ∨
-  (∃ A (e : E A) k, t ≅ Vis e k).
-Proof.
-  rewrite /eq_itree /eqit /eqit_.
-  destruct (observe t) as [r|t'|A e k] eqn:Heq.
-  - left. exists r. pfold. rewrite Heq. by apply EqRet.
-  - right. left. exists t'. pfold. rewrite Heq. apply EqTau. rewrite /upaco2 /bot2. left.
-    by apply Reflexive_eqit.
-  - right. right. exists A, e, k. pfold. rewrite Heq. apply EqVis. rewrite /upaco2 /bot2. left.
-    by apply Reflexive_eqit.
-Qed.
 
 Section wp_itree.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
