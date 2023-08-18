@@ -241,10 +241,9 @@ Section angelic_adequacy.
         + pclearbot. iPureIntro. apply Hinstant'.
         + done.
   Qed.
-  Theorem angelicH_adequate (t : itree (angelicE +' E) R) (t' : itree E R) M Φ :
-    angelic_instantiates t t' →
+  Theorem angelicH_adequate (t : itree (angelicE +' E) R) M Φ :
     WPi t @ angelicH ⊕ H; M {{ Φ }} -∗
-    WPi t' @ H; M {{ Φ }}.
+    (∃ t', ⌜angelic_instantiates t t'⌝ ∧ WPi t' @ H; M {{ Φ }}).
   Proof.
     iIntros (Hinstant) "Hwp". rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
     iApply angelicH_adequate'.
