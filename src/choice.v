@@ -91,7 +91,7 @@ Section demonic_adequacy.
     (demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop)
     : itree' (demonicE +' E) R → itree' E R → Prop :=
   | DInstantiate A (a : A) k k' :
-    (∀ a, demonic_instantiates (k a) (k' a)) →
+    demonic_instantiates (k a) (k' a) →
     demonic_instantiatesF demonic_instantiates (VisF (inl1 (EDemonic A)) k) (TauF (k' a))
   | DReturns r :
     demonic_instantiatesF demonic_instantiates (RetF r) (RetF r)
@@ -174,7 +174,7 @@ Section angelic_adequacy.
     (angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop)
     : itree' (angelicE +' E) R → itree' E R → Prop :=
   | AInstantiate A (a : A) k k' :
-    (∀ a, angelic_instantiates (k a) (k' a)) →
+    angelic_instantiates (k a) (k' a) →
     angelic_instantiatesF angelic_instantiates (VisF (inl1 (EAngelic A)) k) (TauF (k' a))
   | AReturns r :
     angelic_instantiatesF angelic_instantiates (RetF r) (RetF r)
