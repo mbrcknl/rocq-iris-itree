@@ -90,9 +90,9 @@ Section demonic_adequacy.
   Variant demonic_instantiatesF
     (demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop)
     : itree' (demonicE +' E) R → itree' E R → Prop :=
-  | DInstantiate A (a : A) k k' :
-    demonic_instantiates (k a) (k' a) →
-    demonic_instantiatesF demonic_instantiates (VisF (inl1 (EDemonic A)) k) (TauF (k' a))
+  | DInstantiate A (a : A) k t :
+    demonic_instantiates (k a) t →
+    demonic_instantiatesF demonic_instantiates (VisF (inl1 (EDemonic A)) k) (TauF t)
   | DReturns r :
     demonic_instantiatesF demonic_instantiates (RetF r) (RetF r)
   | DSteps t_next t_next' :
@@ -173,9 +173,9 @@ Section angelic_adequacy.
   Variant angelic_instantiatesF
     (angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop)
     : itree' (angelicE +' E) R → itree' E R → Prop :=
-  | AInstantiate A (a : A) k k' :
-    angelic_instantiates (k a) (k' a) →
-    angelic_instantiatesF angelic_instantiates (VisF (inl1 (EAngelic A)) k) (TauF (k' a))
+  | AInstantiate A (a : A) k t :
+    angelic_instantiates (k a) t →
+    angelic_instantiatesF angelic_instantiates (VisF (inl1 (EAngelic A)) k) (TauF t)
   | AReturns r :
     angelic_instantiatesF angelic_instantiates (RetF r) (RetF r)
   | ASteps t_next t_next' :
