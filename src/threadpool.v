@@ -100,12 +100,12 @@ Qed.
 
 Section interleaving.
   Context `{!invGS_gen HasNoLc Σ} {E : Type → Type} {H : iHandler Σ E} {R : Type}.
-  (* This sequentiality assumption is used for the [Emit] case in the adequacy
+  (** This sequentiality assumption is used for the [Emit] case in the adequacy
   proof below. *)
   Context `{!Sequential H}.
 
-  (** The interleaving relation, prior to taking the fixpoint is taken. This
-  relation encodes what it means for an [itree E R] to refine an itree
+  (** The interleaving relation, prior to taking the fixpoint. This relation
+  encodes what it means for an [itree E R] to refine an itree
   [itree (threadpoolE +' E) R] that can emit events [threadpoolE] regarding
   concurrency. *)
   Variant interleavesF
