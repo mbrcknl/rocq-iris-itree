@@ -92,9 +92,9 @@ Section demonic_adequacy.
   Variant demonic_instantiatesF
     (demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop)
     : itree' (demonicE +' E) R → itree' E R → Prop :=
-  | DInstantiate A (a : A) k k' :
-    (∀ a, demonic_instantiates (k a) (k' a)) →
-    demonic_instantiatesF demonic_instantiates (VisF (inl1 (EDemonic A)) k) (TauF (k' a))
+  | DInstantiate A (a : A) k t :
+    demonic_instantiates (k a) t →
+    demonic_instantiatesF demonic_instantiates (VisF (inl1 (EDemonic A)) k) (TauF t)
   | DReturns r :
     demonic_instantiatesF demonic_instantiates (RetF r) (RetF r)
   | DSteps t_next t_next' :
