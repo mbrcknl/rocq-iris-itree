@@ -1,4 +1,6 @@
 From iris.base_logic.lib Require Import iprop.
+From iris.base_logic Require Import bi.
+Import uPred.
 From iris.proofmode Require Import proofmode.
 From iris.itree Require Import axioms.
 From iris.itree Require Import handler.
@@ -166,88 +168,70 @@ Section demonic_adequacy.
   Qed.
 End demonic_adequacy.
 
+Lemma fupd_soundness `{!invGpreS Σ} E1 E2 (P : iProp Σ) `{!Plain P} :
+  (∀ `{Hinv: !invGS_gen HasNoLc Σ}, ⊢ |={E1,E2}=> P) → ⊢ P.
+Proof.
+  intros Hfupd. apply fupd_soundness_no_lc with (E1 := E1) (E2 := E2) (m := 0).
+  - done.
+  - iIntros (Hinv) "Hcred". iApply Hfupd.
+Qed.
+
 (* TODO: Move above demonic_adequacy to signify correct order of application. *)
-Section angelic_adequacy.
-  Context {E : Type → Type} `{H : iHandler Σ E} {R : Type} `{!invGS_gen HasNoLc Σ}.
+Section demonic_angelic_adequacy.
+  Context {R : Type}.
 
-  Variant angelic_instantiatesF
-    (angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop)
-    : itree' (angelicE +' E) R → itree' E R → Prop :=
-  | AInstantiate A (a : A) k k' :
-    (∀ a, angelic_instantiates (k a) (k' a)) →
-    angelic_instantiatesF angelic_instantiates (VisF (inl1 (EAngelic A)) k) (TauF (k' a))
-  | AReturns r :
-    angelic_instantiatesF angelic_instantiates (RetF r) (RetF r)
-  | ASteps t_next t_next' :
-    angelic_instantiates t_next t_next' →
-    angelic_instantiatesF angelic_instantiates (TauF t_next) (TauF t_next')
-  | AEmits A (e : E A) k k' :
-    (∀ a, angelic_instantiates (k a) (k' a)) →
-    angelic_instantiatesF angelic_instantiates (VisF (inr1 e) k) (VisF e k').
-  Hint Constructors angelic_instantiatesF : iris_itree.
-  Definition angelic_instantiates_
-    (angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop)
-    : itree (angelicE +' E) R → itree E R → Prop :=
-    λ t t', angelic_instantiatesF angelic_instantiates (observe t) (observe t').
+  Variant angel_winsF
+    (angel_wins : itree (angelicE +' demonicE) R → (R → Prop) → Prop)
+    : itree' (angelicE +' demonicE) R → (R → Prop) → Prop :=
+  | Returns (Q : R → Prop) r :
+    Q r →
+    angel_winsF angel_wins (RetF r) Q
+  | AngelicChoice Q A k a :
+    angel_wins (k a) Q →
+    angel_winsF angel_wins (VisF (inl1 (EAngelic A)) k) Q
+  | DemonicChoice Q A k :
+    (∀ a, angel_wins (k a) Q) →
+    angel_winsF angel_wins (VisF (inr1 (EDemonic A)) k) Q
+  | Steps Q t :
+    angel_wins t Q →
+    angel_winsF angel_wins (TauF t) Q.
+  Hint Constructors angel_winsF : iris_itree.
+  Definition angel_wins_
+    (angel_wins : itree (angelicE +' demonicE) R → (R → Prop) → Prop)
+    : itree (angelicE +' demonicE) R → (R → Prop) → Prop :=
+    λ t Q, angel_winsF angel_wins (observe t) Q.
 
-  Lemma angelic_instantiatesF_mono angelic_instantiates angelic_instantiates' t t' :
-    angelic_instantiates <2= angelic_instantiates' →
-    angelic_instantiatesF angelic_instantiates t t' →
-    angelic_instantiatesF angelic_instantiates' t t'.
+  Lemma angel_winsF_mono angel_wins angel_wins' t t' :
+    angel_wins <2= angel_wins' →
+    angel_winsF angel_wins  t t' →
+    angel_winsF angel_wins' t t'.
   Proof.
     intros Hleq HinterleavesF. destruct HinterleavesF; eauto with iris_itree.
   Qed.
-  Lemma angelic_instantiates__mono :
-    monotone2 angelic_instantiates_.
+  Lemma angel_wins__mono :
+    monotone2 angel_wins_.
   Proof.
-    rewrite /monotone3 /angelic_instantiates_. intros ??????. by eapply angelic_instantiatesF_mono.
+    rewrite /monotone3 /demonic_instantiates_. intros ??????. by eapply angel_winsF_mono.
   Qed.
-  Hint Resolve angelic_instantiates__mono : paco.
+  Hint Resolve demonic_instantiates__mono : paco.
 
-  Definition angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop :=
-    paco2 angelic_instantiates_ bot2.
+  Definition angel_wins : itree (angelicE +' demonicE) R → (R → Prop) → Prop :=
+    paco2 angel_wins_ bot2.
 
-  Theorem angelicH_adequate' (t : itree (angelicE +' E) R) Φ :
-    WPi t @ angelicH ⊕ H; ∅ {{ Φ }} -∗
-    (∃ t', ⌜angelic_instantiates t t'⌝ ∧ WPi t' @ H; ∅ {{ Φ }}).
+  Theorem demonicH_angelicH_adequate' `{!invGpreS Σ} (t : itree (angelicE +' demonicE) R) (Q : R → Prop) :
+    (∀ `{Hinv : invGS_gen HasNoLc Σ}, sat WPi t @ angelicH ⊕ demonicH; ⊤ {{ v, ⌜ Q v ⌝ }}) →
+    angel_wins t Q.
   Proof.
-    iIntros "Hwp". iLöb as "IH" forall (t Φ).
-    destruct (observe t) as [r|A e k|t'] eqn:Hobserve.
-    - iExists (Ret r). iSplit.
-      * iPureIntro. pfold. rewrite /angelic_instantiates_ Hobserve. simpl. constructor.
-      * symmetry in Hobserve. apply ret_observe_eqit in Hobserve as <-. rewrite -!wpi_ret' //.
-    - symmetry in Hobserve. apply tau_observe_eqit in Hobserve as Heqit. rewrite <- Heqit.
-      rewrite -!wpi_tau'. iMod "Hwp". iModIntro. iNext. iDestruct ("IH" with "Hwp") as "[%t' [%Hinstant Hwp]]". iApply "Hwp".
-
-      iExists (Tau _). iSplit.
-      * shelve.
-      * symmetry in Hobserve. apply tau_observe_eqit in Hobserve as <-.
-        rewrite -!wpi_tau'. iMod "Hwp". iModIntro. iNext. iDestruct ("IH" with "Hwp") as "[%t' [%Hinstant Hwp]]". iApply "Hwp".
-        iApply wpi_tau. iNext. 
-        iPureIntro. pfold. rewrite /angelic_instantiates_ Hobserve. simpl. constructor.
-    inversion (observe t) as [A].
-    punfold Hinstant. inversion Hinstant as [A a k k' Hinstant' Ht Ht'|A e k k' Hinstant' Ht Ht'].
-    - apply vis_observe_eqit in Ht as <-. apply tau_observe_eqit in Ht' as <-.
-      rewrite -wpi_vis' -wpi_tau' wpi_update_post. iMod "Hwp". iModIntro. simpl. iNext. iApply "IH".
-      * pclearbot. iPureIntro. apply Hinstant'.
-      * rewrite  -wpi_update_post. iDestruct "Hwp" as "[%a Hwp]". iApply "Hwp".
-    - apply vis_observe_eqit in Ht as <-. apply vis_observe_eqit in Ht' as <-.
-      rewrite -!wpi_vis'. iMod "Hwp". iModIntro. iApply ihandler_mono; last done.
-      * iIntros (a) "Hwp". iNext. rewrite !wpi_update_post. iApply "IH".
-        + pclearbot. iPureIntro. apply Hinstant'.
-        + done.
-      * iModIntro. iIntros (a) "Hwp". iNext.
-        rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask). iApply "IH".
-        + pclearbot. iPureIntro. apply Hinstant'.
-        + done.
-  Qed.
-  Theorem angelicH_adequate (t : itree (angelicE +' E) R) M Φ :
-    WPi t @ angelicH ⊕ H; M {{ Φ }} -∗
-    (∃ t', ⌜angelic_instantiates t t'⌝ ∧ WPi t' @ H; M {{ Φ }}).
-  Proof.
-    iIntros (Hinstant) "Hwp". rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
-    iApply angelicH_adequate'.
-    - pclearbot. apply Hinstant.
-    - done.
-  Qed.
+    generalize t. pcofix CIH. clear t. intros t Hwp. pfold. rewrite /angel_wins_.
+    destruct (observe t) eqn:Heq.
+    - constructor. symmetry in Heq. apply ret_observe_eqit in Heq.
+      setoid_rewrite <- Heq in Hwp. setoid_rewrite <- wpi_ret' in Hwp.
+      apply fupd_soundness in Hwp. apply pure_soundness in Hwp.
+      * done.
+      * apply _.
+    - constructor. symmetry in Heq. apply tau_observe_eqit in Heq.
+      setoid_rewrite <- Heq in Hwp. setoid_rewrite <- wpi_tau' in Hwp.
+      apply fupd_soundness in Hwp. apply pure_soundness in Hwp.
+      * done.
+      * apply _.
 End angelic_adequacy.
