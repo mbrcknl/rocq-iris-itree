@@ -35,10 +35,6 @@ Arguments ESetState {_} _.
 and [ESet]. *)
 Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
 
-(** Proposition asserting read-only access to the state interpretation. *)
-Definition state_ro {S} `{!stateInterp Σ S} (s : S) : iProp Σ :=
-  ∀ s', state_interp s' -∗ state_interp s' ∗ ⌜ s = s' ⌝.
-
 Section stateH.
   Context {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ}.
 
@@ -46,13 +42,13 @@ Section stateH.
   Program Definition stateH : iHandler Σ (stateE S) :=
     IHandler (λ A e,
       match e with
-      | EGetState    => λ Φ _, (∀ s, state_interp s -∗ (state_interp s ∗ Φ s))
+      | EGetState    => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s  ∗ Φ s ))
       | ESetState s' => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt))
       end
     )%I _.
   Next Obligation.
     iIntros (? e ????) "HΦwand Hswand". destruct e.
-    - iIntros "Hget" (?) "Hstate". iDestruct ("Hget" with "Hstate") as "[$ HΦ]". by iApply "HΦwand".
+    - iIntros "Hget" (?) "Hstate". iDestruct ("Hget" with "Hstate") as ">[$ HΦ]". by iApply "HΦwand".
     - iIntros "Hset" (?) "Hstate". iDestruct ("Hset" with "Hstate") as ">[$ HΦ]". by iApply "HΦwand".
   Qed.
 
@@ -69,13 +65,15 @@ Section wp_state.
   Context {H : iHandler Σ E} `{stateE S -< E} `{inH Σ (stateE S) E (stateH S) H}.
 
   Lemma wpi_get {R} (k : S → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    (∀ s, state_interp s -∗ state_interp s ∗ ▷ WPi (k s) @ H; M {{ Φ }}) -∗
+    (∀ s, state_interp s ={M}=∗ state_interp s ∗ ▷ WPi (k s) @ H; M {{ Φ }}) -∗
     WPi (vis EGetState k) @ H; M {{ Φ }}.
   Proof.
     iIntros "Hwp". iApply wpi_vis.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iApply is_inH.
-    rewrite /stateH. iIntros (s) "Hs". iDestruct ("Hwp" with "Hs") as "[Hs Hwp]". iFrame.
-    iNext. rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp".
+    rewrite /stateH. iIntros (s) "Hs". iDestruct ("Hwp" with "Hs") as "Hswp".
+    iMod "Hfupd" as "_". iMod "Hswp". iDestruct "Hswp" as "[Hwp Hs]". iFrame.
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iNext. iApply wpi_update. iMod "Hfupd". rewrite wpi_clear_mask //.
   Qed.
 
   Lemma wpi_set {R} (s' : S) (k : unit → itree E R) (M : coPset) (Φ : R → iProp Σ) :
@@ -134,6 +132,8 @@ Section stateH_adequacy.
     → itree E (S * R)
     → Prop :=
     λ s t t', evalF eval s (observe t) (observe t').
+
+  (* TODO: Lemma relating this relation to interp in itree library. *)
 
   Lemma evalF_mono eval eval' s t t' :
     eval <3= eval' →
@@ -194,8 +194,9 @@ Section stateH_adequacy.
       by iApply wpi_update_post.
     - (* GetState s_ k t_ *)
       destruct Hs. apply vis_observe_eqit in Ht as <-. apply tau_observe_eqit in Ht' as <-.
-      rewrite -wpi_vis'. iMod "Hwp". simpl. iDestruct ("Hwp" $! s_ with "Hstate") as "[Hstate Hwp]".
-      iApply wpi_tau. iNext. pclearbot. iApply ("IH" with "[//] Hstate").
+      rewrite -wpi_vis'. iMod "Hwp".
+      simpl. iApply wpi_update. iDestruct ("Hwp" $! s_ with "Hstate") as ">[Hstate Hwp]".
+      iApply wpi_tau. iModIntro. iNext. pclearbot. iApply ("IH" with "[//] Hstate").
       by iApply wpi_update_post.
   Qed.
 
