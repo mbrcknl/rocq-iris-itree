@@ -1,7 +1,8 @@
 -Q src iris.itree
 
-src/itree.v
+src/choice.v
 src/handler.v
+src/itree.v
 src/state.v
 src/threadpool.v
 src/wpi.v

@@ -2,7 +2,6 @@ From iris.base_logic.lib Require Import iprop.
 From iris.base_logic Require Import bi.
 Import uPred.
 From iris.proofmode Require Import proofmode.
-From iris.itree Require Import axioms.
 From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
@@ -168,6 +167,7 @@ Section demonic_adequacy.
   Qed.
 End demonic_adequacy.
 
+(*
 Lemma fupd_soundness `{!invGpreS Σ} E1 E2 (P : iProp Σ) `{!Plain P} :
   (∀ `{Hinv: !invGS_gen HasNoLc Σ}, ⊢ |={E1,E2}=> P) → ⊢ P.
 Proof.
@@ -235,3 +235,4 @@ Section demonic_angelic_adequacy.
       * done.
       * apply _.
 End angelic_adequacy.
+*)
