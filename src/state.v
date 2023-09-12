@@ -1,6 +1,5 @@
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
-From iris.base_logic.lib Require Import ghost_var.
 From iris.base_logic.lib Require Import fancy_updates.
 From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
@@ -8,19 +7,6 @@ From iris.itree Require Import itree.
 From ITree Require Import ITree.
 From Paco Require Import paco.
 From Paco Require Import paco3.
-
-Class stateHPreG (Σ : gFunctors) (S : Type) := StateHPreG {
-  stateH_pre_ghost_varG :> ghost_varG Σ S;
-}.
-Class stateHGS (Σ : gFunctors) (S : Type) := StateHGS {
-  stateH_ghost_varG :> ghost_varG Σ S;
-  stateH_name : gname;
-}.
-Definition stateHΣ S : gFunctors :=
-  #[ ghost_varΣ S ].
-Global Instance subG_stateHΣ Σ S :
-  subG (stateHΣ S) Σ → stateHPreG Σ S.
-Proof. solve_inG. Qed.
 
 (** An event type for stateful programs. *)
 Inductive stateE (S : Type) : Type → Type :=
@@ -36,7 +22,7 @@ and [ESet]. *)
 Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
 
 Section stateH.
-  Context {Σ} (S : Type) `{!stateHGS Σ S} `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ}.
+  Context {Σ} (S : Type) `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ}.
 
   (** [iHandler] for [stateE]. *)
   Program Definition stateH : iHandler Σ (stateE S) :=

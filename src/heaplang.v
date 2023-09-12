@@ -1,7 +1,9 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion.
-From iris.itree Require Import threadpool choice state.
+From iris.itree Require Import threadpool choice state handler.
 From iris.prelude Require Import prelude.
+From iris Require Import gmap_view.
+From iris.base_logic.lib Require Import ghost_var.
 
 Record loc := Loc { loc_car : Z }.
 
@@ -381,13 +383,15 @@ Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z en
 Notation "x ;; z" := (ITree.bind x (fun _ => z))
   (at level 100, z at level 200, right associativity) : itree_scope.
 
-Definition compile_expr (e : expr) : itree (callE expr val +' threadpoolE +' demonicE +' stateE state) val :=
+Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state.
+
+Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   match e with
   | Val v => Ret v
   | Rec f x e => Ret (RecV f x e)
   | App e1 e2 =>
-      x ← call e2 ;
-      f ← call e1 ;
+      x ← call e2;
+      f ← call e1;
       match f with
       | RecV f_ x_ e => call (subst_map ({[f_:=f; x_:=x]}) e1)
       | _ => ub
@@ -557,3 +561,27 @@ Definition compile_expr (e : expr) : itree (callE expr val +' threadpoolE +' dem
       end
   | _ => ub
   end%itree.
+
+Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
+
+Class heaplangHPreG (Σ : gFunctors) := HeapLangHPreG {
+  heaplangH_pre_ghost_varG :> inG Σ (gmap_viewUR loc (optionO (leibnizO val)));
+}.
+Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
+  heaplangH_ghost_varG :> inG Σ (gmap_viewUR loc (optionO (leibnizO val)));
+  heaplangH_name : gname;
+}.
+Definition heaplangHΣ : gFunctors :=
+  #[ GFunctor (gmap_viewUR loc (optionO (leibnizO val))) ].
+Global Instance subG_heaplangHΣ Σ :
+  subG heaplangHΣ Σ → heaplangHPreG Σ.
+Proof. solve_inG. Qed.
+
+Section heaplangH.
+  Context {Σ} `{!stateHGS Σ state} `{!invGS_gen HasNoLc Σ} `{!heaplangHGS Σ}.
+
+  Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
+    own heaplangH_name (gmap_view_auth (DfracOwn 1) (id <$> σ.(heap))).
+
+  Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state.
+End heaplangH.
