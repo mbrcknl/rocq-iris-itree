@@ -25,16 +25,14 @@ Record iHandler Σ (E : Type → Type) := IHandler {
 Arguments IHandler {_ _} _.
 
 Global Instance handler_ne Σ E n (H : iHandler Σ E) A :
-  Proper ((=) ==> ((=) ==> dist n) ==> ((=) ==> dist n) ==> dist n) (ihandle _ _ H A).
+  Proper (pointwise_relation _ (pointwise_relation _ (dist n) ==> pointwise_relation _ (dist n) ==> dist n)) (ihandle _ _ H A).
 Proof.
-  intros e1 e2 <- Φ1 Φ2 HΦ s1 s2 Hs.
-  assert (Hmon : ∀ Φ s, (H A e1 Φ s ⊣⊢ ∃ Φ' s', (∀ a, Φ' a -∗ Φ a) ∗ □ (∀ a, s' a -∗ s a) ∗ H A e1 Φ' s')).
+  intros e Φ1 Φ2 HΦ s1 s2 Hs.
+  assert (Hmon : ∀ Φ s, (H A e Φ s ⊣⊢ ∃ Φ' s', (∀ a, Φ' a -∗ Φ a) ∗ □ (∀ a, s' a -∗ s a) ∗ H A e Φ' s')).
   - iIntros (Φ s). iSplit.
     * iIntros "HH". iExists Φ, s. iSplitR; first eauto. by iSplitR; first eauto.
     * iIntros "[%Φ' [%s' [HmonΦ [Hmons HH]]]]". by iApply (ihandler_mono with "HmonΦ Hmons").
   - rewrite !Hmon. repeat f_equiv.
-    * by apply HΦ.
-    * by apply Hs.
 Qed.
 
 (** [inH H1 H2] means that, on events [E1], [H1] is equivalent to [H2]. *)

@@ -48,3 +48,17 @@ Proof.
   intros Heq. rewrite /eq_itree /eqit. pfold. rewrite /eqit_ -Heq. constructor.
   rewrite /upaco2 /bot2. left. by apply Reflexive_eqit.
 Qed.
+
+Lemma eqit_cases {E R} (t1 t2 : itree E R) :
+  t1 ≅ t2 →
+  (∃ r, observe t1 = RetF r ∧ observe t2 = RetF r) ∨
+  (∃ t1' t2', observe t1 = TauF t1' ∧ observe t2 = TauF t2' ∧ t1' ≅ t2') ∨
+  (∃ A (e : E A) k1 k2, observe t1 = VisF e k1 ∧ observe t2 = VisF e k2 ∧ (∀ a, k1 a ≅ k2 a)).
+Proof.
+  intros Ht. punfold Ht. inversion Ht.
+  - left. eexists _. simplify_eq. done.
+  - right. left. eexists _, _. simplify_eq. split; first done. split; first done. by pclearbot.
+  - right. right. eexists _, _, _, _. split; first done. split; first done. by pclearbot.
+  - done.
+  - done.
+Qed.

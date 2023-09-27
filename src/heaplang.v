@@ -370,9 +370,11 @@ Qed.
 Definition state_init_heap (l : loc) (n : Z) (v : val) (σ : state) : state :=
   state_upd_heap (λ h, heap_array l (replicate (Z.to_nat n) v) ∪ h) σ.
 
+(* TODO: This demonic choice should be angelic. Have separate UB. *)
 Definition ub {R : Type} `{demonicE -< E} : itree E R :=
   vis (EDemonic Empty_set) (λ (a : Empty_set), match a with end).
 
+(* TODO: Use stdpp's notation *)
 Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
 Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z))
   (at level 20, y at level 100, z at level 200,
