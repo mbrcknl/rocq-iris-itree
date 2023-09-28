@@ -1,5 +1,6 @@
 From ITree Require Import ITree.
 From ITree Require Import Eqit.
+From ITree Require Import EqAxiom.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
@@ -13,17 +14,17 @@ Qed.
 
 (** TODO: Is this to be found anywhere in the ITree library? *)
 Lemma itree_match {E R} (t : itree E R) :
-  (∃ r, t ≅ Ret r) ∨
-  (∃ t', t ≅ Tau t') ∨
-  (∃ A (e : E A) k, t ≅ Vis e k).
+  (∃ r, t = Ret r) ∨
+  (∃ t', t = Tau t') ∨
+  (∃ A (e : E A) k, t = Vis e k).
 Proof.
   rewrite /eq_itree /eqit /eqit_.
   destruct (observe t) as [r|t'|A e k] eqn:Heq.
-  - left. exists r. pfold. rewrite Heq. by apply EqRet.
-  - right. left. exists t'. pfold. rewrite Heq. apply EqTau. rewrite /upaco2 /bot2. left.
-    by apply Reflexive_eqit.
-  - right. right. exists A, e, k. pfold. rewrite Heq. apply EqVis. rewrite /upaco2 /bot2. left.
-    by apply Reflexive_eqit.
+  - left. exists r. apply bisimulation_is_eq. pfold. rewrite /eqit_ Heq. by apply EqRet.
+  - right. left. exists t'. apply bisimulation_is_eq. pfold. rewrite /eqit_ Heq. apply EqTau.
+    rewrite /upaco2 /bot2. left. by apply Reflexive_eqit.
+  - right. right. exists A, e, k. apply bisimulation_is_eq. pfold. rewrite /eqit_ Heq. apply EqVis.
+    rewrite /upaco2 /bot2. left. by apply Reflexive_eqit.
 Qed.
 
 Lemma ret_observe_eqit {E R} (r : R) (t : itree E R) :
