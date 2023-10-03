@@ -1,6 +1,7 @@
 From ITree Require Import ITree.
 From ITree Require Import Eqit.
 From ITree Require Import EqAxiom.
+From ITree Require Import TranslateFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
@@ -62,4 +63,32 @@ Proof.
   - right. right. eexists _, _, _, _. split; first done. split; first done. by pclearbot.
   - done.
   - done.
+Qed.
+
+Lemma bind_tau_r {A B E} (t : itree E A) (k : A → itree E B) :
+  ITree.bind t (λ x : A, Tau (k x)) ≈ ITree.bind t k.
+Proof.
+  apply eqit_bind; first done. intros a. apply tau_eutt.
+Qed.
+
+Lemma translate_Ret_inv {E1 E2 R} (f : E1 ~> E2) (t : itree E1 R) (r : R) :
+  translate f t ≅ Ret r ->
+  t ≅ Ret r.
+Proof.
+  intros. rewrite (itree_eta t) in H. setoid_rewrite (itree_eta t).
+  desobs t Ht; clear t Ht; rewrite unfold_translate in H; cbn in H.
+  - punfold H; red in H; inversion H. by simplify_eq.
+  - punfold H; red in H; inversion H; inversion CHECK.
+  - apply eqitree_inv_Ret_r in H. discriminate.
+Qed.
+
+Lemma translate_Tau_inv {E1 E2 R} (f : E1 ~> E2) (t1 : itree E1 R) (t2' : itree E2 R) :
+  translate f t1 ≅ Tau t2' ->
+  ∃ t1', t1 ≅ Tau t1' ∧ translate f t1' ≅ t2'.
+Proof.
+  intros. rewrite (itree_eta t1) in H. setoid_rewrite (itree_eta t1).
+  desobs t1 Ht; clear t1 Ht; rewrite unfold_translate in H; cbn in H.
+  - punfold H; red in H; inversion H. by simplify_eq.
+  - punfold H; red in H; inversion H; exists t; by pclearbot.
+  - apply eqitree_inv_Tau_r in H as [t [H _]]. discriminate.
 Qed.
