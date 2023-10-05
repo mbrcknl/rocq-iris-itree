@@ -13,6 +13,7 @@ From ITree Require Import Interp.TranslateFacts.
 From ITree Require Import Eq.
 From ITree Require Import Eqit.
 From Paco Require Import paco.
+From elpi.apps Require Import locker.
 Require Import Coq.Program.Equality.
 
 Section wp_itree.
@@ -88,6 +89,7 @@ Section wp_itree.
       * done.
   Qed.
 
+  (* TODO: Rename [wpi] to [wpi_no_mask] or something along those lines. *)
   Definition wpi (H : iHandler Σ E) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
     bi_least_fixpoint (wpiF' H) (t, Φ).
 
@@ -350,7 +352,7 @@ Section wp_itree_mask.
   Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
   Context {H : iHandler Σ E}.
 
-  Definition wpi_mask {R} (M : coPset) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
+  lock Definition wpi_mask {R} (M : coPset) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
     (|={M, ∅}=> wpi H t%itree (λ v, |={∅, M}=> Φ v))%I.
 
   (* Properness lemmata. *)
@@ -358,7 +360,7 @@ Section wp_itree_mask.
   Global Instance wpi_proper R M :
     Proper (eutt (=) ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi_mask (R:=R) M).
   Proof.
-    intros t1 t2 Ht Φ1 Φ2 HΦ. rewrite /wpi_mask. f_equiv. rewrite Ht. by setoid_rewrite HΦ.
+    intros t1 t2 Ht Φ1 Φ2 HΦ. rewrite /wpi_mask unlock. f_equiv. rewrite Ht. by setoid_rewrite HΦ.
   Qed.
   Global Instance wpi_proper' R M :
     Proper (eqit (=) false false ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi_mask (R:=R) M).
@@ -380,7 +382,12 @@ Section wp_itree_mask.
   Global Instance wpi_ne R t M :
     NonExpansive (λ Φ : leibnizO R -d> iPropO Σ, (WPi t @ H; M {{ Φ }})%I).
   Proof.
-    intros n Φ1 Φ2 HΦ. rewrite /wpi_mask. do 2 f_equiv. intros r. by f_equiv.
+    intros n Φ1 Φ2 HΦ. rewrite /wpi_mask unlock. do 2 f_equiv. intros r. by f_equiv.
+  Qed.
+  Global Instance wpi_ne' R Φ M :
+    NonExpansive (λ t : discreteO (itree E R), (WPi t @ H; M {{ Φ }})%I).
+  Proof.
+    intros n t1 t2 Ht. rewrite /wpi_mask unlock. rewrite Ht //.
   Qed.
 
   (* Induction principles for WPi. *)
@@ -390,7 +397,7 @@ Section wp_itree_mask.
     (□ ∀ t Φ, wpiF H (λ t' Ψ, G t' Ψ ∧ WPi t' @ H; ∅ {{ Ψ }}) t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H; ∅ {{ Φ }} -∗ G t Φ.
   Proof.
-    iIntros (Hne) "#HG". iIntros (t Φ) "Hwp". rewrite /wpi_mask.
+    iIntros (Hne) "#HG". iIntros (t Φ) "Hwp". rewrite /wpi_mask unlock.
     rewrite wpi_update_emp_mask wpi_update_post_emp_mask.
     iApply wpi_ind_emp_mask; last done. iModIntro. clear. iIntros (t Φ) "Hwp". iApply "HG".
     iApply wpiF_mono; last done. iModIntro. clear. iIntros (t Φ) "Hwp". iSplit.
@@ -429,7 +436,7 @@ Section wp_itree_mask.
     WPi t @ H; M {{ Φ }} -∗
     WPi t @ H; M {{ Ψ }}.
   Proof.
-    iIntros "HΦΨ Hwp". iApply (wpi_wand_emp_mask with "[HΦΨ]").
+    iIntros "HΦΨ Hwp". rewrite /wpi_mask unlock. iApply (wpi_wand_emp_mask with "[HΦΨ]").
     - iIntros (r) "Hgoal". by iApply "HΦΨ".
     - done.
   Qed.
@@ -438,7 +445,7 @@ Section wp_itree_mask.
     WPi t @ H; M {{ r, WPi (k r) @ H; M {{ Φ }} }} -∗
     WPi (ITree.bind t k) @ H; M {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_bind_emp_mask. iMod "Hwp".
+    iIntros "Hwp". rewrite /wpi_mask unlock. iApply wpi_bind_emp_mask. iMod "Hwp".
     iApply wpi_wand_emp_mask; last done.
     iIntros (a) "Hwp". iApply wpi_update_emp_mask. by iMod "Hwp".
   Qed.
@@ -448,7 +455,7 @@ Section wp_itree_mask.
     (WPi t @ H; M {{ Φ }}).
   Proof.
     iSplit.
-    - iIntros "Hwp". by iMod "Hwp".
+    - iIntros "Hwp". rewrite /wpi_mask unlock. by iMod "Hwp".
     - iIntros "Hwp". by iModIntro.
   Qed.
 
@@ -457,9 +464,9 @@ Section wp_itree_mask.
     (WPi t @ H; M {{ Φ }}).
   Proof.
     iSplit.
-    - iIntros "Hwp". iApply wpi_wand_emp_mask; last done.
+    - iIntros "Hwp". rewrite /wpi_mask unlock. iApply wpi_wand_emp_mask; last done.
       iIntros (r) "HΦ". by iMod "HΦ".
-    - iIntros "Hwp". iApply wpi_wand_emp_mask; last done.
+    - iIntros "Hwp". rewrite /wpi_mask unlock. iApply wpi_wand_emp_mask; last done.
       iIntros (r) "HΦ". by iMod "HΦ".
   Qed.
 
@@ -470,7 +477,7 @@ Section wp_itree_mask.
     (|={M, M'}=> WPi t @ H; M' {{ v, |={M', M}=> Φ v }}) -∗
     WPi t @ H; M {{ Φ }}.
   Proof.
-    iIntros "Hwp". iMod "Hwp". iMod "Hwp". iModIntro.
+    iIntros "Hwp". rewrite /wpi_mask unlock. iMod "Hwp". iMod "Hwp". iModIntro.
     iApply wpi_wand_emp_mask; last done.
     iIntros (r) "Hgoal". iMod "Hgoal". by iMod "Hgoal".
   Qed.
@@ -481,7 +488,7 @@ Section wp_itree_mask.
   Proof.
     iSplit.
     - iIntros "Hwp". by iApply wpi_reduce_mask.
-    - iIntros "Hwp". iMod "Hwp". iModIntro. iApply wpi_wand_emp_mask; last done.
+    - iIntros "Hwp". rewrite /wpi_mask unlock. iMod "Hwp". iModIntro. iApply wpi_wand_emp_mask; last done.
       by iIntros (r) "HΦ".
   Qed.
   Lemma wpi_clear_mask_false {R} M (t : itree E R) :
@@ -509,7 +516,7 @@ Section wp_itree_mask.
     (▷ P -∗ WPi t @ H; M ∖ ↑N {{ v, ▷ P ∗ Φ v }}) -∗
     own_inv N P -∗ WPi t @ H; M {{ Φ }}.
   Proof.
-    iIntros (Hsubset) "Hwp Hinv".
+    iIntros (Hsubset) "Hwp Hinv". rewrite /wpi_mask unlock.
     iMod (own_inv_acc _ with "Hinv") as "[HP Hclose]"; first done.
     iSpecialize ("Hwp" with "HP").
     iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp //]").
@@ -522,7 +529,7 @@ Section wp_itree_mask.
     (|={M}=> Φ r) ⊣⊢
     WPi Ret r @ H; M {{ Φ }}.
   Proof.
-    rewrite /wpi_mask -wpi_ret_emp_mask'.
+    rewrite /wpi_mask unlock -wpi_ret_emp_mask'.
     iSplit.
     - iIntros "HΦ". iMod "HΦ".
       iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
@@ -540,14 +547,14 @@ Section wp_itree_mask.
     (WPi t @ H; M {{ v, Φ v }}) ⊣⊢
     WPi Tau t @ H; M {{ Φ }}.
   Proof.
-    rewrite /wpi_mask -wpi_tau_emp_mask //.
+    rewrite /wpi_mask unlock -wpi_tau_emp_mask //.
   Qed.
 
   Lemma wpi_vis' {R} M Φ A (e : E A) (k : A → itree E R) :
     (|={M, ∅}=> H A (subevent A e) (λ a, WPi k a @ H; ∅ {{ v, |={∅, M}=> Φ v }}) (λ a, WPi k a @ H; ⊤ {{ _, False }})) ⊣⊢
     WPi (Vis e k) @ H; M {{ Φ }}.
   Proof.
-    rewrite /wpi_mask -wpi_vis_emp_mask'.
+    rewrite /wpi_mask unlock -wpi_vis_emp_mask'.
     iSplit.
     - iIntros "HH". iMod "HH". iModIntro. iModIntro.
       iApply (ihandler_mono with "[] [] [HH //]").
@@ -684,7 +691,8 @@ Section inH.
         + iIntros (a) "Hwp". by iApply wpi_update_post.
         + iModIntro. by iIntros (a) "Hwp".
       * done.
-  -  unshelve epose (G := (λne (t : discreteO (itree E2 R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I); try apply _; try solve_proper.
+  - unshelve epose (G := (λne (t : discreteO (itree E2 R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I); try apply _; try solve_proper.
+    { clear. intros n Φ1 Φ2 HΦ. do 3 f_equiv. by apply wpi_ne. }
     iAssert (∀ t Φ, WPi t @ H2; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { rewrite /G. simpl. iIntros "Hwp". by iApply ("Hgen" with "Hwp"). }
     iApply (wpi_iter' G).
