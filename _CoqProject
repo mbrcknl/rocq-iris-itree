@@ -1,5 +1,6 @@
 -Q src iris.itree
 
+src/axioms.v
 src/choice.v
 src/handler.v
 src/itree.v

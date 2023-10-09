@@ -5,6 +5,7 @@ From iris.proofmode Require Import proofmode.
 From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
+From iris.itree Require Import axioms.
 From iris.bi Require Import fixpoint.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
@@ -12,6 +13,7 @@ From Paco Require Import paco.
 From Paco Require Import paco2.
 From ITree Require Import ITree.
 From ITree Require Import Basics.Monad.
+From ITree Require Import Eqit.
 
 (* TODO: Use syntactic sugar such as stdpp's Equiv (≡) and (>>=). *)
 
@@ -60,12 +62,12 @@ Section wp_angelic.
   Context `{!invGS_gen HasNoLc Σ}.
 
   Lemma wpi_angelic {R A} k M (Φ : R → iProp Σ) :
-    (∃ a, ▷ WPi k a @ H; M {{ Φ }}) -∗
+    (∃ a, WPi k a @ H; M {{ Φ }}) -∗
     WPi (vis (EAngelic A) k) @ H; M {{ Φ }}.
   Proof.
     iIntros "[%a Hwp]". iApply wpi_vis.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iApply is_inH.
-    rewrite /angelicH. iExists a. iNext.
+    rewrite /angelicH. iExists a.
     iEval (rewrite -wpi_update). iMod "Hfupd". rewrite wpi_clear_mask //.
   Qed.
 End wp_angelic.
@@ -75,12 +77,12 @@ Section wp_demonic.
   Context `{!invGS_gen HasNoLc Σ}.
 
   Lemma wpi_demonic {R A} k M (Φ : R → iProp Σ) :
-    (∀ a, ▷ WPi k a @ H; M {{ Φ }}) -∗
+    (∀ a, WPi k a @ H; M {{ Φ }}) -∗
     WPi (vis (EDemonic A) k) @ H; M {{ Φ }}.
   Proof.
     iIntros "Hwp". iApply wpi_vis.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iApply is_inH.
-    rewrite /demonicH. iIntros (a). iNext.
+    rewrite /demonicH. iIntros (a).
     iEval (rewrite -wpi_update). iMod "Hfupd". rewrite wpi_clear_mask //.
   Qed.
 End wp_demonic.
@@ -125,36 +127,63 @@ Section demonic_adequacy.
   Definition demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop :=
     paco2 demonic_instantiates_ bot2.
 
+  Global Instance instantiates_proper_unilateral :
+    Proper (eqit (=) false false ==> eqit (=) false false ==> impl) demonic_instantiates.
+  Proof.
+    pcofix CIH.
+    intros t1 t2 Ht t1' t2' Ht' Hinst.
+    pfold. rewrite /demonic_instantiates_.
+    punfold Ht. punfold Ht'. punfold Hinst. rewrite /demonic_instantiates_ in Hinst.
+    destruct Ht, Ht'; try discriminate; try inversion Hinst.
+    - simplify_eq. inversion Hinst. constructor.
+    - constructor. pclearbot. simplify_eq. right. eapply CIH.
+      * apply REL.
+      * done.
+      * done.
+    - simplify_K. pclearbot. eapply DInstantiate. right. eapply CIH.
+      + apply REL.
+      + done.
+      + done.
+    - simplify_K. pclearbot. inversion Hinst. simplify_K. constructor. right.
+      pclearbot. eapply CIH; last apply H2.
+      * apply REL.
+      * apply REL0.
+  Qed.
+  Global Instance instantiates_proper :
+    Proper ((eqit (=) false false) ==> (eqit (=) false false) ==> (↔)) demonic_instantiates.
+  Proof.
+    intros t1 t2 Ht t1' t2' Ht'.
+    split; rewrite Ht Ht' //.
+  Qed.
+
   Theorem demonicH_adequate' (t : itree (demonicE +' E) R) (t' : itree E R) Φ :
     demonic_instantiates t t' →
     WPi t @ demonicH ⊕ H; ∅ {{ Φ }} -∗
     WPi t' @ H; ∅ {{ Φ }}.
   Proof.
-    iIntros (Hinstant) "Hwp". iLöb as "IH" forall (t t' Hinstant Φ).
-    punfold Hinstant. inversion Hinstant as
-      [A a k k' Hinstant' Ht Ht'
-      |r Ht Ht'
-      |t_next t_next' Hinstant' Ht Ht'
-      |A e k k' Hinstant' Ht Ht'].
-    - apply vis_observe_eqit in Ht as <-. apply tau_observe_eqit in Ht' as <-.
-      rewrite -wpi_vis' -wpi_tau' wpi_update_post. iMod "Hwp". iModIntro. simpl. iNext. iApply "IH".
-      * pclearbot. iPureIntro. apply Hinstant'.
-      * rewrite  -wpi_update_post. iApply "Hwp".
-    - apply ret_observe_eqit in Ht as <-. apply ret_observe_eqit in Ht' as <-. rewrite -!wpi_ret' //.
-    - apply tau_observe_eqit in Ht as <-. apply tau_observe_eqit in Ht' as <-. rewrite -!wpi_tau'.
-      iMod "Hwp". iModIntro. iNext. iApply "IH".
-      * pclearbot. iPureIntro. apply Hinstant'.
-      * done.
-    - apply vis_observe_eqit in Ht as <-. apply vis_observe_eqit in Ht' as <-.
-      rewrite -!wpi_vis'. iMod "Hwp". iModIntro. iApply ihandler_mono; last done.
-      * iIntros (a) "Hwp". iNext. rewrite !wpi_update_post. iApply "IH".
-        + pclearbot. iPureIntro. apply Hinstant'.
-        + done.
-      * iModIntro. iIntros (a) "Hwp". iNext.
-        rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask). iApply "IH".
-        + pclearbot. iPureIntro. apply Hinstant'.
-        + done.
+    iIntros (Hinstant) "Hwp".
+    unshelve epose
+      (G := λne (t : discreteO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I);
+      try apply _; try solve_proper.
+    { intros n Φ1 Φ2 HΦ. do 3 f_equiv. by apply wpi_ne. }
+    iApply (wpi_iter' (H := demonicH ⊕ H) G with "[] [] [] Hwp [//]"); clear.
+    - intros n t1 t2 Ht Φ1 Φ2 HΦ. by repeat f_equiv.
+    - iModIntro. iIntros (Φ r) "HΦ". iIntros (t Hinst). punfold Hinst. inversion Hinst.
+      apply ret_observe_eqit in H2 as <-. rewrite -wpi_ret' //.
+    - iModIntro. iIntros (Φ t) "HG". iIntros (t' Hinst). rewrite -wpi_update. iMod "HG".
+      punfold Hinst. inversion Hinst. pclearbot.
+      apply tau_observe_eqit in H1 as <-. rewrite -wpi_tau. by iApply "HG".
+    - iModIntro. iIntros (Φ' A e k) "HH". rewrite /G /=. iIntros (t'' Hinst).
+      punfold Hinst. inversion Hinst. simplify_K. apply tau_observe_eqit in H4 as <-.
+      * iApply wpi_update. iMod "HH". iModIntro. rewrite -wpi_tau. pclearbot. iApply "HH".
+        iPureIntro. apply H1.
+      * simplify_K. apply vis_observe_eqit in H4 as <-. rewrite -wpi_vis'.
+        iApply ihandler_mono; last done.
+        + iIntros (a) "Hwp". iApply wpi_update_post. pclearbot. iApply "Hwp". iPureIntro. apply H1.
+        + iModIntro. iIntros (t) "Hwp". iApply wpi_clear_mask_false. iMod "Hwp". iModIntro.
+          pclearbot. iApply "Hwp". iPureIntro. apply H1.
   Qed.
+
   Theorem demonicH_adequate (t : itree (demonicE +' E) R) (t' : itree E R) M Φ :
     demonic_instantiates t t' →
     WPi t @ demonicH ⊕ H; M {{ Φ }} -∗
