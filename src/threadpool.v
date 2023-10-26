@@ -140,6 +140,11 @@ Section interleaving.
     tp !! new_current_tid = Some new_current →
     interleaves (cons (Tau (k tt)) (delete new_current_tid tp)) new_current interleaving' →
     interleavesF interleaves tp (VisF (inl1 EYield) k) (TauF interleaving')
+  (** The [EYield] event yields control to the current thread, thus effectively
+  just doing a silent step. *)
+  | YieldSelf tp k interleaving' :
+    interleaves tp (k tt) interleaving' →
+    interleavesF interleaves tp (VisF (inl1 EYield) k) (TauF interleaving')
   (** The [EFork] event adds a new thread to the threadpool and continues
   executing the current thread. The interleaved [itree] takes a silent step in
   place of the [EFork]. *)
