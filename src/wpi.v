@@ -379,15 +379,12 @@ Section wp_itree_mask.
   Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
   Context {H : iHandler Σ E}.
 
-  Global Instance wpi_ne R t M :
-    NonExpansive (λ Φ : leibnizO R -d> iPropO Σ, (WPi t @ H; M {{ Φ }})%I).
+  (* Nonexpansiveness lemmata. *)
+  Global Instance wpi_proper_dist R M n :
+    Proper (eqit (=) false false ==> (pointwise_relation R (dist n)) ==> (dist n)) (wpi_mask (E:=E) (H:=H) (R:=R) M).
   Proof.
-    intros n Φ1 Φ2 HΦ. rewrite /wpi_mask unlock. do 2 f_equiv. intros r. by f_equiv.
-  Qed.
-  Global Instance wpi_ne' R Φ M :
-    NonExpansive (λ t : discreteO (itree E R), (WPi t @ H; M {{ Φ }})%I).
-  Proof.
-    intros n t1 t2 Ht. rewrite /wpi_mask unlock. rewrite Ht //.
+    intros t1 t2 Ht Φ1 Φ2 HΦ. rewrite /wpi_mask unlock Ht. f_equiv. apply wpi_ne_emp_mask.
+    intros v. by f_equiv.
   Qed.
 
   (* Induction principles for WPi. *)
@@ -621,9 +618,7 @@ Section translation.
   Proof.
     iIntros "#HH Hwp".
     unshelve epose (G := (λne (t : discreteO (itree E1 R)) (Φ : leibnizO R -d> iPropO Σ), WPi (interp f t) @ H2; ∅ {{ Φ }})%I); try apply _; try solve_proper.
-    { clear. intros n t1 t2 Ht Φ. simpl. rewrite Ht //. }
-    iApply (wpi_iter' G); clear.
-    - intros ???????. by repeat f_equiv.
+    iApply (wpi_iter' G); first solve_proper; clear.
     - iModIntro. iIntros (Φ r) "Hwp". rewrite /G. simpl. rewrite interp_ret -!wpi_ret' //.
     - iModIntro. iIntros (Φ r) "Hwp". rewrite /G. simpl.
       rewrite interp_tau -!wpi_tau wpi_update //.
@@ -685,27 +680,25 @@ Section inH.
     WPi translate (λ A e', subevent A e') t @ H2; ∅ {{ Φ }}.
   Proof.
     iSplit.
-  - iIntros "Hwp". rewrite translate_to_interp. iApply (wpi_translation (H1 := H1)).
-      * iModIntro. iIntros (A e k Q) "HH". rewrite bind_trigger. iApply wpi_vis. iModIntro.
+    - iIntros "Hwp". rewrite translate_to_interp. iApply (wpi_translation (H1 := H1)).
+        * iModIntro. iIntros (A e k Q) "HH". rewrite bind_trigger. iApply wpi_vis. iModIntro.
+          iApply is_inH. iApply ihandler_mono; last done.
+          + iIntros (a) "Hwp". by iApply wpi_update_post.
+          + iModIntro. by iIntros (a) "Hwp".
+        * done.
+    - unshelve epose (G := (λne (t : discreteO (itree E2 R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I); try apply _; try solve_proper.
+      iAssert (∀ t Φ, WPi t @ H2; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
+      { rewrite /G. simpl. iIntros "Hwp". by iApply ("Hgen" with "Hwp"). }
+      iApply (wpi_iter' G); first solve_proper.
+      * clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t Ht). iApply wpi_update.
+        apply translate_Ret_inv in Ht as ->. by iApply wpi_ret.
+      * clear. iModIntro. iIntros (Φ t) "HG". iIntros (t' Ht). apply translate_Tau_inv in Ht as (t1'&->&Ht).
+        rewrite -wpi_tau. iApply wpi_update. iMod "HG". by iApply "HG".
+      * clear Φ. iModIntro. iIntros (Φ A e k) "HH". iIntros (t' Ht).
+        apply translate_Vis_inv in Ht as (e'&k'&->&->&Hk). iApply wpi_vis.
         iApply is_inH. iApply ihandler_mono; last done.
-        + iIntros (a) "Hwp". by iApply wpi_update_post.
-        + iModIntro. by iIntros (a) "Hwp".
-      * done.
-  - unshelve epose (G := (λne (t : discreteO (itree E2 R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I); try apply _; try solve_proper.
-    { clear. intros n Φ1 Φ2 HΦ. do 3 f_equiv. by apply wpi_ne. }
-    iAssert (∀ t Φ, WPi t @ H2; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
-    { rewrite /G. simpl. iIntros "Hwp". by iApply ("Hgen" with "Hwp"). }
-    iApply (wpi_iter' G).
-    * intros ???????. by repeat f_equiv.
-    * clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t Ht). iApply wpi_update.
-      apply translate_Ret_inv in Ht as ->. by iApply wpi_ret.
-    * clear. iModIntro. iIntros (Φ t) "HG". iIntros (t' Ht). apply translate_Tau_inv in Ht as (t1'&->&Ht).
-      rewrite -wpi_tau. iApply wpi_update. iMod "HG". by iApply "HG".
-    * clear Φ. iModIntro. iIntros (Φ A e k) "HH". iIntros (t' Ht).
-      apply translate_Vis_inv in Ht as (e'&k'&->&->&Hk). iApply wpi_vis.
-      iApply is_inH. iApply ihandler_mono; last done.
-      + iIntros (a) "HG". iApply wpi_update_post. by iApply "HG".
-      + iModIntro. iIntros (a) "HG". iApply wpi_clear_mask_false. by iApply "HG".
+        + iIntros (a) "HG". iApply wpi_update_post. by iApply "HG".
+        + iModIntro. iIntros (a) "HG". iApply wpi_clear_mask_false. by iApply "HG".
   Qed.
 
   Lemma wpi_inH {R} (t : itree E1 R) M Φ :

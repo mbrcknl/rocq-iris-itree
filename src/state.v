@@ -4,9 +4,11 @@ From iris.base_logic.lib Require Import fancy_updates.
 From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
+From iris.itree Require Import axioms.
 From ITree Require Import ITree.
 From Paco Require Import paco.
 From Paco Require Import paco3.
+From ITree Require Import Eqit.
 
 (** An event type for stateful programs. *)
 Inductive stateE (S : Type) : Type → Type :=
@@ -51,7 +53,7 @@ Section wp_state.
   Context {H : iHandler Σ E} `{stateE S -< E} `{inH Σ (stateE S) E (stateH S) H}.
 
   Lemma wpi_get {R} (k : S → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    (∀ s, state_interp s ={M}=∗ state_interp s ∗ ▷ WPi (k s) @ H; M {{ Φ }}) -∗
+    (∀ s, state_interp s ={M}=∗ state_interp s ∗ WPi (k s) @ H; M {{ Φ }}) -∗
     WPi (vis EGetState k) @ H; M {{ Φ }}.
   Proof.
     iIntros "Hwp". iApply wpi_vis.
@@ -59,11 +61,11 @@ Section wp_state.
     rewrite /stateH. iIntros (s) "Hs". iDestruct ("Hwp" with "Hs") as "Hswp".
     iMod "Hfupd" as "_". iMod "Hswp". iDestruct "Hswp" as "[Hwp Hs]". iFrame.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iNext. iApply wpi_update. iMod "Hfupd". rewrite wpi_clear_mask //.
+    iApply wpi_update. iMod "Hfupd". rewrite wpi_clear_mask //.
   Qed.
 
   Lemma wpi_set {R} (s' : S) (k : unit → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    (∀ s, state_interp s ={M}=∗ state_interp s' ∗ ▷ WPi (k tt) @ H; M {{ Φ }}) -∗
+    (∀ s, state_interp s ={M}=∗ state_interp s' ∗ WPi (k tt) @ H; M {{ Φ }}) -∗
     WPi (vis (ESetState s') k) @ H; M {{ Φ }}.
   Proof.
     iIntros "Hwp". iApply wpi_vis.
@@ -71,7 +73,7 @@ Section wp_state.
     rewrite /stateH. iIntros (s) "Hs". simpl. iMod "Hfupd" as "_".
     iDestruct ("Hwp" with "Hs") as ">[Hs Hwp]". iFrame.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iNext. rewrite -wpi_clear_mask. iMod "Hfupd". by iMod "Hwp".
+    rewrite -wpi_clear_mask. iApply wpi_update. iMod "Hfupd". by iMod "Hwp".
   Qed.
 End wp_state.
 
@@ -140,6 +142,41 @@ Section stateH_adequacy.
     S → itree (stateE S +' E) R → itree E (S * R) → Prop :=
     paco3 eval_ bot3.
 
+  Global Instance eval_proper_unilateral :
+    Proper ((=) ==> eqit (=) false false ==> eqit (=) false false ==> impl) eval.
+  Proof.
+    pcofix CIH.
+    intros s s' <- t1 t2 Ht t1' t2' Ht' Heval.
+    pfold. rewrite /eval_.
+    punfold Ht. punfold Ht'. punfold Heval. rewrite /eval_ in Heval.
+    destruct Ht, Ht'; try discriminate; try inversion Heval.
+    - simplify_eq. inversion Heval. constructor.
+    - constructor. pclearbot. simplify_eq. right. eapply CIH; first reflexivity.
+      * apply REL.
+      * done.
+      * clear REL REL0. by pclearbot.
+    - do 2 simplify_K. pclearbot. eapply SetState. right. eapply CIH; first reflexivity.
+      + apply REL.
+      + done.
+      + clear REL REL0. by pclearbot.
+    - do 2 simplify_K. pclearbot. inversion Heval. constructor. right.
+      destruct H4 as [H4|X]; [|contradiction X].
+      pclearbot. eapply CIH; last apply H4; first reflexivity.
+      * apply REL.
+      * apply REL0.
+    - do 2 simplify_K. pclearbot. inversion Heval. constructor. right.
+      destruct (H5 a) as [H5'|X]; [|contradiction X]. simplify_K.
+      eapply CIH; last apply H5'; first reflexivity.
+      * apply REL.
+      * apply REL0.
+  Qed.
+  Global Instance eval_proper :
+    Proper (pointwise_relation S (eqit (=) false false ==> eqit (=) false false ==> (↔))%signature) eval.
+  Proof.
+    intros s t1 t2 Ht t1' t2' Ht'.
+    split; rewrite Ht Ht' //.
+  Qed.
+
   (** A technical version of adequacy, amenable to induction. See corollary below for a
   more meaningful statement. *)
   Theorem wpi_state' s t t' M Φ :
@@ -149,41 +186,32 @@ Section stateH_adequacy.
     WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Φ v }}.
   Proof.
     iIntros "%Heval Hstate Hwp".
-    iLöb as "IH" forall (t t' s Heval M Φ). punfold Heval.
-    inversion Heval as
-      [s_ r Hs Ht Ht'
-      |s_ t_ t_' Heval' Hs Ht Ht'
-      |s_ A e k k' Heval' Hs Ht Ht'
-      |s_ s_' k t_ Heval' Hs Ht Ht'
-      |s_ k t_ Heval' Hs Ht Ht'
-      ].
-    - (* ForwardRet s_ r *)
-      destruct Hs. apply ret_observe_eqit in Ht as <-. apply ret_observe_eqit in Ht' as <-.
-      rewrite -!wpi_ret'. iMod "Hwp". iModIntro. iMod "Hwp". iModIntro. iFrame.
-    - (* FowardTau s_ t_ t_' *)
-      destruct Hs. apply tau_observe_eqit in Ht as <-. apply tau_observe_eqit in Ht' as <-.
-      rewrite -!wpi_tau'. iMod "Hwp". iModIntro. iNext. iEval (rewrite wpi_update_post).
-      pclearbot. iApply ("IH" with "[//] Hstate"). rewrite wpi_update_post //.
-    - (* FowardVis s_ A e k k' *)
-      destruct Hs. apply vis_observe_eqit in Ht as <-. apply vis_observe_eqit in Ht' as <-.
-      rewrite -!wpi_vis'. iMod "Hwp". iModIntro.
-      iApply is_seq. iApply (ihandler_mono with "[Hstate] [] Hwp").
-      * iIntros (a) "Hwp". iNext. pclearbot. iEval (rewrite wpi_update_post).
-        iApply ("IH" with "[] Hstate").
-        + iPureIntro. apply Heval'.
-        + by iApply wpi_update_post.
-      * iModIntro. by iIntros (a) "Hwp".
-    - (* SetState s_ s_' k t_ *)
-      destruct Hs. apply vis_observe_eqit in Ht as <-. apply tau_observe_eqit in Ht' as <-.
-      rewrite -wpi_vis'. iMod "Hwp". simpl. iMod ("Hwp" $! s_ with "Hstate") as "[Hstate Hwp]".
-      iApply wpi_tau. iNext. pclearbot. iApply ("IH" with "[//] Hstate").
-      by iApply wpi_update_post.
-    - (* GetState s_ k t_ *)
-      destruct Hs. apply vis_observe_eqit in Ht as <-. apply tau_observe_eqit in Ht' as <-.
-      rewrite -wpi_vis'. iMod "Hwp".
-      simpl. iApply wpi_update. iDestruct ("Hwp" $! s_ with "Hstate") as ">[Hstate Hwp]".
-      iApply wpi_tau. iModIntro. iNext. pclearbot. iApply ("IH" with "[//] Hstate").
-      by iApply wpi_update_post.
+    unshelve epose (G := (λne (t : discreteO (itree (stateE S +' E) R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t' s Ψ, ⌜eval s t t'⌝ → state_interp s -∗ (∀ v, Φ v -∗ |={∅, M}=> Ψ v) -∗ WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Ψ v }})%I); try apply _; try solve_proper.
+    { clear. intros n t1 t2 Ht Φ. simpl. do 8 f_equiv. split; rewrite Ht //. }
+    iApply (wpi_iter' (H := stateH S ⊕ H) G with "[] [] [] [Hwp] [] Hstate").
+    - intros n t1 t2 Ht Φ1 Φ2 HΦ. rewrite /G. by repeat f_equiv.
+    - clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t s Ψ Heval) "Hstate HΨ".
+      punfold Heval. inversion Heval. simplify_obs.
+      iApply wpi_ret. iMod "HΦ". iMod ("HΨ" with "HΦ") as "HΨ". iModIntro. iFrame.
+    - clear. iModIntro. iIntros (Φ t) "HG". rewrite /G /=. iIntros (t' s Ψ Heval) "Hstate Hwand".
+      punfold Heval. inversion Heval. simplify_obs. rewrite -wpi_tau.
+      iApply wpi_update. iMod "HG". iModIntro. iApply ("HG" with "[] Hstate Hwand").
+      by pclearbot.
+    - clear Φ t' Heval s. iModIntro. iIntros (Φ A e k) "HH". iEval (rewrite /G /=).
+      iIntros (t' s Ψ Heval) "Hstate Hwand". punfold Heval. inversion Heval.
+      * simplify_K. simplify_obs. iApply wpi_vis. iMod "HH". simpl. iModIntro.
+        iDestruct (is_seq with "HH") as "HH".
+        iApply (ihandler_mono with "[Hstate Hwand]"); last done.
+        + iIntros (a) "Hwp". iApply wpi_update_post. iApply ("Hwp" with "[] Hstate Hwand").
+          iPureIntro. pclearbot. apply H4.
+        + eauto.
+      * simplify_K. simplify_obs. simplify_K. simpl. rewrite -wpi_tau. iApply wpi_update. iMod "HH".
+        iMod ("HH" with "Hstate") as "[Hstate HH]". pclearbot. by iApply ("HH" with "[] Hstate").
+      * simplify_K. simplify_obs. simplify_K. simpl. rewrite -wpi_tau. iApply wpi_update. iMod "HH".
+        iMod ("HH" with "Hstate") as "[Hstate HH]". pclearbot. by iApply ("HH" with "[] Hstate").
+    - done.
+    - done.
+    - eauto.
   Qed.
 
   (** Adequacy for [stateH S ⊕ H]. This says that if you can prove the

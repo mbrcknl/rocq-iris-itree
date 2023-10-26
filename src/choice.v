@@ -165,19 +165,18 @@ Section demonic_adequacy.
     unshelve epose
       (G := λne (t : discreteO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I);
       try apply _; try solve_proper.
-    { intros n Φ1 Φ2 HΦ. do 3 f_equiv. by apply wpi_ne. }
     iApply (wpi_iter' (H := demonicH ⊕ H) G with "[] [] [] Hwp [//]"); clear.
     - intros n t1 t2 Ht Φ1 Φ2 HΦ. by repeat f_equiv.
     - iModIntro. iIntros (Φ r) "HΦ". iIntros (t Hinst). punfold Hinst. inversion Hinst.
-      apply ret_observe_eqit in H2 as <-. rewrite -wpi_ret' //.
+      simplify_obs. rewrite -wpi_ret' //.
     - iModIntro. iIntros (Φ t) "HG". iIntros (t' Hinst). rewrite -wpi_update. iMod "HG".
       punfold Hinst. inversion Hinst. pclearbot.
-      apply tau_observe_eqit in H1 as <-. rewrite -wpi_tau. by iApply "HG".
+      simplify_obs. rewrite -wpi_tau. by iApply "HG".
     - iModIntro. iIntros (Φ' A e k) "HH". rewrite /G /=. iIntros (t'' Hinst).
-      punfold Hinst. inversion Hinst. simplify_K. apply tau_observe_eqit in H4 as <-.
+      punfold Hinst. inversion Hinst. simplify_K. simplify_obs.
       * iApply wpi_update. iMod "HH". iModIntro. rewrite -wpi_tau. pclearbot. iApply "HH".
         iPureIntro. apply H1.
-      * simplify_K. apply vis_observe_eqit in H4 as <-. rewrite -wpi_vis'.
+      * simplify_K. simplify_obs. rewrite -wpi_vis'.
         iApply ihandler_mono; last done.
         + iIntros (a) "Hwp". iApply wpi_update_post. pclearbot. iApply "Hwp". iPureIntro. apply H1.
         + iModIntro. iIntros (t) "Hwp". iApply wpi_clear_mask_false. iMod "Hwp". iModIntro.

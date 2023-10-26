@@ -92,3 +92,13 @@ Proof.
   - punfold H; red in H; inversion H; exists t; by pclearbot.
   - apply eqitree_inv_Tau_r in H as [t [H _]]. discriminate.
 Qed.
+
+Ltac simplify_obs :=
+  repeat match goal with
+  | H : RetF _ = observe _ |- _ =>
+    apply ret_observe_eqit in H as <-
+  | H : TauF _ = observe _ |- _ =>
+    apply tau_observe_eqit in H as <-
+  | H : VisF _ _ = observe _ |- _ =>
+    apply vis_observe_eqit in H as <-
+  end.
