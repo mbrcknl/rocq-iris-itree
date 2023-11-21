@@ -24,7 +24,7 @@ and [ESet]. *)
 Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
 
 Section stateH.
-  Context {Σ} (S : Type) `{!stateInterp Σ S} `{!invGS_gen HasNoLc Σ}.
+  Context {Σ} (S : Type) `{!stateInterp Σ S} `{!invGS_gen hlc Σ}.
 
   (** [iHandler] for [stateE]. *)
   Program Definition stateH : iHandler Σ (stateE S) :=
@@ -48,7 +48,7 @@ Section stateH.
 End stateH.
 
 Section wp_state.
-  Context {S : Type} `{!stateHGS Σ S} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
+  Context {S : Type} `{!stateHGS Σ S} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context `{!stateInterp Σ S}.
   Context {H : iHandler Σ E} `{stateE S -< E} `{inH Σ (stateE S) E (stateH S) H}.
 
@@ -78,7 +78,7 @@ Section wp_state.
 End wp_state.
 
 Section stateH_adequacy.
-  Context {S : Type} `{!stateHGS Σ S} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
+  Context {S : Type} `{!stateHGS Σ S} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context `{!stateInterp Σ S}.
   Context {H : iHandler Σ E} `{stateE S -< E} `{inH Σ (stateE S) E (stateH S) H}.
   Context {R : Type}.
@@ -186,8 +186,13 @@ Section stateH_adequacy.
     WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Φ v }}.
   Proof.
     iIntros "%Heval Hstate Hwp".
-    unshelve epose (G := (λne (t : discreteO (itree (stateE S +' E) R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t' s Ψ, ⌜eval s t t'⌝ → state_interp s -∗ (∀ v, Φ v -∗ |={∅, M}=> Ψ v) -∗ WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Ψ v }})%I); try apply _; try solve_proper.
-    { clear. intros n t1 t2 Ht Φ. simpl. do 8 f_equiv. split; rewrite Ht //. }
+    unshelve epose (G := (λne (t : leibnizO (itree (stateE S +' E) R)) (Φ : leibnizO R -d> iPropO Σ),
+      ∀ t' s Ψ,
+        ⌜eval s t t'⌝ →
+        state_interp s -∗
+        (∀ v, Φ v -∗ |={∅, M}=> Ψ v) -∗
+        WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Ψ v }}
+    )%I); try apply _; try solve_proper.
     iApply (wpi_iter' (H := stateH S ⊕ H) G with "[] [] [] [Hwp] [] Hstate").
     - intros n t1 t2 Ht Φ1 Φ2 HΦ. rewrite /G. by repeat f_equiv.
     - clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t s Ψ Heval) "Hstate HΨ".

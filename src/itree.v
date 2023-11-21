@@ -5,7 +5,7 @@ From ITree Require Import TranslateFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
-Global Instance itree_equiv (E : Type → Type) R : Equiv (itree E R) := eq_itree (=).
+(* Global Instance itree_equiv (E : Type → Type) R : Equiv (itree E R) := eq_itree (=). *)
 
 Global Instance eq_itree_iff {E R} (t' : itree E R) :
   Proper (eq_itree (=) ==> iff) (λ t, t ≅ t').

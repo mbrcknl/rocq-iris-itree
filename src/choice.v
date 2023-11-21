@@ -59,7 +59,7 @@ End handler.
 
 Section wp_angelic.
   Context {E : Type → Type} `{H : iHandler Σ E} `{angelicE -< E} `{inH Σ angelicE E angelicH H}.
-  Context `{!invGS_gen HasNoLc Σ}.
+  Context `{!invGS_gen hlc Σ}.
 
   Lemma wpi_angelic {R A} k M (Φ : R → iProp Σ) :
     (∃ a, WPi k a @ H; M {{ Φ }}) -∗
@@ -74,7 +74,7 @@ End wp_angelic.
 
 Section wp_demonic.
   Context {E : Type → Type} `{H : iHandler Σ E} `{demonicE -< E} `{inH Σ demonicE E demonicH H}.
-  Context `{!invGS_gen HasNoLc Σ}.
+  Context `{!invGS_gen hlc Σ}.
 
   Lemma wpi_demonic {R A} k M (Φ : R → iProp Σ) :
     (∀ a, WPi k a @ H; M {{ Φ }}) -∗
@@ -88,7 +88,7 @@ Section wp_demonic.
 End wp_demonic.
 
 Section demonic_adequacy.
-  Context {E : Type → Type} `{H : iHandler Σ E} {R : Type} `{!invGS_gen HasNoLc Σ}.
+  Context {E : Type → Type} `{H : iHandler Σ E} {R : Type} `{!invGS_gen hlc Σ}.
 
   Variant demonic_instantiatesF
     (demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop)
@@ -163,7 +163,7 @@ Section demonic_adequacy.
   Proof.
     iIntros (Hinstant) "Hwp".
     unshelve epose
-      (G := λne (t : discreteO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I);
+      (G := λne (t : leibnizO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I);
       try apply _; try solve_proper.
     iApply (wpi_iter' (H := demonicH ⊕ H) G with "[] [] [] Hwp [//]"); clear.
     - intros n t1 t2 Ht Φ1 Φ2 HΦ. by repeat f_equiv.
@@ -197,7 +197,7 @@ End demonic_adequacy.
 
 (*
 Lemma fupd_soundness `{!invGpreS Σ} E1 E2 (P : iProp Σ) `{!Plain P} :
-  (∀ `{Hinv: !invGS_gen HasNoLc Σ}, ⊢ |={E1,E2}=> P) → ⊢ P.
+  (∀ `{Hinv: !invGS_gen hlc Σ}, ⊢ |={E1,E2}=> P) → ⊢ P.
 Proof.
   intros Hfupd. apply fupd_soundness_no_lc with (E1 := E1) (E2 := E2) (m := 0).
   - done.
@@ -247,7 +247,7 @@ Section demonic_angelic_adequacy.
     paco2 angel_wins_ bot2.
 
   Theorem demonicH_angelicH_adequate' `{!invGpreS Σ} (t : itree (angelicE +' demonicE) R) (Q : R → Prop) :
-    (∀ `{Hinv : invGS_gen HasNoLc Σ}, sat WPi t @ angelicH ⊕ demonicH; ⊤ {{ v, ⌜ Q v ⌝ }}) →
+    (∀ `{Hinv : invGS_gen hlc Σ}, sat WPi t @ angelicH ⊕ demonicH; ⊤ {{ v, ⌜ Q v ⌝ }}) →
     angel_wins t Q.
   Proof.
     generalize t. pcofix CIH. clear t. intros t Hwp. pfold. rewrite /angel_wins_.

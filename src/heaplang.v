@@ -580,7 +580,7 @@ Global Instance subG_heaplangHΣ Σ :
 Proof. solve_inG. Qed.
 
 Section heaplangH.
-  Context {Σ} `{!stateHGS Σ state} `{!invGS_gen HasNoLc Σ} `{!heaplangHGS Σ}.
+  Context {Σ} `{!stateHGS Σ state} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
   Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
     own heaplangH_name (gmap_view_auth (DfracOwn 1) (id <$> σ.(heap))).

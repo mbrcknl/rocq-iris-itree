@@ -22,8 +22,8 @@ Section wp_itree.
   (** The definition of the weakest precondition, prior to taking the fixpoint. *)
   (* TODO: Uncurry this, and don't use the -n> to iProp *)
   Definition wpiF (H : iHandler Σ E)
-    (wpi : discreteO (itree E R) -> (leibnizO R -> iPropO Σ) -> iPropO Σ) :
-           discreteO (itree E R) -> (leibnizO R -> iPropO Σ) -> iPropO Σ :=
+    (wpi : leibnizO (itree E R) -> (leibnizO R -> iPropO Σ) -> iPropO Σ) :
+           leibnizO (itree E R) -> (leibnizO R -> iPropO Σ) -> iPropO Σ :=
     λ t Φ,
       (|={∅}=>
         match observe t with
@@ -35,20 +35,22 @@ Section wp_itree.
         end
       )%I.
   Definition wpiF' (H : iHandler Σ E)
-    (wpi : discreteO (itree E R) * (leibnizO R -d> iPropO Σ) -> iPropO Σ) :
-           discreteO (itree E R) * (leibnizO R -d> iPropO Σ) -> iPropO Σ :=
+    (wpi : leibnizO (itree E R) * (leibnizO R -d> iPropO Σ) -> iPropO Σ) :
+           leibnizO (itree E R) * (leibnizO R -d> iPropO Σ) -> iPropO Σ :=
     λ pair, let (t, Φ) := pair in wpiF H (curry wpi) t Φ.
 
   Global Instance wpiF_ne n H :
     Proper ((dist n ==> dist n) ==> dist n ==> dist n) (wpiF' H).
   Proof.
-    intros wp1 wp2 Hwp [t1 Q1] [t2 Q2] [Ht HQ]. rewrite /wpiF'/wpiF.
-    destruct (eqit_cases t1 t2 Ht) as [(r&->&->)|[(t1'&t2'&->&->&Ht')|(A&e&k1&k2&->&->&Hk)]].
+    intros wp1 wp2 Hwp [t1 Q1] [t2 Q2] [-> HQ]. rewrite /wpiF'/wpiF.
+    simpl in HQ.
+    simpl.
+    do 2 f_equiv.
+    - apply HQ.
     - by f_equiv.
-    - f_equiv. by apply Hwp.
-    - f_equiv. apply handler_ne.
-      * intros a. apply Hwp. split; first apply Hk. done.
-      * intros a. f_equiv. apply Hwp. split; first apply Hk. done.
+    - apply handler_ne.
+      * intros a. apply Hwp. by split.
+      * intros a. f_equiv. apply Hwp. by split.
   Qed.
 
   Lemma wpiF_mono H wp1 wp2:
@@ -75,18 +77,13 @@ Section wp_itree.
     constructor.
     - iIntros (Π Ψ ??) "#Hinner". iIntros ([??]) "Hsim" => /=. iApply wpiF_mono'; [|done].
       iIntros "!>" (??) "HΠ". by iApply ("Hinner" $! (_, _)).
-    - intros wpi HneΦ n [t Φ] [t' Φ'] [Ht HΦ]. rewrite /wpiF'/wpiF. punfold Ht. inversion Ht.
-      * simpl in HΦ. rewrite REL //. repeat f_equiv.
-      * do 2 f_equiv. split.
-        + pclearbot. apply REL.
-        + apply HΦ.
-      * f_equiv. apply handler_ne.
-        + intros a. f_equiv. pclearbot. split.
-          ++ apply REL.
-          ++ done.
-        + intros a. do 2 f_equiv. pclearbot. apply REL.
+    - intros wpi HneΦ n [t Φ] [t' Φ'] [-> HΦ]. rewrite /wpiF'/wpiF.
+      f_equiv. simpl. f_equiv.
       * done.
-      * done.
+      * by f_equiv.
+      * apply handler_ne.
+        + intros a. by f_equiv.
+        + intros a. f_equiv.
   Qed.
 
   (* TODO: Rename [wpi] to [wpi_no_mask] or something along those lines. *)
@@ -107,7 +104,7 @@ Local Notation "'WPi' t @ H {{ v , Q } }" := (wpi H t%itree (λ v, Q))
    format "'[hv' 'WPi'  t  '/' @  '[' H ']'  '/' {{  '[' v ,  '/' Q  ']' } } ']'") : bi_scope.
 
 Section wp_itree.
-  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
+  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context {H : iHandler Σ E}.
 
   Global Instance wpi_ne_emp_mask R t :
@@ -116,7 +113,7 @@ Section wp_itree.
     intros n Φ1 Φ2 HΦ. rewrite /wpi. apply least_fixpoint_ne; first solve_proper. by split.
   Qed.
   Global Instance wpi_ne_emp_mask' R Φ :
-    NonExpansive (λ t : discreteO (itree E R), (WPi t @ H {{ Φ }})%I).
+    NonExpansive (λ t : leibnizO (itree E R), (WPi t @ H {{ Φ }})%I).
   Proof.
     intros n t1 t2 Ht. rewrite /wpi. apply least_fixpoint_ne; first solve_proper. by split.
   Qed.
@@ -140,8 +137,8 @@ Section wp_itree.
     WPi t @ H {{ Φ }} ⊣⊢
     WPi Tau t @ H {{ Φ }}.
   Proof.
-    rewrite !wpi_unfold /wpiF. simpl. f_equiv. rewrite wpi_unfold //.
-  Admitted.
+    rewrite !wpi_unfold /wpiF. simpl. rewrite wpi_unfold /wpiF fupd_idemp //.
+  Qed.
 
   Lemma wpi_vis_emp_mask' {R} Φ A (e : E A) (k : A → itree E R):
     (|={∅}=> H A (subevent A e) (λ a, WPi k a @ H {{ Φ }}) (λ a, |={⊤, ∅}=> WPi k a @ H {{ const False }})) ⊣⊢
@@ -165,7 +162,7 @@ Section wp_itree.
 
   (* Induction principles for WPi. *)
 
-  Lemma wpi_ind_emp_mask {R} (G : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
+  Lemma wpi_ind_emp_mask {R} (G : leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
     NonExpansive2 G →
     (□ ∀ t Φ, wpiF H (λ t' Ψ, G t' Ψ ∧ WPi t' @ H {{ Ψ }}) t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ.
@@ -176,7 +173,7 @@ Section wp_itree.
     iIntros "!>" ([??]) "Hwp" => /=. by iApply "HPre".
   Qed.
 
-  Lemma wpi_iter_emp_mask {R} (G : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
+  Lemma wpi_iter_emp_mask {R} (G : leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
     NonExpansive2 G →
     (□ ∀ t Φ, wpiF H G t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ.
@@ -185,7 +182,7 @@ Section wp_itree.
     iApply "HPre". iApply (wpiF_mono with "[] Hwp").
     iIntros "!>" (??) "[? _]". by iFrame.
   Qed.
-  Lemma wpi_iter_emp_mask' {R} (G : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
+  Lemma wpi_iter_emp_mask' {R} (G : leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
     NonExpansive2 G →
     (□ ∀ Φ r, (|={∅}=> Φ r) -∗ G (Ret r) Φ) -∗
     (□ ∀ Φ t, (|={∅}=> G t Φ) -∗ G (Tau t) Φ) -∗
@@ -202,14 +199,12 @@ Section wp_itree.
 
   (* [Proper] instances. *)
 
-  Global Instance wpi_proper_eqit_emp_mask R :
-    Proper ((eqit (E:=E) (=) false false) ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi H).
+  Global Instance wpi_proper_post_emp_mask R :
+    Proper ((=) ==> ((pointwise_relation R (⊣⊢)) ==> (⊣⊢))) (wpi (E:=E) (R:=R) H).
   Proof.
-    intros t1 t2 Hbisim Φ1 Φ2 HΦ.
+    intros t1 t2 <- Φ1 Φ2 HΦ.
     rewrite /wpi. apply equiv_dist. intros n. apply least_fixpoint_ne; first solve_proper.
-    split; simpl.
-    - done.
-    - intros r. rewrite HΦ //.
+    split; eauto.
   Qed.
 
   (* TODO: Don't use instances for temporary class definitions. *)
@@ -218,9 +213,8 @@ Section wp_itree.
   Proof.
     iIntros (t1 t2 Hbisim Φ Φ' <-).
     unshelve epose
-      (G := λne (t1 : discreteO (itree E R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t2, ⌜t1 ≈ t2⌝ → WPi t2 @ H {{ Φ }})%I);
+      (G := λne (t1 : leibnizO (itree E R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t2, ⌜t1 ≈ t2⌝ → WPi t2 @ H {{ Φ }})%I);
       try apply _; try solve_proper.
-    { clear Φ Hbisim t1 t2. intros n t1 t2 Ht. intros Φ. simpl. do 4 f_equiv. split; by rewrite Ht. }
     iAssert (∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hint".
     - iApply (wpi_iter_emp_mask G).
       * intros ???????. by repeat f_equiv.
@@ -255,6 +249,15 @@ Section wp_itree.
     - iIntros "Hwp". rewrite Hbisim HΦ //.
   Qed.
 
+  Global Instance wpi_proper_eqit_emp_mask R :
+    Proper ((eqit (E:=E) (=) false false) ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi H).
+  Proof.
+    intros t1 t2 Hbisim Φ1 Φ2 HΦ.
+    assert (Hbisim' : t1 ≈ t2).
+    - rewrite Hbisim //.
+    - rewrite Hbisim' HΦ //.
+  Qed.
+
   (* Structural rules. *)
 
   Lemma wpi_update_emp_mask {R} Φ (t : itree E R) :
@@ -272,8 +275,7 @@ Section wp_itree.
     WPi t @ H {{ Ψ }}.
   Proof.
     iIntros "Hwand Hwp".
-    unshelve epose (G := (λne (t : discreteO (itree E R)) (Φ : leibnizO R -d> iPropO Σ), ∀ Ψ, (∀ r : R, (|={∅}=> Φ r) -∗ (|={∅}=> Ψ r)) -∗ WPi t @ H {{ Ψ }})%I); try apply _; try solve_proper.
-    { clear. intros n t1 t2 Ht Φ. simpl. do 3 f_equiv. by rewrite Ht. }
+    unshelve epose (G := (λne (t : leibnizO (itree E R)) (Φ : leibnizO R -d> iPropO Σ), ∀ Ψ, (∀ r : R, (|={∅}=> Φ r) -∗ (|={∅}=> Ψ r)) -∗ WPi t @ H {{ Ψ }})%I); try apply _; try solve_proper.
     iAssert (∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { rewrite /G. simpl. iApply ("Hgen" with "Hwp Hwand"). }
     iApply (wpi_iter_emp_mask' G); clear.
@@ -310,8 +312,7 @@ Section wp_itree.
     WPi (ITree.bind t k) @ H {{ Φ }}.
   Proof.
     iIntros "Hwp".
-    unshelve epose (G := (λne (t : discreteO (itree E T)) (Φ : leibnizO T -d> iPropO Σ), ∀ (Ψ : R → iProp Σ) k, (∀ x : T, Φ x -∗ WPi (k x) @ H {{ Ψ }}) -∗ WPi (ITree.bind t k) @ H {{ Ψ }})%I); try apply _; try solve_proper.
-    { clear. intros n t1 t2 Ht Φ. simpl. do 5 f_equiv. apply wpi_ne_emp_mask'. by apply eqit_bind. }
+    unshelve epose (G := (λne (t : leibnizO (itree E T)) (Φ : leibnizO T -d> iPropO Σ), ∀ (Ψ : R → iProp Σ) k, (∀ x : T, Φ x -∗ WPi (k x) @ H {{ Ψ }}) -∗ WPi (ITree.bind t k) @ H {{ Ψ }})%I); try apply _; try solve_proper.
     iAssert (∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { rewrite /G. simpl. iApply ("Hgen" with "Hwp"). eauto. }
     iApply (wpi_iter_emp_mask' G); clear.
@@ -349,7 +350,7 @@ Section wp_itree.
 End wp_itree.
 
 Section wp_itree_mask.
-  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
+  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context {H : iHandler Σ E}.
 
   lock Definition wpi_mask {R} (M : coPset) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
@@ -376,7 +377,7 @@ Notation "'WPi' t @ H ; M {{ Φ } }" := (WPi t @ H; M {{ v, Φ v }})%I
   (at level 20, t, Φ at level 200, only parsing) : bi_scope.
 
 Section wp_itree_mask.
-  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen HasNoLc Σ}.
+  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context {H : iHandler Σ E}.
 
   (* Nonexpansiveness lemmata. *)
@@ -389,7 +390,7 @@ Section wp_itree_mask.
 
   (* Induction principles for WPi. *)
 
-  Lemma wpi_ind {R} (G : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
+  Lemma wpi_ind {R} (G : leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
     NonExpansive2 G →
     (□ ∀ t Φ, wpiF H (λ t' Ψ, G t' Ψ ∧ WPi t' @ H; ∅ {{ Ψ }}) t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H; ∅ {{ Φ }} -∗ G t Φ.
@@ -402,7 +403,7 @@ Section wp_itree_mask.
     - iDestruct "Hwp" as "[_ Hwp]". rewrite wpi_update_emp_mask wpi_update_post_emp_mask //.
   Qed.
 
-  Lemma wpi_iter {R} (G : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
+  Lemma wpi_iter {R} (G : leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
     NonExpansive2 G →
     (□ ∀ t Φ, wpiF H G t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H; ∅ {{ Φ }} -∗ G t Φ.
@@ -411,7 +412,7 @@ Section wp_itree_mask.
     iApply "HPre". iApply (wpiF_mono with "[] Hwp").
     iIntros "!>" (??) "[? _]". by iFrame.
   Qed.
-  Lemma wpi_iter' {R} (G : discreteO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
+  Lemma wpi_iter' {R} (G : leibnizO (itree E R) -d> (leibnizO R -d> iPropO Σ) -n> iPropO Σ):
     NonExpansive2 G →
     (□ ∀ Φ r, (|={∅}=> Φ r) -∗ G (Ret r) Φ) -∗
     (□ ∀ Φ t, (|={∅}=> G t Φ) -∗ G (Tau t) Φ) -∗
@@ -594,7 +595,7 @@ Section wp_itree_mask.
 End wp_itree_mask.
 
 Section translation.
-  Context {Σ : gFunctors} `{!invGS_gen HasNoLc Σ}.
+  Context {Σ : gFunctors} `{!invGS_gen hlc Σ}.
   Context {E1 E2 : Type → Type}.
   Context {H1 : iHandler Σ E1} {H2 : iHandler Σ E2}.
   Context {f : E1 ~> itree E2}.
@@ -617,8 +618,9 @@ Section translation.
     WPi t @ H1; ∅ {{ Φ }} -∗ WPi (interp f t) @ H2; ∅ {{ Φ }}.
   Proof.
     iIntros "#HH Hwp".
-    unshelve epose (G := (λne (t : discreteO (itree E1 R)) (Φ : leibnizO R -d> iPropO Σ), WPi (interp f t) @ H2; ∅ {{ Φ }})%I); try apply _; try solve_proper.
-    iApply (wpi_iter' G); first solve_proper; clear.
+    unshelve epose (G := (λne (t : leibnizO (itree E1 R)) (Φ : leibnizO R -d> iPropO Σ), WPi (interp f t) @ H2; ∅ {{ Φ }})%I); try apply _; try solve_proper.
+    iApply (wpi_iter' G); clear.
+    - by intros n t1 t2 -> Φ1 Φ2 ->.
     - iModIntro. iIntros (Φ r) "Hwp". rewrite /G. simpl. rewrite interp_ret -!wpi_ret' //.
     - iModIntro. iIntros (Φ r) "Hwp". rewrite /G. simpl.
       rewrite interp_tau -!wpi_tau wpi_update //.
@@ -670,7 +672,7 @@ Section translation.
 End translation.
 
 Section inH.
-  Context {Σ : gFunctors} `{!invGS_gen HasNoLc Σ}.
+  Context {Σ : gFunctors} `{!invGS_gen hlc Σ}.
   Context {E1 E2 : Type → Type}.
   Context {H1 : iHandler Σ E1} {H2 : iHandler Σ E2}.
   Context `{f : E1 -< E2} `{inH1H2 : inH (f := f) Σ E1 E2 H1 H2}.
@@ -686,10 +688,11 @@ Section inH.
           + iIntros (a) "Hwp". by iApply wpi_update_post.
           + iModIntro. by iIntros (a) "Hwp".
         * done.
-    - unshelve epose (G := (λne (t : discreteO (itree E2 R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I); try apply _; try solve_proper.
+    - unshelve epose (G := (λne (t : leibnizO (itree E2 R)) (Φ : leibnizO R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I); try apply _; try solve_proper.
       iAssert (∀ t Φ, WPi t @ H2; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
       { rewrite /G. simpl. iIntros "Hwp". by iApply ("Hgen" with "Hwp"). }
-      iApply (wpi_iter' G); first solve_proper.
+      iApply (wpi_iter' G).
+      * by intros n t1 t2 -> Φ1 Φ2 ->.
       * clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t Ht). iApply wpi_update.
         apply translate_Ret_inv in Ht as ->. by iApply wpi_ret.
       * clear. iModIntro. iIntros (Φ t) "HG". iIntros (t' Ht). apply translate_Tau_inv in Ht as (t1'&->&Ht).
