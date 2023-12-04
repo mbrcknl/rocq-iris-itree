@@ -31,6 +31,7 @@ Section wp_itree.
         | TauF t' => wpi t' Φ
         | VisF e k => H _ e
             (λ a, wpi (k a) Φ)
+            (* TODO: Should the handler handle the fancy update? *)
             (λ a, |={⊤, ∅}=> wpi (k a) (λ _, False))
         end
       )%I.

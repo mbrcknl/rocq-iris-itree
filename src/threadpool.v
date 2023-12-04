@@ -194,6 +194,8 @@ Section wptp.
     to introduce the dependently typed binders sufficiently late. This is why
     we put a lambda after each arm, as opposed to on the outside. *)
     match e with
+    (* TODO: Unify [EKillThread] and [EYield] by having a unified insert/delete
+    accepting an [option nat]. *)
     | EKillThread => λ k,
       (
       (|={∅, ⊤}=> wptp None (delete tid tp) Φ)
@@ -201,8 +203,8 @@ Section wptp.
       )
     | EYield => λ k,
       (
-      (|={∅, ⊤}=> wptp None tp Φ)
-      ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') tp Φ
+      (|={∅, ⊤}=> wptp None (<[tid:=k ()]>tp) Φ)
+      ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (<[tid:=k ()]>tp) Φ
       )
     | EFork => λ k,
       wptp (Some (tid + 1)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
@@ -402,8 +404,8 @@ Section wptp_induction.
       |={∅}=> G (Some (tid + 1)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
       )
     ∨ (∃ k, ⌜tp !! tid = Some (Vis (inl1 EYield) k)⌝ ∧ (
-      (|={∅, ⊤}=> G None tp Φ)
-      ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> G (Some tid') tp Φ
+      (|={∅, ⊤}=> G None (<[tid:=k ()]>tp) Φ)
+      ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> G (Some tid') (<[tid:=k ()]>tp) Φ
       ))
     ∨ (∃ k, ⌜tp !! tid = Some (Vis (inl1 EKillThread) k)⌝ ∧ (
       (|={∅, ⊤}=> G None (delete tid tp) Φ)
@@ -631,6 +633,10 @@ Section threadpool_adequacy.
     ∃ idx, permutes (Some idx) xs (Some idx') xs'.
   Admitted.
 
+  Lemma lookup_lt_Some' {A} (i : nat) (xs : list A) :
+    i < length xs → ∃ x, xs !! i = Some x.
+  Admitted.
+
   Lemma wptp_reorder tp tid tp' tid' Φ :
     permutes tid tp tid' tp' →
     wptp (R:=R) H tid  tp  Φ -∗
@@ -654,13 +660,20 @@ Section threadpool_adequacy.
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iModIntro. iSplit.
         + iDestruct "Hwptp'" as "[>Hwptp' _]". iApply "Hwptp'".
-          iModIntro. iPureIntro. by eapply permutes_Some_None.
-        + apply permutes_Some_None in Hperm. clear -Hperm. iIntros (tid' t' Hidx').
-          apply permutes_mapping with (idx' := tid') in Hperm; first last.
-          { by eapply lookup_lt_Some. } destruct Hperm as [tid Hperm'].
-          destruct (permutes_Some_Some _ _ _ _ Hperm') as [Hidxbound Hcoincide].
+          iModIntro. iPureIntro.
+          apply permutes_insert with (x := k ()) in Hperm.
+          by eapply permutes_Some_None.
+        + apply permutes_insert with (x := k()) in Hperm.
+          apply permutes_Some_None in Hperm.
+          clear -Hperm.
+          iIntros (tid_' t Hidx_').
+          apply permutes_mapping with (idx' := tid_') in Hperm; first last.
+          { rewrite insert_length. by eapply lookup_lt_Some. }
+          destruct Hperm as [tid_ Hperm].
+          destruct (permutes_Some_Some _ _ _ _ Hperm) as [Hidxbound Hcoincide].
           iDestruct "Hwptp'" as "[_ Hwptp']".
-          rewrite Hcoincide in Hidx'. by iApply "Hwptp'".
+          rewrite insert_length in Hidxbound. apply lookup_lt_Some' in Hidxbound as [t' Hidx_].
+          by iApply "Hwptp'".
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iModIntro. iSplit.
         + iDestruct "Hwptp'" as "[>Hwptp' _]". iApply "Hwptp'".
@@ -702,7 +715,7 @@ Section threadpool_adequacy.
     iIntros (t tp Φ) "Hwptp". iDestruct "Hwptp" as "[$ _]".
   Qed.
 
-  Lemma wptp_wptpIH' `{!Sequential H} tid' tp' Φ :
+  Lemma wptp_wptpIH' tid' tp' Φ :
     wptp H tid' tp' Φ -∗ wptp_IH_right tid' tp' Φ.
   Proof.
     generalize tid' tp' Φ.
@@ -724,13 +737,14 @@ Section threadpool_adequacy.
         iApply "Hwptp''". { iPureIntro. lia. } done.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         iModIntro. iSplit.
-        + iDestruct "Hwptp" as "[>[_ [Hwptp _]] _]". iApply "Hwptp".
+        + iDestruct "Hwptp" as "[>[_ [Hwptp _]] _]". rewrite insert_app_r. iApply "Hwptp".
           by iDestruct "Hwptp''" as "[>[$ _] _]".
         + clear. iIntros (new_tid t' Hidx').
           apply lookup_app_Some in Hidx' as [Hidx'|[Hidx'bound Hidx']].
           ++ iDestruct "Hwptp''" as "[>[Hwptp'' _] _]".
-             iDestruct "Hwptp" as "[_ Hwptp]". by iApply "Hwptp".
-          ++ iDestruct "Hwptp''" as "[_ Hwptp'']". iApply "Hwptp''"; eauto. iPureIntro. lia.
+             iDestruct "Hwptp" as "[_ Hwptp]". rewrite insert_app_r. by iApply "Hwptp".
+          ++ iDestruct "Hwptp''" as "[_ Hwptp'']". rewrite insert_app_r.
+             iApply "Hwptp''"; eauto. iPureIntro. lia.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         iModIntro. iSplit.
         + iDestruct "Hwptp" as "[>[_ [Hwptp _]] _]".
@@ -743,7 +757,7 @@ Section threadpool_adequacy.
              iDestruct "Hwptp" as "[_ Hwptp]".
              by iApply "Hwptp".
           ++ iDestruct "Hwptp''" as "[_ Hwptp'']". iApply "Hwptp''"; eauto. iPureIntro. lia.
-      * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. } 
+      * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         simpl. iMod "HH". iModIntro. iApply (ihandler_mono with "[Hwptp]"); last done.
         + iIntros (a) "[_ Hwptp']". rewrite insert_app_r. by iApply "Hwptp'".
         + eauto.
@@ -772,18 +786,23 @@ Section threadpool_adequacy.
         iSpecialize ("Hwptp'" $! _ _ Hidx). iMod "Hwptp'". iModIntro. iDestruct "Hwptp'" as "[$ _]".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. iModIntro. iSplit.
-        + iDestruct "Hwptp''" as "[>[_ [Hwptp'' _]] _]". iApply "Hwptp''".
-          iDestruct "Hwptp'" as "[[Hwptp' _] _]". iModIntro. by iApply wptp_update.
-        + clear. iIntros (new_tid t' Hidx').
+        + iDestruct "Hwptp''" as "[>[_ [Hwptp'' _]] _]".
+          rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
+          iApply "Hwptp''". iDestruct "Hwptp'" as "[[Hwptp' _] _]". iModIntro.
+          by iApply wptp_update.
+        + rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
+          clear. iIntros (new_tid t' Hidx').
           apply lookup_app_Some in Hidx' as [Hidx'|[Hidx'bound Hidx']].
-          ++ iDestruct "Hwptp''" as "[_ Hwptp'']". iApply "Hwptp''"; first done.
+          ++ iDestruct "Hwptp''" as "[_ Hwptp'']".
+             iApply "Hwptp''"; first done.
              iEval (rewrite wptp_unfold /=).
              iSplit. { by iDestruct "Hwptp'" as "[>[$ _] _]". }
              clear. iIntros (tid' t' Hidx). iDestruct "Hwptp'" as "[_ Hwptp']".
              iSpecialize ("Hwptp'" $! _ _ Hidx). iMod "Hwptp'". iModIntro.
              iDestruct "Hwptp'" as "[$ _]".
           ++ iDestruct "Hwptp''" as "[>[_ [_ Hwptp'']] _]". iApply "Hwptp''".
-             { iPureIntro. apply (Nat.le_add_sub (length tp) new_tid Hidx'bound). }
+             { iPureIntro. rewrite insert_length.
+               apply (Nat.le_add_sub (length tp) new_tid Hidx'bound). }
              iDestruct "Hwptp'" as "[_ Hwptp']". iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
              iModIntro. by iDestruct "Hwptp'" as "[Hwptp' _]".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
@@ -803,7 +822,7 @@ Section threadpool_adequacy.
              { iPureIntro. apply (Nat.le_add_sub _ new_tid Hidx'bound). }
              iDestruct "Hwptp'" as "[_ Hwptp']". iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
              iModIntro. by iDestruct "Hwptp'" as "[Hwptp' _]".
-      * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. } 
+      * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. iMod "HH". iModIntro. iApply (ihandler_mono with "[Hwptp']"); last done.
         + iIntros (a) "[_ Hwptp]". rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
           iApply "Hwptp". iEval (rewrite wptp_unfold /=). clear.
@@ -813,7 +832,7 @@ Section threadpool_adequacy.
         + eauto.
   Qed.
 
-  Lemma wptp_wptpIH `{!Sequential H} tid tp Φ :
+  Lemma wptp_wptpIH tid tp Φ :
     wptp H tid tp Φ -∗
     wptp_IH tid tp Φ.
   Proof.
@@ -848,7 +867,7 @@ Section threadpool_adequacy.
   induction template can even use the existing one aside from the None case. *)
   Admitted.
 
-  Lemma wp_wptp (t : itree (threadpoolE +' E) R) Φ :
+  Lemma wp_wptp {Hseq : Sequential H} (t : itree (threadpoolE +' E) R) Φ :
     WPi t @ (threadpoolH ⊕ H); ∅ {{ v, |={∅, ⊤}=> Φ v }} -∗
     wptp H (Some 0) [t] Φ.
   (* TODO: Prove this by giving a version of WPi that incorporates the full
@@ -858,14 +877,14 @@ Section threadpool_adequacy.
     epose (G := (λ (masked : bool) (t : itree (threadpoolE +' E) R) (Φ_fupd : leibnizO R -d> iPropO Σ),
       ∀ Φ, (∀ r, Φ_fupd r -∗ (|={∅, ⊤}=> Φ r)) -∗
         if masked then
-         wptp H None [t] Φ
+          wptp H None [t] Φ
         else
           wptp H (Some 0) [t] Φ
       )%I).
     iAssert (∀ t Φ, WPi t @ threadpoolH ⊕ H; ∅ {{ Φ }} -∗ G false t Φ)%I as "Hgen"; last first.
     { iIntros "Hwp". iApply ("Hgen" with "Hwp"). eauto. }
     iApply (wpi_iter_masked (H := threadpoolH ⊕ H) G); first solve_proper.
-    - iModIntro. clear. iIntros (t Φ_fupd) "Hwp". iIntros (Φ) "Hwand".
+    - iModIntro. clear -Hseq. iIntros (t Φ_fupd) "Hwp". iIntros (Φ) "Hwand".
       destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k ->]]]]].
       * rewrite wptp_unfold /wpiF /=.
         iExists _. iSplit. { iPureIntro. reflexivity. }
@@ -883,14 +902,24 @@ Section threadpool_adequacy.
                  iApply "Hnew". iModIntro. by iIntros (r) "?".
              +++ by iApply "Hcurrent".
           ++ iModIntro. iSplit.
-             +++ do 2 iMod "Hwp". iModIntro. iApply wptp_None. iIntros (tid' t' Hidx). iMod "Hwp".
+             +++ do 2 iMod "Hwp". iModIntro. iApply wptp_None. iIntros (tid' t' Hidx).
                  apply list_lookup_singleton_Some in Hidx as [-> _].
-                 rewrite wptp_unfold /wptpF /=. iModIntro.
-                 iExists _. iSplit. { iPureIntro. reflexivity. }
-                 iModIntro. iSplit.
-                 ++++ iApply wptp_None.
-             +++ iApply "HH".
-    
+                 by iApply "Hwp".
+             +++ iIntros (tid t Hidx).
+                 apply list_lookup_singleton_Some in Hidx as [-> _].
+                 do 3 iMod "Hwp". by iApply "Hwp".
+          ++ iModIntro. iSplit.
+             +++ do 2 iMod "Hwp". iModIntro. iApply wptp_None. by iIntros (tid' t' Hidx).
+             +++ by iIntros (tid t Hidx).
+        + iExists _. iSplit. { iPureIntro. reflexivity. }
+          unshelve iDestruct (is_seq with "Hwp") as "Hwp".
+          iApply (ihandler_mono with "[Hwand]"); last done; eauto.
+          iIntros (a) "HG". by iApply "HG".
+    - clear. iIntros "!>" (t Φ) "HG". iIntros (Φ') "Hwand". iApply wptp_None.
+      iIntros (tid' t' Hidx'). apply list_lookup_singleton_Some in Hidx' as [-> _].
+      iMod "HG". iModIntro. by iApply "HG".
+  Qed.
+
   (** A technical version of adequacy, amenable to induction. See corollary below for a
   more meaningful statement. *)
   Theorem wpi_interleaving'
