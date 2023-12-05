@@ -92,84 +92,144 @@ End wp_threadpool.
 
 Section interleaving.
   Context `{!invGS_gen hlc Σ} {E : Type → Type} {H : iHandler Σ E} {R : Type}.
-  (** This sequentiality assumption is used for the [Emit] case in the adequacy
-  proof below. *)
-  Context `{!Sequential H}.
+
+  (* TODO: Update comments here in view of changes to the way that the focused
+  thread is encoded etc. *)
 
   (** The interleaving relation, prior to taking the fixpoint. This relation
   encodes what it means for an [itree E R] to refine an itree
   [itree (threadpoolE +' E) R] that can emit events [threadpoolE] regarding
   concurrency. *)
   Variant interleavesF
-    (interleaves : list (itree (threadpoolE +' E) R) → itree (threadpoolE +' E) R → itree E R → Prop)
-    : list (itree (threadpoolE +' E) R)
+    (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop)
+    : nat
     → itree' (threadpoolE +' E) R
+    → list (itree (threadpoolE +' E) R)
     → itree' E R
     → Prop :=
   (** If a thread returns, the interleaved [itree] ends. *)
-  | Return tp r :
-    interleavesF interleaves tp (RetF r) (RetF r)
+  | Return current_tid tp r :
+    interleavesF interleaves current_tid (RetF r) tp (RetF r)
   (** If the current thread steps, so does the interleaved [itree]. *)
-  | Step current' tp interleaving' :
-    interleaves tp current' interleaving' →
-    interleavesF interleaves tp (TauF current') (TauF interleaving')
+  | Step current_tid current' tp interleaving' :
+    interleaves current_tid (<[current_tid:=current']>tp) interleaving' →
+    interleavesF interleaves current_tid (TauF current') tp (TauF interleaving')
   (** If an event of type [E] is emitted, the interleaved [itree] also
   emits this event. *)
-  | Emit tp A (e : E A) k k' :
-    (∀ a, interleaves tp (k a) (k' a)) →
-    interleavesF interleaves tp (VisF (inr1 e) k) (VisF e k')
+  | Emit current_tid tp A (e : E A) k k' :
+    (∀ a, interleaves current_tid (<[current_tid:=k a]>tp) (k' a)) →
+    interleavesF interleaves current_tid (VisF (inr1 e) k) tp (VisF e k')
   (** If a thread emits the [EKillThread] event, the thread ends and control is
   yielded to some other thread in the threadpool. The interleaved [itree] takes
   a silent step in place of the [EKillThread]. *)
-  | KillThread tp k new_current_tid new_current interleaving' :
-    tp !! new_current_tid = Some new_current →
-    interleaves (delete new_current_tid tp) new_current interleaving' →
-    interleavesF interleaves tp (VisF (inl1 EKillThread) k) (TauF interleaving')
+  | KillThread current_tid tp k new_current_tid new_current interleaving' :
+    delete current_tid tp !! new_current_tid = Some new_current →
+    interleaves new_current_tid (delete current_tid tp) interleaving' →
+    interleavesF interleaves current_tid (VisF (inl1 EKillThread) k) tp (TauF interleaving')
   (** The [EYield] event yields control to another thread placing the current
   thread in the threadpool to be resumed. Resumption costs a step. The
   interleaved [itree] takes a silent step in place of the [EYield]. *)
-  | Yield tp k new_current_tid new_current interleaving' :
+  | Yield current_tid tp k new_current_tid new_current interleaving' :
     tp !! new_current_tid = Some new_current →
-    interleaves (cons (Tau (k tt)) (delete new_current_tid tp)) new_current interleaving' →
-    interleavesF interleaves tp (VisF (inl1 EYield) k) (TauF interleaving')
-  (** The [EYield] event yields control to the current thread, thus effectively
-  just doing a silent step. *)
-  | YieldSelf tp k interleaving' :
-    interleaves tp (k tt) interleaving' →
-    interleavesF interleaves tp (VisF (inl1 EYield) k) (TauF interleaving')
+    interleaves new_current_tid (<[current_tid := k ()]>tp) interleaving' →
+    interleavesF interleaves current_tid (VisF (inl1 EYield) k) tp (TauF interleaving')
   (** The [EFork] event adds a new thread to the threadpool and continues
   executing the current thread. The interleaved [itree] takes a silent step in
   place of the [EFork]. *)
-  | Fork tp k interleaving' :
-    interleaves (cons (k NewThread) tp) (k CurrentThread) interleaving' →
-    interleavesF interleaves tp (VisF (inl1 EFork) k) (TauF interleaving').
+  | Fork current_tid tp k interleaving' :
+    interleaves (S current_tid) (k NewThread :: <[current_tid := k CurrentThread]>tp) interleaving' →
+    interleavesF interleaves current_tid (VisF (inl1 EFork) k) tp (TauF interleaving').
   Hint Constructors interleavesF : iris_itree.
   Definition interleaves_
-    (interleaves : list (itree (threadpoolE +' E) R) → itree (threadpoolE +' E) R → itree E R → Prop)
-    : list (itree (threadpoolE +' E) R)
-    → itree (threadpoolE +' E) R
+    (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop)
+    : nat
+    → list (itree (threadpoolE +' E) R)
     → itree E R
     → Prop :=
-    λ tp current interleaving, interleavesF interleaves tp (observe current) (observe interleaving).
+    λ tid tp interleaving, ∃ t, tp !! tid = Some t ∧ interleavesF interleaves tid (observe t) tp (observe interleaving).
 
-  Lemma interleavesF_mono interleaves interleaves' tp current interleaving :
+  Lemma interleavesF_mono interleaves interleaves' tid t tp interleaving :
     interleaves <3= interleaves' →
-    interleavesF interleaves tp current interleaving →
-    interleavesF interleaves' tp current interleaving.
+    interleavesF interleaves tid t tp interleaving →
+    interleavesF interleaves' tid t tp interleaving.
   Proof.
     intros Hleq HinterleavesF. destruct HinterleavesF; eauto with iris_itree.
   Qed.
   Lemma interleaves__mono :
     monotone3 interleaves_.
   Proof.
-    rewrite /monotone3 /interleaves_. intros. by eapply interleavesF_mono; last done.
+    rewrite /monotone3 /interleaves_. intros tid tp t r r' [t' [Hidx Hinter]] Hrel.
+    eexists. split; first done. by eapply interleavesF_mono; last done.
   Qed.
   Hint Resolve interleaves__mono : paco.
 
   (** The interleaving relation. (See comments above.) *)
-  Definition interleaves :
-    list (itree (threadpoolE +' E) R) → itree (threadpoolE +' E) R → itree E R → Prop :=
+  Definition interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop :=
     paco3 interleaves_ bot3.
+
+  Lemma interleaves_inversion_Ret tid tp r interleaving :
+    tp !! tid = Some (Ret r) →
+    interleaves tid tp interleaving →
+    interleaving ≅ Ret r.
+  Proof.
+    intros Hidx Hinter. punfold Hinter. destruct Hinter as [t [Hidx' Hinter]].
+    rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
+    inversion Hinter. subst. by simplify_obs.
+  Qed.
+  Lemma interleaves_inversion_Tau tid tp t interleaving :
+    tp !! tid = Some (Tau t) →
+    interleaves tid tp interleaving →
+    ∃ interleaving', interleaves tid (<[tid := t]>tp) interleaving' ∧ interleaving ≅ Tau interleaving'.
+  Proof.
+    intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
+    rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
+    inversion Hinter. subst. exists interleaving'. pclearbot. by simplify_obs.
+  Qed.
+  Lemma interleaves_inversion_Vis_EKillThread tid tp k interleaving :
+    tp !! tid = Some (Vis (inl1 EKillThread) k) →
+    interleaves tid tp interleaving →
+    ∃ interleaving' tid', interleaves tid' (delete tid tp) interleaving' ∧ interleaving ≅ Tau interleaving'.
+  Proof.
+    intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
+    rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
+    inversion Hinter. subst. pclearbot. simplify_K. exists interleaving', new_current_tid.
+    split; first done. by simplify_obs.
+  Qed.
+  Lemma interleaves_inversion_Vis_EYield tid tp k interleaving :
+    tp !! tid = Some (Vis (inl1 EYield) k) →
+    interleaves tid tp interleaving →
+    ∃ interleaving' tid', interleaves tid' (<[tid:=k ()]>tp) interleaving' ∧ interleaving ≅ Tau interleaving'.
+  Proof.
+    intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
+    rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
+    inversion Hinter. subst. pclearbot. simplify_K. exists interleaving', new_current_tid.
+    split; first done. by simplify_obs.
+  Qed.
+  Lemma interleaves_inversion_Vis_EFork tid tp k interleaving :
+    tp !! tid = Some (Vis (inl1 EFork) k) →
+    interleaves tid tp interleaving →
+    ∃ interleaving', interleaves (S tid) (k NewThread :: <[tid:=k CurrentThread]>tp) interleaving' ∧ interleaving ≅ Tau interleaving'.
+  Proof.
+    intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
+    rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
+    inversion Hinter. subst. pclearbot. simplify_K. exists interleaving'. by simplify_obs.
+  Qed.
+  Lemma interleaves_inversion_Vis tid tp A (e : E A) k interleaving :
+    tp !! tid = Some (Vis (inr1 e) k) →
+    interleaves tid tp interleaving →
+    ∃ k', (∀ a, interleaves tid (<[tid:=k a]>tp) (k' a)) ∧ interleaving ≅ Vis e k'.
+  Proof.
+    intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
+    rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
+    inversion Hinter. subst. pclearbot. simplify_K. exists k'. by simplify_obs.
+  Qed.
+
+  Lemma interleaves_lookup tid tp interleaving :
+    interleaves tid tp interleaving →
+    ∃ t, tp !! tid = Some t.
+  Proof.
+    intros Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]]. eauto.
+  Qed.
 End interleaving.
 
 (* To prove adequacy for the threadpool handler, we need an induction principle
@@ -207,7 +267,7 @@ Section wptp.
       ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (<[tid:=k ()]>tp) Φ
       )
     | EFork => λ k,
-      wptp (Some (tid + 1)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
+      wptp (Some (S tid)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
     end%I.
   (** The definition of the weakest precondition, prior to taking the fixpoint. *)
   (* TODO: Uncurry this, and don't use the -n> to iProp *)
@@ -401,7 +461,7 @@ Section wptp_induction.
     ( (∃ r, ⌜tp !! tid = Some (Ret r)⌝ ∧ (|={∅,⊤}=> Φ r))
     ∨ (∃ t', ⌜tp !! tid = Some (Tau t')⌝ ∧ |={∅}=> G (Some tid) (<[tid:=t']>tp) Φ)
     ∨ (∃ k, ⌜tp !! tid = Some (Vis (inl1 EFork) k)⌝ ∧
-      |={∅}=> G (Some (tid + 1)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
+      |={∅}=> G (Some (S tid)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
       )
     ∨ (∃ k, ⌜tp !! tid = Some (Vis (inl1 EYield) k)⌝ ∧ (
       (|={∅, ⊤}=> G None (<[tid:=k ()]>tp) Φ)
@@ -633,8 +693,13 @@ Section threadpool_adequacy.
     ∃ idx, permutes (Some idx) xs (Some idx') xs'.
   Admitted.
 
+  (* TODO: lookup_lt_is_Some already exists *)
   Lemma lookup_lt_Some' {A} (i : nat) (xs : list A) :
     i < length xs → ∃ x, xs !! i = Some x.
+  Admitted.
+
+  Lemma delete_insert {A} (i : nat) (x : A) (xs : list A) :
+    delete i (<[i:=x]> xs) = delete i xs.
   Admitted.
 
   Lemma wptp_reorder tp tid tp' tid' Φ :
@@ -656,7 +721,7 @@ Section threadpool_adequacy.
         by apply permutes_insert.
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iMod "Hwptp'". iModIntro. iApply "Hwptp'". iPureIntro.
-        eapply permutes_cons; eauto. rewrite -!plus_n_O. by apply permutes_insert.
+        eapply permutes_cons; eauto. by apply permutes_insert.
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iModIntro. iSplit.
         + iDestruct "Hwptp'" as "[>Hwptp' _]". iApply "Hwptp'".
@@ -699,8 +764,8 @@ Section threadpool_adequacy.
   Qed.
 
   Lemma wptp_reorder' tp tp' t tid Φ :
-    wptp (R:=R) H (Some (length tp + tid + 1)) (tp ++ t :: tp') Φ -∗
-    wptp (R:=R) H (Some (length tp + tid + 1)) (t :: tp ++ tp') Φ.
+    wptp (R:=R) H (Some (S (length tp + tid))) (tp ++ t :: tp') Φ -∗
+    wptp (R:=R) H (Some (S (length tp + tid))) (t :: tp ++ tp') Φ.
   Admitted.
 
   Lemma wptp_update tid tp Φ :
@@ -920,118 +985,66 @@ Section threadpool_adequacy.
       iMod "HG". iModIntro. by iApply "HG".
   Qed.
 
-  (** A technical version of adequacy, amenable to induction. See corollary below for a
-  more meaningful statement. *)
-  Theorem wpi_interleaving'
-    (tp : list (itree (threadpoolE +' E) R))
-    (current : itree (threadpoolE +' E) R)
-    (interleaving : itree E R)
-    (Φ : R → iProp Σ) :
-    interleaves tp current interleaving →
-    ([∗ list] thread ∈ tp, WPi thread @ threadpoolH ⊕ H; ⊤ {{ Φ }}) -∗
-    WPi current @ threadpoolH ⊕ H; ∅ {{ r, |={∅, ⊤}=> Φ r }} -∗
-    WPi interleaving @ H; ∅ {{ r, |={∅, ⊤}=> Φ r }}.
+  (* TODO: Why do I need to register this hint again here when I already did it
+  in another section? *)
+  Hint Resolve interleaves__mono : paco.
+
+  Theorem wpi_interleaving' :
+    ∀ tid' tp Φ,
+    wptp (R:=R) H tid' tp Φ -∗
+    ∀ tid interleaving,
+      ⌜tid' = Some tid⌝ →
+      ⌜interleaves tid tp interleaving⌝ →
+      WPi interleaving @ H; ∅ {{ r, |={∅, ⊤}=> Φ r }}.
   Proof.
-    iIntros "%Hinter Htp Hcurrent".
-    epose (G := (λ (current : leibnizO (itree (threadpoolE +' E) R)) (Φ_fupd : leibnizO R -d> iPropO Σ),
-      ∀ interleaving tp Φ,
-        ⌜interleaves tp current interleaving⌝ →
-        (∀ r, Φ_fupd r -∗ (|={∅, ⊤}=> Φ r)) -∗
-        ([∗ list] thread ∈ tp, WPi thread @ threadpoolH ⊕ H; ⊤ {{ Φ }}) -∗
-        WPi interleaving @ H; ∅ {{ r, |={∅, ⊤}=> Φ r }}
-    )%I).
-    iAssert (∀ t Φ, WPi t @ threadpoolH ⊕ H; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
-    { iApply ("Hgen" with "Hcurrent [] [] Htp"); eauto. }
-    iApply (wpi_iter' (H := threadpoolH ⊕ H) G); first solve_proper.
-    - clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t tp Φfupd Hinter) "HΦfupd Htp".
-      punfold Hinter. inversion Hinter. subst. apply ret_observe_eqit in H3 as <-.
-      rewrite -wpi_ret'. by iApply "HΦfupd".
-    - clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t tp Φfupd Hinter) "HΦfupd Htp".
-      punfold Hinter. inversion Hinter. subst. apply tau_observe_eqit in H2 as <-.
-      rewrite -wpi_tau. iApply wpi_update. iMod "HΦ". pclearbot. by iApply ("HΦ" with "[] HΦfupd").
-    - clear -Sequential0. iModIntro.
-      iIntros (Φfupd A e k) "HH". iIntros (interleaving tp Φ Hinter) "HΦfupd Htp".
-      punfold Hinter.
-      inversion Hinter; simplify_K; simplify_eq.
-      * apply vis_observe_eqit in H5 as <-. rewrite -!wpi_vis'.
-        simpl. iMod "HH". iModIntro. iApply is_seq.
-        iApply (ihandler_mono with "[HΦfupd Htp] [] [HH //]").
-        + iIntros (a) "Hwp". iApply wpi_update_post. pclearbot. iApply ("Hwp" with "[] HΦfupd Htp").
-          iPureIntro. apply H2.
-        + iModIntro. by iIntros (t) "H".
-      * simplify_K. apply tau_observe_eqit in H5 as <-. rewrite -wpi_tau. simpl.
-        shelve.
-      * simplify_K. apply tau_observe_eqit in H5 as <-. simpl. rewrite -wpi_tau.
-
-
-    iLöb as "IH" forall (tp current interleaving Hinter Φ). punfold Hinter.
-    - (* Return tp' r *)
-      apply ret_observe_eqit in Heqcurrent as <-. apply ret_observe_eqit in Heqinterleaving as <-.
-      by rewrite -!wpi_ret'.
-    - (* Step current' tp' interleaving' *)
-      apply tau_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
-      rewrite -!wpi_tau'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
-      iModIntro. iNext. iMod "Hfupd".
-      iEval (rewrite wpi_update_post). iApply ("IH" with "[] [Htp]").
-      * by destruct Hinter'.
-      * done.
-      * rewrite !wpi_update_post //.
-    - (* Emit tp' A e k k' *)
-      apply vis_observe_eqit in Heqcurrent as <-. apply vis_observe_eqit in Heqinterleaving as <-.
-      rewrite -!wpi_vis'. iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iMod "Hcurrent".
-      iApply is_seq. iApply (ihandler_mono with "[Hfupd Htp] [] [Hcurrent //]").
-      * pclearbot. iIntros (a) "Hwp". iNext. iMod "Hfupd".
-        iEval (rewrite wpi_update_post). iApply ("IH" with "[] Htp").
-        + by destruct (Hinter' a).
-        + rewrite wpi_update_post //.
-      * iModIntro. by iIntros (t) "Hwp".
-    - (* KillThread tp' k new_current_tid new_current interleaving' *)
-      apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
-      rewrite -wpi_vis'. simpl. iApply wpi_tau. iNext.
-      iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
-      pclearbot. iApply ("IH" with "[] [Htp']").
-      * done.
-      * done.
-      * iMod "Hcurrent". simpl. iMod "Hcurrent".
-        iDestruct (wpi_clear_mask with "Hcurrent'") as "Hcurrent'". by do 2 iMod "Hcurrent'".
-    - (* Yield tp' k new_current_tid new_current interleaving' *)
-      apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
-      iApply wpi_tau'. rewrite -wpi_vis'. simpl. do 2 iMod "Hcurrent".
-      rewrite wpi_update_post wpi_tau'.
-      iDestruct (big_sepL_delete' _ _ _ new_current_tid with "Htp") as "[Hcurrent' Htp']"; first done.
-      iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iModIntro. iNext.
-      iApply wpi_update_post. iApply ("IH" with "[] [Hcurrent Htp']").
-      * by destruct Hinter'.
-      * iApply big_sepL_cons.
-        iSplitL "Hcurrent".
-        + iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. by iMod "Hfupd".
-        + done.
-      * iDestruct (wpi_clear_mask with "Hcurrent'") as "Hcurrent'".
-        iApply wpi_update. by iMod "Hfupd".
-    - (* Fork tp' k interleaving' *)
-      apply vis_observe_eqit in Heqcurrent as <-. apply tau_observe_eqit in Heqinterleaving as <-.
-      iApply wpi_tau'. rewrite -wpi_vis'. simpl. iMod "Hcurrent" as "[Hcurrent' Hforked]".
-      iModIntro. iNext. iApply wpi_update_post. iApply ("IH" with "[] [Hforked Htp]").
-      * by destruct Hinter'.
-      * iApply big_sepL_cons. iFrame. iApply wpi_wand; last done. by iIntros (?) "?".
-      * rewrite wpi_update_post //.
+    iApply (wptp_iter _); first solve_proper.
+    iIntros "!>" (tid' tp Φ) "Hwptp". iIntros (tid interleaving -> Hinter).
+    iDestruct (wptp_inversion with "Hwptp") as "[(%r&%Hidx'&HΦ)|[(%tnext&%Hidx'&Hwptp')|[(%k&%Hidx'&Hwptp')|[(%k&%Hidx'&Hwptp')|[(%k&%Hidx'&Hwptp')|(%A&%e&%k&%Hidx'&HH)]]]]]".
+    - apply interleaves_inversion_Ret with (r := r) in Hinter; last done.
+      rewrite Hinter -wpi_ret' //.
+    - iApply wpi_update. iMod "Hwptp'". iModIntro.
+      apply interleaves_inversion_Tau with (t := tnext) in Hinter; last done.
+      destruct Hinter as [interleaving' [Hinter ->]]. rewrite -wpi_tau. by iApply "Hwptp'".
+    - iApply wpi_update. iMod "Hwptp'". iModIntro.
+      apply interleaves_inversion_Vis_EFork with (k := k) in Hinter; last done.
+      destruct Hinter as [interleaving' [Hinter ->]]. rewrite -wpi_tau. by iApply "Hwptp'".
+    - iApply wpi_update. iDestruct "Hwptp'" as "[_ Hwptp']".
+      apply interleaves_inversion_Vis_EYield with (k := k) in Hinter; last done.
+      destruct Hinter as [interleaving' [tid' [Hinter ->]]]. rewrite -wpi_tau.
+      assert (Hidx'' := interleaves_lookup _ _ _ Hinter).
+      destruct Hidx'' as [t Hidx''].
+      apply lookup_lt_Some in Hidx''. rewrite insert_length in Hidx''.
+      apply lookup_lt_Some' in Hidx'' as [t' Hidx''].
+      by iApply ("Hwptp'" $! tid').
+    - iApply wpi_update. iDestruct "Hwptp'" as "[_ Hwptp']".
+      apply interleaves_inversion_Vis_EKillThread with (k := k) in Hinter; last done.
+      destruct Hinter as [interleaving' [tid' [Hinter ->]]]. rewrite -wpi_tau.
+      assert (Hidx'' := interleaves_lookup _ _ _ Hinter).
+      destruct Hidx'' as [t Hidx''].
+      by iApply ("Hwptp'" $! tid').
+    - iApply wpi_update. iMod "HH". iModIntro.
+      apply interleaves_inversion_Vis with (k := k) (e := e) in Hinter; last done.
+      destruct Hinter as [interleaving' [Hinter' ->]]. iApply wpi_vis.
+      iModIntro. iApply ihandler_mono; last done.
+      * iIntros (a) "Hwp". iApply wpi_update_post. by iApply "Hwp".
+      * iIntros "!>" (t). by iIntros "?".
   Qed.
+
   (** Adequacy for [threadpoolH ⊕ H]. This says that if you can prove the
   weakest precondition an [itree (threadpoolE +' E) R] then you get weakest
   preconditions for every interleaving [itree E R]. *)
-  Corollary wpi_interleaving
+  Corollary wpi_interleaving `{!Sequential H}
     (concurrent : itree (threadpoolE +' E) R)
     (interleaving : itree E R)
     (Φ : R → iProp Σ) :
-    interleaves [] concurrent interleaving →
+    interleaves 0 [concurrent] interleaving →
     WPi concurrent @ threadpoolH ⊕ H; ⊤ {{ Φ }} -∗
     WPi interleaving @ H; ⊤ {{ Φ }}.
   Proof.
     iIntros "%Hinter Hwp". iApply wpi_clear_mask.
-    iMod (fupd_mask_subseteq ∅) as "Hfupd"; first done. iModIntro.
-    iApply (wpi_interleaving' []).
-    - done.
-    - by iApply big_sepL_nil.
-    - iDestruct (wpi_clear_mask with "Hwp") as "Hwp". iApply wpi_update. by iMod "Hfupd".
+    iEval (rewrite -wpi_clear_mask) in "Hwp". iMod "Hwp".
+    iDestruct (wp_wptp with "Hwp") as "Hwptp".
+    iDestruct (wpi_interleaving' with "Hwptp") as "Hwp".
+    by iApply "Hwp".
   Qed.
-End interleaving.
+End threadpool_adequacy.
