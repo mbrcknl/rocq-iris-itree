@@ -37,7 +37,7 @@ Section handler.
   Global Instance demonicH_Sequential :
     Sequential demonicH.
   Proof.
-    iIntros (A e Φ s s') "HH". by destruct e.
+    iIntros (A e Φ s) "HH". by destruct e.
   Qed.
 
   Program Definition angelicH : iHandler Σ angelicE :=
@@ -53,7 +53,7 @@ Section handler.
   Global Instance angelicH_Sequential :
     Sequential angelicH.
   Proof.
-    iIntros (A e Φ s s') "HH". by destruct e.
+    iIntros (A e Φ s) "HH". by destruct e.
   Qed.
 End handler.
 
@@ -162,11 +162,10 @@ Section demonic_adequacy.
     WPi t' @ H; ∅ {{ Φ }}.
   Proof.
     iIntros (Hinstant) "Hwp".
-    unshelve epose
-      (G := λne (t : leibnizO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I);
-      try apply _; try solve_proper.
-    iApply (wpi_iter' (H := demonicH ⊕ H) G with "[] [] [] Hwp [//]"); clear.
-    - intros n t1 t2 Ht Φ1 Φ2 HΦ. by repeat f_equiv.
+    (* TODO: A lot of these explicitly spelled out [G]'s can be replaced by
+    appropriate [iRevert]s. See [threadpool.v]. *)
+    epose (G := λ (t : leibnizO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I).
+    iApply (wpi_iter' (H := demonicH ⊕ H) G with "[] [] [] Hwp [//]"); first solve_proper; clear.
     - iModIntro. iIntros (Φ r) "HΦ". iIntros (t Hinst). punfold Hinst. inversion Hinst.
       simplify_obs. rewrite -wpi_ret' //.
     - iModIntro. iIntros (Φ t) "HG". iIntros (t' Hinst). rewrite -wpi_update. iMod "HG".
@@ -195,18 +194,84 @@ Section demonic_adequacy.
   Qed.
 End demonic_adequacy.
 
-(*
-Lemma fupd_soundness `{!invGpreS Σ} E1 E2 (P : iProp Σ) `{!Plain P} :
-  (∀ `{Hinv: !invGS_gen hlc Σ}, ⊢ |={E1,E2}=> P) → ⊢ P.
+Class ExistentialCommute {Σ E} (H : iHandler Σ E) :=
+  exists_commute : ∀ A X e (Φ : A → X → iProp Σ) (s : A → X → iProp Σ),
+    H A e (λ a, ∃ x, Φ a x) (λ a, ∃ x, s a x) -∗
+    ∃ f, H A e (λ a, Φ a (f a)) (λ a, s a (f a)).
+Global Instance sumH_ExistentialCommute {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2)
+  `{!ExistentialCommute H1} `{!ExistentialCommute H2} :
+  ExistentialCommute (H1 ⊕ H2).
 Proof.
-  intros Hfupd. apply fupd_soundness_no_lc with (E1 := E1) (E2 := E2) (m := 0).
-  - done.
-  - iIntros (Hinv) "Hcred". iApply Hfupd.
+  iIntros (A X e Φ s) "HH". destruct e.
+  - by iApply ExistentialCommute0.
+  - by iApply ExistentialCommute1.
 Qed.
 
-(* TODO: Move above demonic_adequacy to signify correct order of application. *)
+Section angelic_adequacy.
+  Context {E : Type → Type} `{H : iHandler Σ E} {R : Type} `{!invGS_gen hlc Σ}.
+
+  Variant angelic_instantiatesF
+    (angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop)
+    : itree' (angelicE +' E) R → itree' E R → Prop :=
+  | AInstantiate A (a : A) k t :
+    angelic_instantiates (k a) t →
+    angelic_instantiatesF angelic_instantiates (VisF (inl1 (EAngelic A)) k) (TauF t)
+  | AReturns r :
+    angelic_instantiatesF angelic_instantiates (RetF r) (RetF r)
+  | ASteps t_next t_next' :
+    angelic_instantiates t_next t_next' →
+    angelic_instantiatesF angelic_instantiates (TauF t_next) (TauF t_next')
+  | AEmits A (e : E A) k k' :
+    (∀ a, angelic_instantiates (k a) (k' a)) →
+    angelic_instantiatesF angelic_instantiates (VisF (inr1 e) k) (VisF e k').
+  Hint Constructors angelic_instantiatesF : iris_itree.
+  Definition angelic_instantiates_
+    (angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop)
+    : itree (angelicE +' E) R → itree E R → Prop :=
+    λ t t', angelic_instantiatesF angelic_instantiates (observe t) (observe t').
+
+  Lemma angelic_instantiatesF_mono angelic_instantiates angelic_instantiates' t t' :
+    angelic_instantiates <2= angelic_instantiates' →
+    angelic_instantiatesF angelic_instantiates t t' →
+    angelic_instantiatesF angelic_instantiates' t t'.
+  Proof.
+   intros Hleq HinterleavesF. destruct HinterleavesF; eauto with iris_itree.
+  Qed.
+
+  Lemma angelic_instantiates__mono :
+    monotone2 angelic_instantiates_.
+  Proof.
+    rewrite /monotone3 /angelic_instantiates_. intros ??????. by eapply angelic_instantiatesF_mono.
+  Qed.
+  Hint Resolve angelic_instantiates__mono : paco.
+
+  Definition angelic_instantiates : itree (angelicE +' E) R → itree E R → Prop :=
+    paco2 angelic_instantiates_ bot2.
+
+  Theorem angelicH_adequate (t : itree (angelicE +' E) R) Φ :
+    WPi t @ angelicH ⊕ H; ∅ {{ Φ }} -∗
+    (∃ t', ⌜angelic_instantiates t t'⌝ ∧ WPi t' @ H; ∅ {{ Φ }}).
+  Proof.
+    iRevert (t Φ). iApply (wpi_iter' (H := angelicH ⊕ H) _); first solve_proper.
+    - iIntros "!>" (Φ r) "HΦ". iExists (Ret r). iSplit.
+      * iPureIntro. pfold. constructor.
+      * by iApply wpi_ret'.
+    - iIntros "!>" (Φ t) "Hwp". do 2 iMod "Hwp". iModIntro.
+      iDestruct "Hwp" as "[%t' [%Hinstant Hwp]]". iExists (Tau t'). iSplit.
+      * iPureIntro. pfold. constructor. punfold Hinstant.
+      * rewrite wpi_tau //.
+    - iIntros "!>" (Φ A e k) "HH". iMod "HH".
+      destruct e as [e|e].
+      * destruct e. simpl. iDestruct "HH" as "[%choice >[%t' [%Hinstant Hwp]]]". iModIntro.
+        iExists (Tau t'). iSplit.
+        + iPureIntro. pfold. econstructor. by left.
+        + rewrite wpi_tau //.
+      * iModIntro. destruct e. simpl.
+        iExists (Vis (inr1 (EDemoni)))
+End angelic_adequacy.
+
 Section demonic_angelic_adequacy.
-  Context {R : Type}.
+  Context {R : Type} `{!invGS_gen hlc Σ}.
 
   Variant angel_winsF
     (angel_wins : itree (angelicE +' demonicE) R → (R → Prop) → Prop)
@@ -246,7 +311,38 @@ Section demonic_angelic_adequacy.
   Definition angel_wins : itree (angelicE +' demonicE) R → (R → Prop) → Prop :=
     paco2 angel_wins_ bot2.
 
-  Theorem demonicH_angelicH_adequate' `{!invGpreS Σ} (t : itree (angelicE +' demonicE) R) (Q : R → Prop) :
+  Theorem demonicH_angelicH_adequate' (t : itree (angelicE +' demonicE) R) (Q : R → Prop) :
+    WPi t @ angelicH ⊕ demonicH; ∅ {{ r, ⌜Q r⌝ }} -∗
+    |={∅}=> ⌜angel_wins t Q⌝.
+  Proof.
+    epose (G := λ (t : itree (angelicE +' demonicE) R) (Φ : leibnizO R -d> iPropO Σ),
+      (|={∅}=> ∀ Q, (∀ r, Φ r  -∗ (⌜Q r⌝)) -∗ ⌜angel_wins t Q⌝)%I).
+    iAssert (∀ t Φ, WPi t @ angelicH ⊕ demonicH; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
+    { iIntros "Hwp". iApply ("Hgen" with "Hwp"). eauto. }
+    iApply (wpi_iter' (H := angelicH ⊕ demonicH) G); first solve_proper; clear.
+    - iIntros "!>" (Φ r) "HΦ". iMod "HΦ". iIntros "!>" (Q) "Hwand".
+      iDestruct ("Hwand" with "HΦ") as "%HQ". iPureIntro. pfold. by constructor.
+    - iIntros "!>" (Φ t) "HG". do 2 iMod "HG". iIntros "!>" (Q) "Hwand".
+      iDestruct ("HG" with "Hwand") as "%Hrel". iPureIntro. pfold. constructor. by left.
+    - iIntros "!>" (Φ A e k) "Hrel". iMod "Hrel".
+      destruct e as [e|e].
+      * destruct e. simpl. iDestruct "Hrel" as "[%choice >Hrel]". iModIntro.
+        iIntros (Q) "Hwand". iDestruct ("Hrel" with "Hwand") as "%Hrel".
+        iPureIntro. pfold. econstructor. by left.
+      * destruct e. iModIntro.
+        iIntros (Q) "Hwand". simpl. iApply bi.pure_mono. { intros Hgoal. pfold. constructor. done. }
+        iApply pure_forall_2. iIntros (a). iDestruct ("Hrel" $! a with "Hwand") as "Hrel".
+        iApply bupd_plain. Search (|={_}=> _)%I (|==> _)%I.
+        iMod "Hrel".
+        Search (|==> _)%I.
+        Search (⌜ _ ⌝)%I.
+        Search  (⌜ ∀ _, _ ⌝)%I.
+        iApply DemonicChoice.
+        iPureIntro. pfold. econstructor. by left.
+      * iModIntro. destruct e. simpl.
+        iExists (Vis (inr1 (EDemoni)))
+
+
     (∀ `{Hinv : invGS_gen hlc Σ}, sat WPi t @ angelicH ⊕ demonicH; ⊤ {{ v, ⌜ Q v ⌝ }}) →
     angel_wins t Q.
   Proof.
@@ -263,4 +359,3 @@ Section demonic_angelic_adequacy.
       * done.
       * apply _.
 End angelic_adequacy.
-*)
