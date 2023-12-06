@@ -698,7 +698,6 @@ Section threadpool_adequacy.
     intros Hidx. rewrite lookup_app_r; last lia.
     by replace (length xs + n - length xs) with n by lia.
   Qed.
-
   Lemma delete_app_r A (xs ys : list A) n :
     delete (length xs + n) (xs ++ ys) = xs ++ delete n ys.
   Proof.
@@ -706,18 +705,15 @@ Section threadpool_adequacy.
     replace (S (length xs + n)) with (length xs + (1 + n)) by lia.
     rewrite take_add_app // drop_add_app // -app_assoc //.
   Qed.
-
   Lemma delete_app_l A (xs ys : list A) n :
     n < length xs →
     delete n (xs ++ ys) = delete n xs ++ ys.
-  Admitted.
-  (* TODO: lookup_lt_is_Some already exists *)
-  Lemma lookup_lt_Some' {A} (i : nat) (xs : list A) :
-    i < length xs → ∃ x, xs !! i = Some x.
-  Admitted.
-  Lemma delete_insert {A} (i : nat) (x : A) (xs : list A) :
-    delete i (<[i:=x]> xs) = delete i xs.
-  Admitted.
+  Proof.
+    intros Hlt.
+    rewrite !delete_take_drop take_app_le; last by lia.
+    rewrite drop_app_le; last by lia.
+    rewrite app_assoc //.
+  Qed.
 
   Definition enumerate {A} (xs : list A) : list (nat * A) :=
     zip (seq 0 (length xs)) xs.
@@ -809,7 +805,7 @@ Section threadpool_adequacy.
           destruct Hperm as [tid_ Hperm].
           destruct (permutes_Some_Some _ _ _ _ Hperm) as [Hidxbound Hcoincide].
           iDestruct "Hwptp'" as "[_ Hwptp']".
-          rewrite insert_length in Hidxbound. apply lookup_lt_Some' in Hidxbound as [t' Hidx_].
+          rewrite insert_length in Hidxbound. apply lookup_lt_is_Some_2 in Hidxbound as [t' Hidx_].
           by iApply "Hwptp'".
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iModIntro. iSplit.
@@ -1106,7 +1102,7 @@ Section threadpool_adequacy.
       assert (Hidx'' := interleaves_lookup _ _ _ Hinter).
       destruct Hidx'' as [t Hidx''].
       apply lookup_lt_Some in Hidx''. rewrite insert_length in Hidx''.
-      apply lookup_lt_Some' in Hidx'' as [t' Hidx''].
+      apply lookup_lt_is_Some_2 in Hidx'' as [t' Hidx''].
       by iApply ("Hwptp'" $! tid').
     - iApply wpi_update. iDestruct "Hwptp'" as "[_ Hwptp']".
       apply interleaves_inversion_Vis_EKillThread with (k := k) in Hinter; last done.
