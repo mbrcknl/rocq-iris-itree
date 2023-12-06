@@ -564,24 +564,97 @@ Proof.
   rewrite -delete_take_drop. f_equiv. rewrite take_drop_middle //.
 Qed.
 
-Section wpi_ind.
-  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen hlc Σ}.
-  Context {H : iHandler Σ E}.
+Section wpi_masked_ind.
+  Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
 
-  Lemma wpi_ind_masked {R} (G : bool -> itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  (** The definition of the weakest precondition, prior to taking the fixpoint. *)
+  (* TODO: Uncurry this, and don't use the -n> to iProp *)
+  Definition wpiF_masked (H : iHandler Σ E)
+    (wpi : leibnizO bool -> leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ) :
+           leibnizO bool -> leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ :=
+    (λ masked t Φ, if masked then |={⊤, ∅}=> wpi false t Φ else wpiF H (wpi false) t Φ)%I.
+  Definition wpiF_masked' (H : iHandler Σ E)
+    (wpi : leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ) :
+           leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ :=
+    λ pair, let (rest, Φ) := pair in let (masked, t) := rest in wpiF_masked H (curry3 wpi) masked t Φ.
+
+  Global Instance wpiF_masked_ne n H :
+    Proper ((dist n ==> dist n ==> dist n ==> dist n) ==> dist n ==> dist n ==> dist n ==> dist n) (wpiF_masked H).
+  Proof.
+    intros wp1 wp2 Hwp m1 m2 <- t1 t2 <- Φ1 Φ2 HΦ. rewrite /wpiF_masked.
+    do 2 f_equiv; eauto. by apply Hwp.
+  Qed.
+
+  Global Instance wpiF_masked_ne' n H :
+    Proper ((dist n ==> dist n) ==> dist n ==> dist n) (wpiF_masked' H).
+  Proof.
+    intros wp1 wp2 Hwp [[m1 t1] Φ1] [[m2 t2] Φ2] [[Hm Ht] HΦ]. rewrite /wpiF'.
+    apply wpiF_masked_ne; eauto. intros. by f_equiv.
+  Qed.
+
+  Lemma wpiF_masked_mono H wp1 wp2:
+    ⊢ □ (∀ masked t Φ, wp1 masked t Φ -∗ wp2 masked t Φ)
+    → ∀ masked t Φ, wpiF_masked H wp1 masked t Φ -∗ wpiF_masked H wp2 masked t Φ.
+  Proof.
+    iIntros "#Hwand" (masked t Φ) "Hwp". rewrite /wpiF_masked. destruct masked.
+    - by iApply "Hwand".
+    - iApply wpiF_mono; eauto.
+  Qed.
+  Lemma wpiF_masked_mono' H wp1 wp2:
+    ⊢ □ (∀ masked t Φ, wp1 (masked, t, Φ) -∗ wp2 (masked, t, Φ))
+    → ∀ masked t Φ, wpiF_masked' H wp1 (masked, t, Φ) -∗ wpiF_masked' H wp2 (masked, t, Φ).
+  Proof.
+    rewrite /wpiF_masked'. iApply wpiF_masked_mono.
+  Qed.
+
+  Global Instance wpi_masked_pre_monotone H :
+    BiMonoPred (λ wp_itree, wpiF_masked' H wp_itree).
+  Proof.
+    constructor.
+    - iIntros (Π Ψ ??) "#Hinner". iIntros ([[??]?]) "Hsim" => /=. iApply wpiF_masked_mono'; [|done].
+      iIntros "!>" (???) "HΠ". by iApply ("Hinner" $! (_, _)).
+    - intros wpi HneΦ n [t Φ] [t' Φ'] [-> HΦ]. f_equiv. simpl. by f_equiv.
+  Qed.
+
+  (* TODO: Rename [wpi] to [wpi_no_mask] or something along those lines. *)
+  Definition wpi_masked (H : iHandler Σ E) (masked : bool) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
+    bi_least_fixpoint (wpiF_masked' H) (masked, t, Φ).
+
+  Lemma wpi_without_mask H (t : itree E R) Φ :
+    WPi t @ H; ∅ {{ Φ }} -∗ wpi_masked H false t Φ.
+  Proof.
+    iRevert (t Φ). iApply wpi_iter. { intros t n Φ1 Φ2 HΦ. by apply least_fixpoint_ne. }
+    iIntros "!>" (t Φ) "Hwp". iEval (rewrite /wpi_masked least_fixpoint_unfold).
+    iApply wpiF_mono; last done. clear. by iIntros "!>" (t Φ) "Hwp".
+  Qed.
+
+  Lemma wpi_iter_masked' (H : iHandler Σ E) (G : bool -> itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
     (∀ b t, NonExpansive (G b t)) →
-    (□ ∀ t Φ, wpiF H (λ t' Ψ, G false t' Ψ ∧ WPi t' @ H; ∅ {{ Ψ }}) t Φ -∗ G false t Φ) -∗
-    (□ ∀ t Φ, (|={⊤, ∅}=> (G false t Φ ∧ WPi t @ H; ∅ {{ Φ }})) -∗ G true t Φ) -∗
-    ∀ t Φ, WPi t @ H; ∅ {{ Φ }} -∗ G false t Φ.
-  Admitted.
+    (□ ∀ t Φ, wpiF H (G false) t Φ -∗ G false t Φ) -∗
+    (□ ∀ t Φ, (|={⊤, ∅}=> G false t Φ) -∗ G true t Φ) -∗
+    ∀ masked t Φ, wpi_masked H masked t Φ -∗ G masked t Φ.
+  Proof.
+    iIntros (Hne) "#Hnomask #Hmask". rewrite /wpi_masked.
+    iAssert (∀ (x : leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ)), bi_least_fixpoint (wpiF_masked' H) x -∗ G (fst (fst x)) (snd (fst x)) (snd x))%I as "Hgen"; last first.
+    { iIntros (masked t Φ) "Hwp". by iApply ("Hgen" $! (masked, t, Φ)). }
+    unshelve iApply (least_fixpoint_iter (wpiF_masked' H) (λ x, G (fst (fst x)) (snd (fst x)) (snd x))).
+    { iIntros (n [[masked1 t1] Φ1] [[masked2 t2] Φ2] [[<- <-] HΦ]). by f_equiv. }
+    iModIntro. iIntros ([[[|] t] Φ]) "Hwp"; simpl.
+    - by iApply "Hmask".
+    - by iApply "Hnomask".
+  Qed.
 
-  Lemma wpi_iter_masked {R} (G : bool -> itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_iter_masked (H : iHandler Σ E) (G : bool -> itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
     (∀ b t, NonExpansive (G b t)) →
     (□ ∀ t Φ, wpiF H (G false) t Φ -∗ G false t Φ) -∗
     (□ ∀ t Φ, (|={⊤, ∅}=> G false t Φ) -∗ G true t Φ) -∗
     ∀ t Φ, WPi t @ H; ∅ {{ Φ }} -∗ G false t Φ.
-  Admitted.
-End wpi_ind.
+  Proof.
+    iIntros (Hne) "#Hnomask #Hmask". iIntros (t Φ) "Hwp".
+    iApply (wpi_iter_masked' H G with "Hnomask Hmask").
+    rewrite wpi_without_mask //.
+  Qed.
+End wpi_masked_ind.
 
 Section threadpool_adequacy.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
@@ -916,11 +989,30 @@ Section threadpool_adequacy.
         iDestruct (wptp_wptpIH' with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
   Qed.
 
+  Lemma wptp_merge_l tp tp' i Φ :
+    wptp H (Some i) tp Φ -∗
+    wptp H None tp' Φ -∗
+    wptp (R:=R) H (Some i) (tp ++ tp') Φ.
+  Proof.
+    iIntros "Hwptp Hwptp'". iDestruct (wptp_wptpIH with "Hwptp") as "[_ Hwptp]".
+    by iApply "Hwptp".
+  Qed.
+  Lemma wptp_merge_r tp tp' i Φ :
+    wptp H None tp Φ -∗
+    wptp H (Some i) tp' Φ -∗
+    wptp (R:=R) H (Some (length tp + i)) (tp ++ tp') Φ.
+  Proof.
+    iIntros "Hwptp Hwptp'". iDestruct (wptp_wptpIH with "Hwptp") as "[_ [_ Hwptp]]".
+    by iApply "Hwptp".
+  Qed.
+
   Lemma wptp_2_threads t t' Φ :
     wptp H None [t] Φ -∗
     wptp H (Some 0) [t'] Φ -∗
     wptp (R:=R) H (Some 1) [t; t'] Φ.
-  Admitted.
+  Proof.
+    iIntros "Hwptp Hwptp'". iDestruct (wptp_merge_r with "Hwptp Hwptp'") as "$".
+  Qed.
 
   Lemma wp_wptp {Hseq : Sequential H} (t : itree (threadpoolE +' E) R) Φ :
     WPi t @ (threadpoolH ⊕ H); ∅ {{ v, |={∅, ⊤}=> Φ v }} -∗

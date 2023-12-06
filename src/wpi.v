@@ -21,6 +21,7 @@ Section wp_itree.
 
   (** The definition of the weakest precondition, prior to taking the fixpoint. *)
   (* TODO: Uncurry this, and don't use the -n> to iProp *)
+  (* TODO: Use unicode notation for [->] across this and other files. *)
   Definition wpiF (H : iHandler Σ E)
     (wpi : leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ) :
            leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ :=
@@ -71,7 +72,7 @@ Section wp_itree.
   Proof.
     intros wp1 wp2 Hwp [t1 Φ1] [t2 Φ2] [Ht HΦ]. rewrite /wpiF'.
     apply wpiF_ne.
-    - clear t1 t2 Ht Φ1 Φ2 HΦ. intros t1 t2 Ht Φ1 Φ2 Hi. by f_equiv.
+    - intros. by f_equiv.
     - done.
     - done.
   Qed.
