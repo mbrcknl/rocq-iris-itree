@@ -276,7 +276,7 @@ Section wptp.
             leibnizO (option nat) -> leibnizO (list (itree (threadpoolE +' E) R)) -> (R -d> iPropO Σ) -> iPropO Σ :=
     λ tid tp Φ, (
       match tid with
-      | None => (|={∅}=> wptp None tp Φ) ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={⊤, ∅}=> wptp (Some tid') tp Φ
+      | None => ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={⊤, ∅}=> wptp (Some tid') tp Φ
       | Some tid => ∃ t, ⌜tp !! tid = Some t⌝ ∧ |={∅}=>
         match observe t with
         | RetF r  => |={∅, ⊤}=> Φ r
@@ -310,7 +310,6 @@ Section wptp.
         + apply handler_ne.
           ++ intros ?. by apply Hwptp.
           ++ by intros.
-    - repeat f_equiv. by apply Hwptp.
     - repeat f_equiv. by apply Hwptp.
   Qed.
   Global Instance wptpF'_ne n H :
@@ -346,10 +345,7 @@ Section wptp.
           ++ iApply ihandler_mono; last done.
              +++ iIntros (a) "Hwptp". by iApply "Hwand".
              +++ eauto.
-    - iSplit.
-      * iApply "Hwand". iDestruct "Hwptp" as "[$ _]".
-      * iIntros (tid' t' Hidx). iDestruct "Hwptp" as "[_ Hwptp]".
-        iSpecialize ("Hwptp" $! _ _ Hidx). by iApply "Hwand".
+    - iIntros (tid' t' Hidx). iSpecialize ("Hwptp" $! _ _ Hidx). by iApply "Hwand".
   Qed.
   Lemma wptpF_mono' H wp1 wp2:
     ⊢ □ (∀ tid tp Φ, wp1 (tid, tp, Φ) -∗ wp2 (tid, tp, Φ))
@@ -752,15 +748,12 @@ Section threadpool_adequacy.
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iApply ihandler_mono; last done; last eauto.
         iIntros (a) "Hwptp". iApply "Hwptp". iPureIntro. by apply permutes_insert.
-    - apply permutes_None in Hperm as [-> Hperm]. iSplit.
-      * iDestruct "Hwptp" as "[Hwptp _]". by iApply "Hwptp".
-      * iDestruct "Hwptp" as "[_ Hwptp]". iIntros (tid' t' Hidx'). 
-        apply permutes_mapping with (idx' := tid') in Hperm; first last.
-        { by eapply lookup_lt_Some. }
-        destruct Hperm as [tid Hperm].
-        destruct (permutes_Some_Some _ _ _ _ Hperm) as [Hidxbound Hcoincide].
-        rewrite Hcoincide in Hidx'.
-        by iApply "Hwptp".
+    - apply permutes_None in Hperm as [-> Hperm]. iIntros (tid' t' Hidx').
+      apply permutes_mapping with (idx' := tid') in Hperm; first last. { by eapply lookup_lt_Some. }
+      destruct Hperm as [tid Hperm].
+      destruct (permutes_Some_Some _ _ _ _ Hperm) as [Hidxbound Hcoincide].
+      rewrite Hcoincide in Hidx'.
+      by iApply "Hwptp".
   Qed.
 
   Lemma wptp_reorder' tp tp' t tid Φ :
@@ -779,6 +772,14 @@ Section threadpool_adequacy.
     iIntros "Hwptp". rewrite wptp_unfold /=. iApply wptpF_mono; last done. iModIntro. clear.
     iIntros (t tp Φ) "Hwptp". iDestruct "Hwptp" as "[$ _]".
   Qed.
+
+  Lemma wptp_None tp Φ :
+    (∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={⊤, ∅}=> wptp H (Some tid') tp Φ) -∗
+    wptp (R:=R) H None tp Φ.
+  (* TODO: Prove this. Maybe there is a simpler proof, but I was thinking of
+  taking the existing induction template and tweaking it. Maybe the tweaked
+  induction template can even use the existing one aside from the None case. *)
+  Admitted.
 
   Lemma wptp_wptpIH' tid' tp' Φ :
     wptp H tid' tp' Φ -∗ wptp_IH_right tid' tp' Φ.
@@ -802,33 +803,34 @@ Section threadpool_adequacy.
         iApply "Hwptp''". { iPureIntro. lia. } done.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         iModIntro. iSplit.
-        + iDestruct "Hwptp" as "[>[_ [Hwptp _]] _]". rewrite insert_app_r. iApply "Hwptp".
-          by iDestruct "Hwptp''" as "[>[$ _] _]".
-        + clear. iIntros (new_tid t' Hidx').
-          apply lookup_app_Some in Hidx' as [Hidx'|[Hidx'bound Hidx']].
+        + iDestruct "Hwptp''" as "[>[_ [Hwptp'' _]] _]". rewrite insert_app_r.
+          by iApply "Hwptp''".
+        + clear. iIntros (new_tid t Hidx).
+          apply lookup_app_Some in Hidx as [Hidx|[Hidx'bound Hidx']].
           ++ iDestruct "Hwptp''" as "[>[Hwptp'' _] _]".
-             iDestruct "Hwptp" as "[_ Hwptp]". rewrite insert_app_r. by iApply "Hwptp".
+             rewrite insert_app_r. by iApply "Hwptp".
           ++ iDestruct "Hwptp''" as "[_ Hwptp'']". rewrite insert_app_r.
              iApply "Hwptp''"; eauto. iPureIntro. lia.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         iModIntro. iSplit.
-        + iDestruct "Hwptp" as "[>[_ [Hwptp _]] _]".
-          rewrite delete_app_r. iApply "Hwptp".
-          by iDestruct "Hwptp''" as "[>[$ _] _]".
-        + clear. iIntros (new_tid t' Hidx').
-          rewrite delete_app_r in Hidx'. rewrite delete_app_r.
-          apply lookup_app_Some in Hidx' as [Hidx'|[Hidx'bound Hidx']].
-          ++ iDestruct "Hwptp''" as "[>[Hwptp'' _] _]".
-             iDestruct "Hwptp" as "[_ Hwptp]".
-             by iApply "Hwptp".
+        + iDestruct "Hwptp''" as "[>[_ [Hwptp'' _]] _]". rewrite delete_app_r.
+          by iApply "Hwptp''".
+        + clear. iIntros (new_tid t Hidx).
+          rewrite delete_app_r in Hidx. rewrite delete_app_r.
+          apply lookup_app_Some in Hidx as [Hidx|[Hidx'bound Hidx']].
+          ++ iDestruct "Hwptp''" as "[>[Hwptp'' _] _]". by iApply "Hwptp".
           ++ iDestruct "Hwptp''" as "[_ Hwptp'']". iApply "Hwptp''"; eauto. iPureIntro. lia.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         simpl. iMod "HH". iModIntro. iApply (ihandler_mono with "[Hwptp]"); last done.
         + iIntros (a) "[_ Hwptp']". rewrite insert_app_r. by iApply "Hwptp'".
         + eauto.
     - iSplit.
-      { iIntros (tp) "Hwptp". iDestruct "Hwptp" as "[[_ [Hwptp _]] _]". iApply wptp_update.
-        iMod "Hwptp". iApply "Hwptp". iModIntro. by iApply wptp_IH_right_wptp.
+      { iIntros (tp) "Hwptp". iApply wptp_None. iIntros (tid' t' Hidx). rewrite /wptpF.
+        apply lookup_app_Some in Hidx as [Hidx|[Hidx'bound Hidx']].
+        - iMod ("Hwptp" $! _ _ Hidx) as "Hwptp". iApply "Hwptp". iApply wptp_None.
+          iModIntro. clear. iIntros (tid t Hidx). by iMod ("Hwptp'" $! _ _ Hidx) as "[$ _]".
+        - iMod ("Hwptp'" $! _ _ Hidx') as "Hwptp'". iApply "Hwptp'". { iPureIntro. lia. }
+          iModIntro. clear. iIntros (tid t Hidx). by iSpecialize ("Hwptp" $! _ _ Hidx).
       }
       iIntros (tid tp) "Hwptp".
       iEval (rewrite wptp_unfold /=).
@@ -839,60 +841,56 @@ Section threadpool_adequacy.
         simpl. iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']". iModIntro.
         rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
         iApply "Hwptp''". iEval (rewrite wptp_unfold /=).
-        clear. iSplit. { by iDestruct "Hwptp'" as "[>[$ _] _]". }
-        iIntros (tid' t' Hidx). iDestruct "Hwptp'" as "[_ Hwptp']".
-        iSpecialize ("Hwptp'" $! _ _ Hidx). iMod "Hwptp'". iModIntro. iDestruct "Hwptp'" as "[$ _]".
+        clear. iIntros (tid' t' Hidx'). iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'". iModIntro.
+        iDestruct "Hwptp'" as "[$ _]".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
         iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']". iApply "Hwptp''".
         iEval (rewrite wptp_unfold /=).
-        clear. iModIntro. iSplit. { by iDestruct "Hwptp'" as "[>[$ _] _]". }
-        iIntros (tid' t' Hidx). iDestruct "Hwptp'" as "[_ Hwptp']".
-        iSpecialize ("Hwptp'" $! _ _ Hidx). iMod "Hwptp'". iModIntro. iDestruct "Hwptp'" as "[$ _]".
+        clear. iModIntro. iIntros (tid' t' Hidx'). iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
+        iModIntro. iDestruct "Hwptp'" as "[$ _]".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. iModIntro. iSplit.
         + iDestruct "Hwptp''" as "[>[_ [Hwptp'' _]] _]".
           rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
-          iApply "Hwptp''". iDestruct "Hwptp'" as "[[Hwptp' _] _]". iModIntro.
-          by iApply wptp_update.
+          iApply "Hwptp''". iModIntro. iApply wptp_None. clear. iIntros (tid' t' Hidx').
+          iSpecialize ("Hwptp'" $! _ _ Hidx').
+          iMod "Hwptp'". iModIntro. iDestruct "Hwptp'" as "[$ _]".
         + rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
-          clear. iIntros (new_tid t' Hidx').
-          apply lookup_app_Some in Hidx' as [Hidx'|[Hidx'bound Hidx']].
+          clear. iIntros (new_tid t Hidx).
+          apply lookup_app_Some in Hidx as [Hidx|[Hidx'bound Hidx']].
           ++ iDestruct "Hwptp''" as "[_ Hwptp'']".
              iApply "Hwptp''"; first done.
-             iEval (rewrite wptp_unfold /=).
-             iSplit. { by iDestruct "Hwptp'" as "[>[$ _] _]". }
-             clear. iIntros (tid' t' Hidx). iDestruct "Hwptp'" as "[_ Hwptp']".
-             iSpecialize ("Hwptp'" $! _ _ Hidx). iMod "Hwptp'". iModIntro.
+             iEval (rewrite wptp_unfold /=). clear. iIntros (tid' t' Hidx').
+             iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'". iModIntro.
              iDestruct "Hwptp'" as "[$ _]".
           ++ iDestruct "Hwptp''" as "[>[_ [_ Hwptp'']] _]". iApply "Hwptp''".
              { iPureIntro. rewrite insert_length.
                apply (Nat.le_add_sub (length tp) new_tid Hidx'bound). }
-             iDestruct "Hwptp'" as "[_ Hwptp']". iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
+             iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
              iModIntro. by iDestruct "Hwptp'" as "[Hwptp' _]".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. iModIntro. rewrite delete_app_l; last first. { by eapply lookup_lt_Some. }
         iSplit.
-        + iDestruct "Hwptp''" as "[>[_ [Hwptp'' _]] _]". iApply "Hwptp''".
-          iDestruct "Hwptp'" as "[[Hwptp' _] _]". iModIntro. by iApply wptp_update.
-        + clear. iIntros (new_tid t' Hidx').
-          apply lookup_app_Some in Hidx' as [Hidx'|[Hidx'bound Hidx']].
+        + iDestruct "Hwptp''" as "[>[_ [Hwptp'' _]] _]".
+          iApply "Hwptp''". iModIntro. iApply wptp_None. clear. iIntros (tid' t' Hidx').
+          iSpecialize ("Hwptp'" $! _ _ Hidx').
+          iMod "Hwptp'". iModIntro. iDestruct "Hwptp'" as "[$ _]".
+        + clear. iIntros (new_tid t Hidx).
+          apply lookup_app_Some in Hidx as [Hidx|[Hidx'bound Hidx']].
           ++ iDestruct "Hwptp''" as "[_ Hwptp'']". iApply "Hwptp''"; first done.
-             iEval (rewrite wptp_unfold /=).
-             iSplit. { by iDestruct "Hwptp'" as "[>[$ _] _]". }
-             clear. iIntros (tid' t' Hidx). iDestruct "Hwptp'" as "[_ Hwptp']".
+             iEval (rewrite wptp_unfold /=). clear. iIntros (tid' t' Hidx).
              iSpecialize ("Hwptp'" $! _ _ Hidx). iMod "Hwptp'". iModIntro.
              iDestruct "Hwptp'" as "[$ _]".
           ++ iDestruct "Hwptp''" as "[>[_ [_ Hwptp'']] _]". iApply "Hwptp''".
              { iPureIntro. apply (Nat.le_add_sub _ new_tid Hidx'bound). }
-             iDestruct "Hwptp'" as "[_ Hwptp']". iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
+             iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
              iModIntro. by iDestruct "Hwptp'" as "[Hwptp' _]".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. iMod "HH". iModIntro. iApply (ihandler_mono with "[Hwptp']"); last done.
         + iIntros (a) "[_ Hwptp]". rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
           iApply "Hwptp". iEval (rewrite wptp_unfold /=). clear.
-          iSplit. { by iDestruct "Hwptp'" as "[>[$ _] _]". } iDestruct "Hwptp'" as "[_ Hwptp']".
-          iIntros (tid' t' Hidx). iSpecialize ("Hwptp'" $! _ _ Hidx).
+          iIntros (tid' t' Hidx'). iSpecialize ("Hwptp'" $! _ _ Hidx').
           iMod "Hwptp'". iModIntro. iDestruct "Hwptp'" as "[$ _]".
         + eauto.
   Qed.
@@ -922,14 +920,6 @@ Section threadpool_adequacy.
     wptp H None [t] Φ -∗
     wptp H (Some 0) [t'] Φ -∗
     wptp (R:=R) H (Some 1) [t; t'] Φ.
-  Admitted.
-
-  Lemma wptp_None tp Φ :
-    (∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={⊤, ∅}=> wptp H (Some tid') tp Φ) -∗
-    wptp (R:=R) H None tp Φ.
-  (* TODO: Prove this. Maybe there is a simpler proof, but I was thinking of
-  taking the existing induction template and tweaking it. Maybe the tweaked
-  induction template can even use the existing one aside from the None case. *)
   Admitted.
 
   Lemma wp_wptp {Hseq : Sequential H} (t : itree (threadpoolE +' E) R) Φ :
