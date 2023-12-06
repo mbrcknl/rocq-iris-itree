@@ -711,6 +711,13 @@ Section threadpool_adequacy.
     n < length xs →
     delete n (xs ++ ys) = delete n xs ++ ys.
   Admitted.
+  (* TODO: lookup_lt_is_Some already exists *)
+  Lemma lookup_lt_Some' {A} (i : nat) (xs : list A) :
+    i < length xs → ∃ x, xs !! i = Some x.
+  Admitted.
+  Lemma delete_insert {A} (i : nat) (x : A) (xs : list A) :
+    delete i (<[i:=x]> xs) = delete i xs.
+  Admitted.
 
   Definition enumerate {A} (xs : list A) : list (nat * A) :=
     zip (seq 0 (length xs)) xs.
@@ -761,14 +768,10 @@ Section threadpool_adequacy.
     idx' < length xs' →
     ∃ idx, permutes (Some idx) xs (Some idx') xs'.
   Admitted.
-
-  (* TODO: lookup_lt_is_Some already exists *)
-  Lemma lookup_lt_Some' {A} (i : nat) (xs : list A) :
-    i < length xs → ∃ x, xs !! i = Some x.
-  Admitted.
-
-  Lemma delete_insert {A} (i : nat) (x : A) (xs : list A) :
-    delete i (<[i:=x]> xs) = delete i xs.
+  Lemma permutes_to_front {A} (xs : list A) (idx: nat) (xs' : list A) (x : A) :
+    idx > length xs →
+    idx < length xs + length xs' + 1 →
+    permutes (Some idx) (xs ++ x :: xs') (Some idx) (x :: xs ++ xs').
   Admitted.
 
   Lemma wptp_reorder tp tid tp' tid' Φ :
@@ -829,15 +832,23 @@ Section threadpool_adequacy.
       by iApply "Hwptp".
   Qed.
 
+  Lemma wptp_bound tid tp Φ :
+    wptp (R:=R) H (Some tid) tp Φ -∗
+    ⌜tid < length tp⌝.
+  Proof.
+    iIntros "Hwptp". rewrite wptp_unfold. iDestruct "Hwptp" as "[%t [%Hidx _]]".
+    by apply lookup_lt_Some in Hidx.
+  Qed.
+
   Lemma wptp_reorder' tp tp' t tid Φ :
     wptp (R:=R) H (Some (S (length tp + tid))) (tp ++ t :: tp') Φ -∗
     wptp (R:=R) H (Some (S (length tp + tid))) (t :: tp ++ tp') Φ.
-  Admitted.
-
-  Lemma wptp_update tid tp Φ :
-    (|={∅}=> wptp (R:=R) H tid tp Φ) -∗
-    wptp (R:=R) H tid tp Φ.
-  Admitted.
+  Proof.
+    iIntros "Hwptp". iDestruct (wptp_bound with "Hwptp") as "%Hbound".
+    iApply wptp_reorder; last done. apply permutes_to_front.
+    - lia.
+    - rewrite app_length in Hbound. simpl in Hbound. lia.
+  Qed.
 
   Lemma wptp_IH_right_wptp tid tp Φ :
     wptpF H wptp_IH_right tid tp Φ -∗ wptp (R:=R) H tid tp Φ.
@@ -849,10 +860,9 @@ Section threadpool_adequacy.
   Lemma wptp_None tp Φ :
     (∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={⊤, ∅}=> wptp H (Some tid') tp Φ) -∗
     wptp (R:=R) H None tp Φ.
-  (* TODO: Prove this. Maybe there is a simpler proof, but I was thinking of
-  taking the existing induction template and tweaking it. Maybe the tweaked
-  induction template can even use the existing one aside from the None case. *)
-  Admitted.
+  Proof.
+    iIntros "Hwptp". by iEval (rewrite wptp_unfold).
+  Qed.
 
   Lemma wptp_wptpIH' tid' tp' Φ :
     wptp H tid' tp' Φ -∗ wptp_IH_right tid' tp' Φ.
@@ -1030,7 +1040,7 @@ Section threadpool_adequacy.
       )%I).
     iAssert (∀ t Φ, WPi t @ threadpoolH ⊕ H; ∅ {{ Φ }} -∗ G false t Φ)%I as "Hgen"; last first.
     { iIntros "Hwp". iApply ("Hgen" with "Hwp"). eauto. }
-    iApply (wpi_iter_masked (H := threadpoolH ⊕ H) G); first solve_proper.
+    iApply (wpi_iter_masked (threadpoolH ⊕ H) G); first solve_proper.
     - iModIntro. clear -Hseq. iIntros (t Φ_fupd) "Hwp". iIntros (Φ) "Hwand".
       destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k ->]]]]].
       * rewrite wptp_unfold /wpiF /=.
