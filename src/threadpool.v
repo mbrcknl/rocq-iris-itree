@@ -691,21 +691,21 @@ Section threadpool_adequacy.
     clear; intros tid1 tid2 <- tp1 tp2 <- Φ1 Φ2 HΦ; repeat f_equiv.
   Qed.
 
-  Lemma lookup_app_r_Some A (xs ys : list A) y n :
+  Lemma lookup_app_r_Some {A} (xs ys : list A) y n :
     ys !! n = Some y →
     (xs ++ ys) !! (length xs + n) = Some y.
   Proof.
     intros Hidx. rewrite lookup_app_r; last lia.
     by replace (length xs + n - length xs) with n by lia.
   Qed.
-  Lemma delete_app_r A (xs ys : list A) n :
+  Lemma delete_app_r {A} (xs ys : list A) n :
     delete (length xs + n) (xs ++ ys) = xs ++ delete n ys.
   Proof.
     rewrite !delete_take_drop.
     replace (S (length xs + n)) with (length xs + (1 + n)) by lia.
     rewrite take_add_app // drop_add_app // -app_assoc //.
   Qed.
-  Lemma delete_app_l A (xs ys : list A) n :
+  Lemma delete_app_l {A} (xs ys : list A) n :
     n < length xs →
     delete n (xs ++ ys) = delete n xs ++ ys.
   Proof.
@@ -714,16 +714,59 @@ Section threadpool_adequacy.
     rewrite drop_app_le; last by lia.
     rewrite app_assoc //.
   Qed.
+  Lemma app_lookup {A} (idx : nat) (xs ys : list A) :
+    ((xs ++ ys) !! idx = None) ∨
+    (∃ x, (xs ++ ys) !! idx = xs !! idx ∧ xs !! idx = Some x) ∨
+    (∃ y, (xs ++ ys) !! idx = ys !! (idx - length xs) ∧ ys !! (idx - length xs) = Some y).
+  Admitted.
+  Lemma zip_length {A B} (xs : list A) (ys : list B) :
+    length (zip xs ys) = min (length xs) (length ys).
+  Admitted.
 
   Definition enumerate {A} (xs : list A) : list (nat * A) :=
     zip (seq 0 (length xs)) xs.
+  Lemma enumerate_lookup {A} (xs : list A) (idx idx' : nat) (x : A) :
+    enumerate xs !! idx = Some (idx', x) → idx = idx' ∧ xs !! idx = Some x.
+  Admitted.
+  Lemma enumerate_lookup_fst {A} (xs : list A) (idx: nat) :
+    idx < length xs →
+    fst <$> enumerate xs !! idx = Some idx.
+  Admitted.
+  Lemma enumerate_length {A} (xs : list A) :
+    length (enumerate xs) = length xs.
+  Admitted.
+  Lemma enumerate_insert {A} (xs : list A) (i : nat) (x : A) :
+    enumerate (<[i:=x]>xs) = <[i:=(i, x)]>(enumerate xs).
+  Admitted.
+  Lemma enumerate_bound {A} (xs : list A) (i : nat) (x : A) :
+    (i, x) ∈ enumerate xs → i < length xs.
+  Admitted.
+  Lemma enumerate_insert_fmap {A} (xs : list A) (enumerated_xs' : list (nat * A)) (idx idx' : nat) (x' : A) :
+    enumerate xs ≡ₚ enumerated_xs' →
+    fst <$> enumerated_xs' !! idx' = Some idx →
+    <[idx':=(idx, x')]>enumerated_xs' = (λ i, if fst i =? idx then (idx, x') else i) <$> enumerated_xs'.
+  Admitted.
+  Definition remove {A} (idx : nat) (xs : list (nat * A)) : list (nat * A) :=
+    mbind (λ i, if fst i =? idx then [] else if fst i <? idx then [(fst i, snd i)] else [(fst i - 1, snd i)]) xs.
+  Lemma enumerate_delete {A} (xs : list A) (enumerated_xs' : list (nat * A)) (idx idx' : nat) :
+    fst <$> enumerated_xs' !! idx' = Some idx →
+    enumerate xs ≡ₚ enumerated_xs' →
+    enumerate (delete idx xs) ≡ₚ remove idx enumerated_xs' ∧ snd <$> remove idx enumerated_xs' = delete idx' (snd <$> enumerated_xs').
+  Admitted.
+  Lemma enumerate_recover {A} (xs : list A) :
+    snd <$> enumerate xs = xs.
+  Admitted.
+  Lemma enumerate_app {A} (xs xs' : list A) :
+    enumerate (xs ++ xs') = enumerate xs ++ zip (seq (length xs) (length xs')) xs'.
+  Admitted.
   Definition permutes {A} (idx : option nat) (xs : list A) (idx' : option nat) (xs' : list A) : Prop :=
     ∃ enumerated_xs',
     enumerate xs ≡ₚ enumerated_xs' ∧
+    snd <$> enumerated_xs' = xs' ∧
     match idx with
     | Some idx =>
         match idx' with
-        | Some idx' => snd <$> enumerated_xs' = xs' ∧ fst <$> (enumerated_xs' !! idx') = Some idx
+        | Some idx' => fst <$> (enumerated_xs' !! idx') = Some idx
         | None => False
         end
     | None => idx' = None
@@ -732,43 +775,129 @@ Section threadpool_adequacy.
     permutes (Some idx) xs idx' xs' →
     idx < length xs ∧
     ∃ idx'unwrap, idx' = Some idx'unwrap ∧ xs' !! idx'unwrap = xs !! idx.
-  Admitted.
+  Proof.
+    intros [enumerated_xs' [Hperm [Hsnd Hfst]]]. destruct idx' as [idx'|]; last done.
+    destruct (enumerated_xs' !! idx') as [[idx'' x]|] eqn:Heidx; last discriminate.
+    simpl in Hfst. injection Hfst as Hfst. destruct Hfst.
+    apply elem_of_list_lookup_2 in Heidx as Hin.
+    rewrite -Hperm in Hin. apply elem_of_list_lookup in Hin as [idx Heidx'].
+    assert (Heidx'' := Heidx'). apply enumerate_lookup in Heidx' as [<- Hidx].
+    split.
+    - rewrite -enumerate_length. by eapply lookup_lt_Some.
+    - eexists. split; first done. rewrite Hidx -Hsnd list_lookup_fmap Heidx //.
+  Qed.
   Lemma permutes_Some_Some {A} (idx : nat) (xs : list A) (idx' : nat) (xs' : list A) :
     permutes (Some idx) xs (Some idx') xs' →
     idx < length xs ∧ xs' !! idx' = xs !! idx.
-  Admitted.
+  Proof.
+    intros Hperm. by apply permutes_Some in Hperm as [Hbound [idx'unwrap [[=<-] Heq]]].
+  Qed.
   Lemma permutes_None {A} (xs : list A) (idx' : option nat) (xs' : list A) :
     permutes None xs idx' xs' →
     idx' = None ∧ permutes None xs None xs'.
-  Admitted.
+  Proof.
+    intros Hperm. assert (Hperm' := Hperm). by destruct Hperm as [enumerated_xs' [Hperm [Hsnd ->]]].
+  Qed.
   Lemma permutes_insert {A} (idx : nat) (xs : list A) (idx' : nat) (xs' : list A) (x : A) :
     permutes (Some idx) xs (Some idx') xs' →
     permutes (Some idx) (<[idx:=x]>xs) (Some idx') (<[idx':=x]>xs').
-  Admitted.
+  Proof.
+    intros [enumerated_xs' [Hperm [Hsnd Hfst]]]. exists (<[idx':=(idx, x)]>enumerated_xs').
+    split; last split.
+    - rewrite enumerate_insert.
+      rewrite (enumerate_insert_fmap xs (enumerate xs) idx idx x).
+      2:done.
+      2:{ rewrite enumerate_lookup_fst; first done.
+          destruct (enumerated_xs' !! idx') as [[idx'' x']|] eqn:Heq; last done.
+          simpl in Hsnd. injection Hfst as ->.
+          apply elem_of_list_lookup_2 in Heq. rewrite -Hperm in Heq.
+          by apply enumerate_bound in Heq.
+      }
+      rewrite (enumerate_insert_fmap xs enumerated_xs' idx idx' x) //.
+      by f_equiv.
+    - rewrite list_fmap_insert Hsnd //.
+    - rewrite list_lookup_insert; first done. destruct (enumerated_xs' !! idx') eqn:Heq; last done.
+      by apply lookup_lt_Some in Heq.
+  Qed.
+  Lemma permutes_delete {A} (idx : nat) (xs : list A) (idx': nat) (xs' : list A) :
+    permutes (Some idx) xs (Some idx') xs' →
+    permutes None (delete idx xs) None (delete idx' xs').
+  Proof.
+    intros [enumerated_xs' [Hperm [Hsnd Hfst]]]. eexists (remove idx enumerated_xs').
+    assert (Hperm' := Hperm).
+    apply enumerate_delete with (idx := idx) (idx' := idx') in Hperm' as [-> Hsnd']; last done.
+    split; last split.
+    - destruct (enumerated_xs' !! idx') as [[idx'' x']|] eqn:Heq; last done.
+      simpl in Hsnd. injection Hfst as ->.
+      apply elem_of_list_lookup_2 in Heq. rewrite -Hperm in Heq.
+      by apply enumerate_bound in Heq.
+    - rewrite Hsnd' Hsnd //.
+    - done.
+  Qed.
   Lemma permutes_cons {A} (idx sidx : nat) (xs : list A) (idx' sidx' : nat) (xs' : list A) (x : A) :
     sidx = S idx →
     sidx' = S idx' →
     permutes (Some idx) xs (Some idx') xs' →
     permutes (Some sidx) (x::xs) (Some sidx') (x::xs').
-  Admitted.
+  Proof.
+    intros -> -> [enumerated_xs' [Hperm [Hfst Hsnd]]].
+    exists ((0, x) :: ((λ (i : nat * A), let (n, x) := i in (S n, x)) <$> enumerated_xs')).
+    split; last split.
+    - rewrite /enumerate. simpl. f_equiv. rewrite -Hperm. rewrite /enumerate.
+      remember 0 as n. generalize n. clear. induction xs as [|x xs' IH].
+      * done.
+      * intros n'. simpl. f_equiv. apply IH.
+    - rewrite fmap_cons -list_fmap_compose /= -Hfst. f_equiv. apply Forall_fmap_ext_1.
+      apply List.Forall_forall. by intros [a b] ?.
+    - simpl. rewrite list_lookup_fmap -option_fmap_compose.
+      destruct (enumerated_xs' !! idx') as [[a b]|]; last done. simpl. by injection Hsnd as ->.
+  Qed.
   Lemma permutes_Some_None {A} (idx : nat) (xs : list A) (idx': nat) (xs' : list A) :
     permutes (Some idx) xs (Some idx') xs' →
     permutes None xs None xs'.
-  Admitted.
-  Lemma permutes_delete {A} (idx : nat) (xs : list A) (idx': nat) (xs' : list A) :
-    permutes (Some idx) xs (Some idx') xs' →
-    permutes None (delete idx xs) None (delete idx' xs').
-  Admitted.
+  Proof.
+    intros [enumerated_xs' [Hperm [Hfst Hsnd]]]. by exists enumerated_xs'.
+  Qed.
   Lemma permutes_mapping {A} (xs : list A) (idx': nat) (xs' : list A) :
     permutes None xs None xs' →
     idx' < length xs' →
     ∃ idx, permutes (Some idx) xs (Some idx') xs'.
-  Admitted.
+  Proof.
+    intros [enumerated_xs' [Hperm [Hsnd _]]] Hbound.
+    rewrite -Hsnd fmap_length in Hbound. apply lookup_lt_is_Some_2 in Hbound as [[idx x] Hidx'].
+    exists idx. exists enumerated_xs'. split; first done. split.
+    - done.
+    - rewrite Hidx' //.
+  Qed.
   Lemma permutes_to_front {A} (xs : list A) (idx: nat) (xs' : list A) (x : A) :
     idx > length xs →
     idx < length xs + length xs' + 1 →
     permutes (Some idx) (xs ++ x :: xs') (Some idx) (x :: xs ++ xs').
-  Admitted.
+  Proof.
+    intros Hgt Hlt.
+    exists (((length xs, x) :: enumerate xs) ++ zip (seq (S (length xs)) (length xs')) xs').
+    split; last split.
+    - etransitivity; last rewrite Permutation_cons_append -app_assoc //.
+      rewrite enumerate_app //.
+    - rewrite fmap_app /enumerate fmap_cons !snd_zip.
+      * done.
+      * by rewrite seq_length.
+      * by rewrite seq_length.
+    - destruct idx as [|idx].
+      * lia.
+      * simpl. destruct (app_lookup idx (enumerate xs) (zip (seq (S (length xs)) (length xs')) xs')) as [Hidx|[[[idx' x'] [-> Hidx]]|[[idx' x'] [-> Hidx]]]].
+        + rewrite Hidx.
+          assert (Hlen : length (enumerate xs ++ zip (seq (S (length xs)) (length xs')) xs') = length xs + length xs').
+          { rewrite app_length enumerate_length. f_equiv. rewrite zip_length.
+            apply Nat.min_r. rewrite seq_length //.
+          }
+          apply lookup_ge_None_1 in Hidx. lia.
+        + apply lookup_lt_Some in Hidx. rewrite enumerate_length in Hidx. lia.
+        + rewrite -list_lookup_fmap fst_zip.
+          ++ rewrite enumerate_length. replace (S idx) with ((S (length xs)) + (idx - length xs)) by lia.
+             apply lookup_seq_lt. lia.
+          ++ rewrite seq_length //.
+  Qed.
 
   Lemma wptp_reorder tp tid tp' tid' Φ :
     permutes tid tp tid' tp' →
