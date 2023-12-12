@@ -718,47 +718,238 @@ Section threadpool_adequacy.
     ((xs ++ ys) !! idx = None) ∨
     (∃ x, (xs ++ ys) !! idx = xs !! idx ∧ xs !! idx = Some x) ∨
     (∃ y, (xs ++ ys) !! idx = ys !! (idx - length xs) ∧ ys !! (idx - length xs) = Some y).
-  Admitted.
+  Proof.
+    destruct (idx <? length xs) eqn:Heq.
+    - apply Nat.ltb_lt in Heq as Hbound. right. left.
+      assert (Hbound' := Hbound).
+      apply lookup_lt_is_Some_2 in Hbound as [x Hidx].
+      eexists. by split; first by apply lookup_app_l.
+    - apply Nat.ltb_nlt in Heq as Hbound.
+      destruct (idx <? length xs + length ys) eqn:Heq'.
+      * apply Nat.ltb_lt in Heq' as Hbound'. right. right.
+        rewrite -app_length in Hbound'.
+        apply lookup_lt_is_Some_2 in Hbound' as [x Hidx].
+        eexists. split.
+        + apply lookup_app_r. lia.
+        + rewrite -lookup_app_r; first done. lia.
+      * apply Nat.ltb_nlt in Heq' as Hbound'. left. apply lookup_ge_None_2. rewrite app_length. lia.
+  Qed.
   Lemma zip_length {A B} (xs : list A) (ys : list B) :
     length (zip xs ys) = min (length xs) (length ys).
-  Admitted.
+  Proof. apply zip_with_length. Qed.
+  Lemma zip_lookup {A B} (xs : list A) (a : A) (ys : list B) (b : B) (idx : nat) :
+    (zip xs ys) !! idx = Some (a, b) →
+    xs !! idx = Some a ∧ ys !! idx = Some b.
+  Proof.
+    rewrite lookup_zip_with. intros Hidx.
+    destruct (xs !! idx) as [x|]; last done.
+    destruct (ys !! idx) as [y|]; last done.
+    by injection Hidx as -> ->.
+  Qed.
+  Lemma zip_insert {A B} (xs : list A) (a : A) (ys : list B) (b : B) (idx : nat) :
+    <[idx:=(a, b)]>(zip xs ys) = zip (<[idx:=a]>xs) (<[idx:=b]>ys).
+  Proof. apply insert_zip_with. Qed.
+  Lemma seq_0_insert (idx len : nat) :
+    <[idx := idx]>(seq 0 len) = seq 0 len.
+  Proof.
+    apply list_eq. intros i.
+    destruct (i <? len) eqn:Hineq.
+    - apply Nat.ltb_lt in Hineq.
+      destruct (i =? idx) eqn:Heq.
+      * apply Nat.eqb_eq in Heq as ->.
+        rewrite list_lookup_insert; last rewrite seq_length //. rewrite lookup_seq_lt //.
+      * apply Nat.eqb_neq in Heq. rewrite list_lookup_insert_ne //.
+    - apply Nat.ltb_ge in Hineq.
+      rewrite !lookup_ge_None_2 //. { rewrite seq_length //. }
+      rewrite insert_length seq_length //.
+  Qed.
+  Lemma nin_cons {A} (xs : list A) (x x' : A) :
+    x' ∉ x :: xs → x' ∉ xs.
+  Proof.
+    intros Hnin. intros Hin. unshelve eassert (Hnin := Hnin _). { by constructor. } done.
+  Qed.
 
+  Definition enumerate_from {A} (n : nat) (xs : list A) : list (nat * A) :=
+    zip (seq n (length xs)) xs.
   Definition enumerate {A} (xs : list A) : list (nat * A) :=
-    zip (seq 0 (length xs)) xs.
+    enumerate_from 0 xs.
   Lemma enumerate_lookup {A} (xs : list A) (idx idx' : nat) (x : A) :
     enumerate xs !! idx = Some (idx', x) → idx = idx' ∧ xs !! idx = Some x.
-  Admitted.
+  Proof.
+    intros Hidx. rewrite /enumerate/enumerate_from in Hidx. apply zip_lookup in Hidx as [Hseq Hidx].
+    by apply lookup_seq in Hseq as [Heq Hbound].
+  Qed.
+  Lemma enumerate_from_cons {A} (n : nat) (x : A) (xs : list A) :
+    enumerate_from n (x :: xs) = (n, x) :: enumerate_from (S n) xs.
+  Proof. done. Qed.
+  Lemma enumerate_from_fst {A} (n : nat) (xs : list A) :
+    fst <$> enumerate_from n xs = seq n (length xs).
+  Proof.
+    rewrite /enumerate_from fst_zip // seq_length //.
+  Qed.
   Lemma enumerate_lookup_fst {A} (xs : list A) (idx: nat) :
     idx < length xs →
     fst <$> enumerate xs !! idx = Some idx.
-  Admitted.
+  Proof.
+    intros Hbound. rewrite -list_lookup_fmap /enumerate enumerate_from_fst lookup_seq //.
+  Qed.
   Lemma enumerate_length {A} (xs : list A) :
     length (enumerate xs) = length xs.
-  Admitted.
+  Proof.
+    rewrite /enumerate zip_length seq_length. apply Nat.min_id.
+  Qed.
   Lemma enumerate_insert {A} (xs : list A) (i : nat) (x : A) :
     enumerate (<[i:=x]>xs) = <[i:=(i, x)]>(enumerate xs).
-  Admitted.
+  Proof.
+    rewrite zip_insert seq_0_insert /enumerate/enumerate_from insert_length //.
+  Qed.
   Lemma enumerate_bound {A} (xs : list A) (i : nat) (x : A) :
     (i, x) ∈ enumerate xs → i < length xs.
-  Admitted.
+  Proof.
+    by intros [idx [<- Hbound%lookup_lt_Some]%enumerate_lookup]%elem_of_list_lookup_1.
+  Qed.
+  Lemma enumerate_from_NoDup {A} (n : nat) (xs : list A) :
+    NoDup (fst <$> enumerate_from n xs).
+  Proof.
+    induction xs.
+    - constructor.
+    - rewrite enumerate_from_fst. apply NoDup_seq.
+  Qed.
+  Lemma enumerate_NoDup {A} (xs : list A) :
+    NoDup (fst <$> enumerate xs).
+  Proof.
+    rewrite enumerate_from_fst. apply NoDup_seq.
+  Qed.
+  Lemma NoDup_insert_fmap {A} (xs : list (nat * A)) (idx idx' : nat) (x' : A) :
+    NoDup (fst <$> xs) →
+    fst <$> xs !! idx' = Some idx →
+    <[idx':=(idx, x')]>xs = (λ i, if fst i =? idx then (idx, x') else i) <$> xs.
+  Proof.
+    intros Hdup. remember (fst <$> xs) as xs1. revert xs Heqxs1 idx idx'. induction Hdup as [|n ns Hin Hdup IH].
+    - intros xs Heq idx idx' Hidx. rewrite -list_lookup_fmap -Heq in Hidx. discriminate.
+    - intros xs Heq idx idx' Hidx. destruct xs as [|x xs]; first discriminate.
+      rewrite fmap_cons in Heq. rewrite fmap_cons.
+      destruct idx' as [|idx'].
+      * etransitivity. { by simpl. }
+        injection Hidx as <-. rewrite Nat.eqb_refl. f_equiv.
+        injection Heq as <- ->. clear -Hin. induction xs as [|x xs IH].
+        + done.
+        + rewrite fmap_cons. rewrite fmap_cons in Hin. destruct (x.1 =? n) as [|] eqn:Heq.
+          ++ apply Nat.eqb_eq in Heq as <-.
+             by unshelve eassert (Hin := Hin _); first constructor.
+          ++ f_equiv. apply IH. intros Hin'.
+             by unshelve eassert (Hin := Hin _); first by constructor.
+      * etransitivity. { by simpl. }
+        injection Heq as <- ->. simpl in Hidx.
+        destruct (n =? idx) as [|] eqn:Heq.
+        + apply Nat.eqb_eq in Heq as <-.
+          rewrite -list_lookup_fmap in Hidx.
+          apply elem_of_list_lookup_2 in Hidx. contradiction.
+        + f_equiv. by apply IH.
+  Qed.
   Lemma enumerate_insert_fmap {A} (xs : list A) (enumerated_xs' : list (nat * A)) (idx idx' : nat) (x' : A) :
     enumerate xs ≡ₚ enumerated_xs' →
     fst <$> enumerated_xs' !! idx' = Some idx →
     <[idx':=(idx, x')]>enumerated_xs' = (λ i, if fst i =? idx then (idx, x') else i) <$> enumerated_xs'.
-  Admitted.
+  Proof.
+    intros Hperm Hidx. apply NoDup_insert_fmap; last done. rewrite -Hperm. apply enumerate_NoDup.
+  Qed.
   Definition remove {A} (idx : nat) (xs : list (nat * A)) : list (nat * A) :=
     mbind (λ i, if fst i =? idx then [] else if fst i <? idx then [(fst i, snd i)] else [(fst i - 1, snd i)]) xs.
+  Lemma NoDup_remove_id {A} (xs : list (nat * A)) (idx : nat) :
+    NoDup (fst <$> xs) →
+    idx ∉ fst <$> xs →
+    snd <$> remove idx xs = snd <$> xs.
+  Proof.
+    intros Hdup Hnin. induction xs as [|x xs IH]; first done.
+    rewrite fmap_cons /=. destruct (x.1 =? idx) eqn:Heq.
+    - apply Nat.eqb_eq in Heq as <-. rewrite fmap_cons in Hnin.
+      unshelve eassert (Hnin := Hnin _). { constructor. } done.
+    - apply Nat.eqb_neq in Heq. rewrite fmap_app. apply nin_cons in Hnin.
+      inversion Hdup. destruct (x.1 <? idx); simpl; f_equiv; by apply IH.
+  Qed.
+  Lemma NoDup_delete_remove {A} (xs : list (nat * A)) (idx idx' : nat) :
+    NoDup (fst <$> xs) →
+    fst <$> xs !! idx' = Some idx →
+    snd <$> remove idx xs = delete idx' (snd <$> xs).
+  Proof.
+    intros Hdup Hidx. revert idx idx' Hidx. induction xs as [|x xs IH]; first done.
+    intros idx idx' Hidx. destruct idx' as [|idx'].
+    - rewrite -list_lookup_fmap in Hidx. injection Hidx as <-. simpl.
+      rewrite Nat.eqb_refl app_nil_l. inversion Hdup. by apply NoDup_remove_id.
+    - rewrite fmap_cons. etransitivity; last simpl; first done.
+      simpl. destruct (x.1 =? idx) eqn:Heq.
+      * apply Nat.eqb_eq in Heq as <-.
+        rewrite -list_lookup_fmap fmap_cons lookup_cons in Hidx.
+        apply elem_of_list_lookup_2 in Hidx. inversion Hdup. contradiction.
+      * apply Nat.eqb_neq in Heq. rewrite fmap_app.
+        inversion Hdup. destruct (x.1 <? idx); simpl; f_equiv; by apply IH.
+  Qed.
+  Lemma NoDup_remove_length {A} (xs : list (nat * A)) (idx idx' : nat) :
+    NoDup (fst <$> xs) →
+    fst <$> xs !! idx' = Some idx →
+    length (remove idx xs) = length xs - 1.
+  Proof.
+    intros Hdup Hidx. rewrite -(fmap_length snd) (NoDup_delete_remove _ _ idx') // length_delete.
+    - rewrite fmap_length //.
+    - rewrite list_lookup_fmap. by destruct (xs !! idx').
+  Qed.
+  Instance remove_proper {A} idx :
+    Proper ((≡ₚ) ==> (≡ₚ)) (remove (A:=A) idx).
+  Proof.
+    intros xs xs' Hperm. rewrite /remove Hperm //.
+  Qed.
+  Lemma enumerate_from_delete_outside_range {A} (xs : list A) (idx idx' : nat) :
+    idx' < S idx →
+    enumerate_from idx xs = remove idx' (zip (seq (S idx) (length xs)) xs).
+  Proof.
+    revert idx. induction xs as [|x xs IH]; first done. intros idx Hineq.
+    rewrite enumerate_from_cons. destruct idx.
+    - apply Nat.lt_1_r in Hineq as ->. simpl. f_equiv. rewrite IH //. lia.
+    - simpl. destruct idx' as [|[|idx']].
+      * replace (S (S idx) <? 0) with false; first last.
+        { symmetry. apply Nat.ltb_nlt. lia. }
+        simpl. f_equiv. apply IH. lia.
+      * replace (S (S idx) <? 0) with false; first last.
+        { symmetry. apply Nat.ltb_nlt. lia. }
+        simpl. f_equiv. apply IH. lia.
+      * replace (idx =? idx') with false; first last.
+        { symmetry. apply Nat.eqb_neq. lia. }
+        replace (S (S idx) <? S (S idx')) with false; first last.
+        { symmetry. apply Nat.ltb_nlt. lia. }
+        simpl. f_equiv. apply IH. lia.
+  Qed.
+  Lemma enumerate_from_delete {A} (xs : list A) (idx idx' : nat) (n : nat) :
+    idx' = idx + n →
+    enumerate_from n (delete idx xs) = remove idx' (enumerate_from n xs).
+  Proof.
+    intros ->. revert n idx. induction xs as [|x xs IH]; first done.
+    destruct idx as [|idx].
+    - simpl. rewrite Nat.eqb_refl app_nil_l. apply enumerate_from_delete_outside_range. lia.
+    - simpl. destruct (n =? S (idx + n)) eqn:Heq.
+      * apply Nat.eqb_eq in Heq. lia.
+      * apply Nat.eqb_neq in Heq. destruct (n <? S (idx + n)) eqn:Hineq.
+        + apply Nat.ltb_lt in Hineq.
+          rewrite enumerate_from_cons. simpl. f_equiv. rewrite IH.
+          by replace (idx + S n) with (S (idx + n)) by lia.
+        + apply Nat.ltb_nlt in Hineq. lia.
+  Qed.
   Lemma enumerate_delete {A} (xs : list A) (enumerated_xs' : list (nat * A)) (idx idx' : nat) :
     fst <$> enumerated_xs' !! idx' = Some idx →
     enumerate xs ≡ₚ enumerated_xs' →
     enumerate (delete idx xs) ≡ₚ remove idx enumerated_xs' ∧ snd <$> remove idx enumerated_xs' = delete idx' (snd <$> enumerated_xs').
-  Admitted.
-  Lemma enumerate_recover {A} (xs : list A) :
-    snd <$> enumerate xs = xs.
-  Admitted.
+  Proof.
+    intros Hidx Hperm. split.
+    - rewrite -Hperm. rewrite /enumerate. by apply reflexive_eq, enumerate_from_delete.
+    - apply NoDup_delete_remove; last done. rewrite -Hperm. apply enumerate_NoDup.
+  Qed.
   Lemma enumerate_app {A} (xs xs' : list A) :
     enumerate (xs ++ xs') = enumerate xs ++ zip (seq (length xs) (length xs')) xs'.
-  Admitted.
+  Proof.
+    rewrite /enumerate/enumerate_from -zip_with_app.
+    - f_equiv. rewrite app_length. apply seq_app.
+    - rewrite seq_length //.
+  Qed.
   Definition permutes {A} (idx : option nat) (xs : list A) (idx' : option nat) (xs' : list A) : Prop :=
     ∃ enumerated_xs',
     enumerate xs ≡ₚ enumerated_xs' ∧
@@ -843,10 +1034,10 @@ Section threadpool_adequacy.
     intros -> -> [enumerated_xs' [Hperm [Hfst Hsnd]]].
     exists ((0, x) :: ((λ (i : nat * A), let (n, x) := i in (S n, x)) <$> enumerated_xs')).
     split; last split.
-    - rewrite /enumerate. simpl. f_equiv. rewrite -Hperm. rewrite /enumerate.
+    - rewrite /enumerate enumerate_from_cons. simpl. f_equiv. rewrite -Hperm. rewrite /enumerate.
       remember 0 as n. generalize n. clear. induction xs as [|x xs' IH].
       * done.
-      * intros n'. simpl. f_equiv. apply IH.
+      * intros n'. rewrite enumerate_from_cons. simpl. f_equiv. apply IH.
     - rewrite fmap_cons -list_fmap_compose /= -Hfst. f_equiv. apply Forall_fmap_ext_1.
       apply List.Forall_forall. by intros [a b] ?.
     - simpl. rewrite list_lookup_fmap -option_fmap_compose.

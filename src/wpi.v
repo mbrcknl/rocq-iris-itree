@@ -676,13 +676,12 @@ Section translation.
     iApply wpi_translation_emp_mask; last rewrite -wpi_clear_mask //.
     iModIntro. iIntros (A e k Q) "HH".
     iApply wpi_update. iApply wpi_update_post.
-    iApply wpi_wand; first shelve.
-    iApply "Hwand". iApply ihandler_mono; last done.
-    - iIntros (a) "Hwp". rewrite -wpi_update_post //.
-    - iModIntro. iIntros (a) "Hwp". iApply wpi_clear_mask. iMod "Hwp". iApply wpi_wand; last done.
-      by iIntros (r) "?".
-  Unshelve.
-    by iIntros (a) "Hwp".
+    iApply wpi_wand; first last.
+    - iApply "Hwand". iApply ihandler_mono; last done.
+      * iIntros (a) "Hwp". rewrite -wpi_update_post //.
+      * iModIntro. iIntros (a) "Hwp". iApply wpi_clear_mask. iMod "Hwp". iApply wpi_wand; last done.
+        by iIntros (r) "?".
+    - by iIntros (a) "Hwp".
   Qed.
 
   (** A special case of above translation lemma which has a nicer statement at the
