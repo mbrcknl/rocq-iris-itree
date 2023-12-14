@@ -37,8 +37,10 @@ Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoo
     [EFork] disallowing returning in the [NewThread] continuation, even
     though it is possible to define [itree]s that do so. From the point of view
     of [WPi], we are thus declaring such returns as unsafe. This
-    overapproximation is justified from our applications. *)
+    overapproximation is justified from our applications: typically, only the
+    return value of the main thread concerns us. *)
     | EFork      => λ Φ s, Φ CurrentThread ∗ s NewThread
+    (** To prove that one can [EYield], one must restablish all the invariants. *)
     | EYield     => λ Φ _, |={∅, ⊤}=> |={⊤, ∅}=> Φ tt
     | EKillThread => λ _ _, |={∅, ⊤}=> True
     end
@@ -73,7 +75,7 @@ Section wp_threadpool.
   invariants. It amounts to the typical requirement of atomicity in the
   invariant opening rule known from "normal Iris". *)
   Lemma wpi_yield {R} (k : unit → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    WPi (k tt) @ H; ⊤ {{ Φ }} -∗
+    WPi (k ()) @ H; ⊤ {{ Φ }} -∗
     WPi (vis EYield k) @ H; ⊤ {{ Φ }}.
   Proof.
     iIntros "Hwp". iApply wpi_vis. iApply is_inH. simpl.
@@ -96,15 +98,23 @@ Section interleaving.
   (* TODO: Update comments here in view of changes to the way that the focused
   thread is encoded etc. *)
 
-  (** The interleaving relation, prior to taking the fixpoint. This relation
-  encodes what it means for an [itree E R] to refine an itree
-  [itree (threadpoolE +' E) R] that can emit events [threadpoolE] regarding
-  concurrency. *)
+  (** The interleaving relation. This relation encodes what it means for an
+  [itree E R] to refine an itree [itree (threadpoolE +' E) R] that can emit
+  events [threadpoolE] regarding concurrency. *)
+
+  (** The recuirsion template for the interleaving relation, without enforcing
+  [tp !! tid = Some t]. *)
   Variant interleavesF
+    (** The recursive instance of the interleaving relation (doing bound
+    checks). *)
     (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop)
+    (** The thread ID [tid] of the currently executing thread. *)
     : nat
+    (** The thread [t] that is currently being executed. *)
     → itree' (threadpoolE +' E) R
+    (** The threadpool [tp] (supposed to satisfy [tp !! tid = Some t]) *)
     → list (itree (threadpoolE +' E) R)
+    (** The interleaved [itree]. *)
     → itree' E R
     → Prop :=
   (** If a thread returns, the interleaved [itree] ends. *)
@@ -122,15 +132,12 @@ Section interleaving.
   (** If a thread emits the [EKillThread] event, the thread ends and control is
   yielded to some other thread in the threadpool. The interleaved [itree] takes
   a silent step in place of the [EKillThread]. *)
-  | KillThread current_tid tp k new_current_tid new_current interleaving' :
-    delete current_tid tp !! new_current_tid = Some new_current →
+  | KillThread current_tid tp k new_current_tid interleaving' :
     interleaves new_current_tid (delete current_tid tp) interleaving' →
     interleavesF interleaves current_tid (VisF (inl1 EKillThread) k) tp (TauF interleaving')
-  (** The [EYield] event yields control to another thread placing the current
-  thread in the threadpool to be resumed. Resumption costs a step. The
+  (** The [EYield] event yields control to another thread. The
   interleaved [itree] takes a silent step in place of the [EYield]. *)
-  | Yield current_tid tp k new_current_tid new_current interleaving' :
-    tp !! new_current_tid = Some new_current →
+  | Yield current_tid tp k new_current_tid interleaving' :
     interleaves new_current_tid (<[current_tid := k ()]>tp) interleaving' →
     interleavesF interleaves current_tid (VisF (inl1 EYield) k) tp (TauF interleaving')
   (** The [EFork] event adds a new thread to the threadpool and continues
@@ -139,7 +146,12 @@ Section interleaving.
   | Fork current_tid tp k interleaving' :
     interleaves (S current_tid) (k NewThread :: <[current_tid := k CurrentThread]>tp) interleaving' →
     interleavesF interleaves current_tid (VisF (inl1 EFork) k) tp (TauF interleaving').
+  (* TODO: Somehow deal with the case where the main thread emits
+  [EKillThread]. (This case is never exhibited for typical [itree]s, because
+  [EKillThread] is generally only to be used to avoid forked threads from
+  returning.) For example, return an [option]. *)
   Hint Constructors interleavesF : iris_itree.
+  (** The recuirsion template for the interleaving relation. *)
   Definition interleaves_
     (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop)
     : nat
@@ -166,6 +178,8 @@ Section interleaving.
   (** The interleaving relation. (See comments above.) *)
   Definition interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop :=
     paco3 interleaves_ bot3.
+
+  (** Inversion lemmata. *)
 
   Lemma interleaves_inversion_Ret tid tp r interleaving :
     tp !! tid = Some (Ret r) →
@@ -232,11 +246,31 @@ Section interleaving.
   Qed.
 End interleaving.
 
-(* To prove adequacy for the threadpool handler, we need an induction principle
-for an entire threadpool as opposed to for a weakest precondition of a
-single thread. Therefore, it is necessary to define a weakest precondition for
+(* Our objective is to prove the threadpool adequacy theorem [threadpool_adequacy].
+For this, we need an induction principle for an entire threadpool as opposed to
+for a weakest precondition of a single thread (since this thread could spawn
+new threads). Therefore, it is necessary to define a weakest precondition for
 threadpools. However, this is only a necessity for the proof. It does not
-affect the statement of adequacy. *)
+affect the statement of adequacy.
+
+The weakest precondition for a threadpool [wptp] takes a threadpool and a
+currently executing thread. A key technical idea in proving the threadpool
+adequacy theorem is to also have the option of control being at the "outside
+world", that is, that the threadpool is currently suspended and waiting to
+be resumed. (This is necessary to state e.g. [wptp_merge_r], which is a lemma
+necessary to prove the threadpool adequacy theorem.) This is represented by
+having [wptp] take an [option nat] which is either [Some tid] for
+representing that the thread with thread ID [tid] is currently executing or
+[None] representing that the threadpool is suspended.
+
+With (a carefully chosen) definition of [wptp], the proof of
+[threadpool_adequacy] breaks into two implications:
+
+(1) [wp_wptp] which relates [WPi] to [wptp], and
+(2) [threadpool_adequacy'], which is a version of [threadpool_adequacy] where
+    the hypothesis is a [wptp] instead of a [WPi].
+*)
+
 Section wptp.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
 
@@ -258,30 +292,48 @@ Section wptp.
     accepting an [option nat]. *)
     | EKillThread => λ k,
       (
+      (** After killing the current thread, control can be yielded to the
+      outside world (in which case all invariants must be closed so that they
+      can be accessed when resuming another suspended threadpool) or ... *)
       (|={∅, ⊤}=> wptp None (delete tid tp) Φ)
+      (** ... to another thread in the threadpool. *)
       ∧ ∀ tid' t', ⌜(delete tid tp) !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (delete tid tp) Φ
       )
     | EYield => λ k,
       (
+      (** [EYield] can yield control to the outside world (in which case all
+      invariants must be closed so that they can be accessed when resuming
+      another suspended threadpool) or ... *)
       (|={∅, ⊤}=> wptp None (<[tid:=k ()]>tp) Φ)
+      (** ... to another thread in the threadpool. *)
       ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (<[tid:=k ()]>tp) Φ
       )
     | EFork => λ k,
-      wptp (Some (S tid)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
+      (** Newly forked threads are just prepended to the threadpool. *)
+      wptp (Some (S tid)) (k NewThread :: <[tid:=k CurrentThread]>tp) Φ
     end%I.
-  (** The definition of the weakest precondition, prior to taking the fixpoint. *)
-  (* TODO: Uncurry this, and don't use the -n> to iProp *)
+  (** The definition of the weakest precondition, prior to taking the least
+  fixpoint. *)
   Definition wptpF (H : iHandler Σ E)
     (wptp : leibnizO (option nat) -> leibnizO (list (itree (threadpoolE +' E) R)) -> (R -d> iPropO Σ) -> iPropO Σ) :
             leibnizO (option nat) -> leibnizO (list (itree (threadpoolE +' E) R)) -> (R -d> iPropO Σ) -> iPropO Σ :=
     λ tid tp Φ, (
       match tid with
+      (** The threadpool is suspended but can be resumed at any thread in it
+      after opening up invariants. *)
       | None => ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={⊤, ∅}=> wptp (Some tid') tp Φ
+      (** [tid] is the thread ID for the currently executing thread. *)
       | Some tid => ∃ t, ⌜tp !! tid = Some t⌝ ∧ |={∅}=>
         match observe t with
+        (** Upon return, we close down all invariants and verify the
+        postcondition. *)
         | RetF r  => |={∅, ⊤}=> Φ r
+        (** We simply skip over silent steps. *)
         | TauF t' => wptp (Some tid) (<[tid := t']>tp) Φ
+        (** [threadpoolE] events are handled using the function
+        [handle_threadpoolE]. *)
         | @VisF _ _ _  A (inl1 e) k => handle_threadpoolE tid t tp Φ wptp A e k
+        (** Non-threadpool events are handled using the handler [H]. *)
         | VisF (inr1 e) k => H _ e
             (λ a, wptp (Some tid) (<[tid:=k a]>tp) Φ)
             (λ a, False)
@@ -363,7 +415,6 @@ Section wptp.
     - intros wpi HneΦ n [t Φ] [t' Φ'] [-> HΦ]. f_equiv. simpl. by f_equiv.
   Qed.
 
-  (* TODO: Rename [wpi] to [wpi_no_mask] or something along those lines. *)
   Definition wptp (H : iHandler Σ E) (tid : option nat) (tp : list (itree (threadpoolE +' E) R)) (Φ : R -> iPropO Σ) : iProp Σ :=
     bi_least_fixpoint (wptpF' H) ((tid, tp), Φ).
 
@@ -380,6 +431,7 @@ Section wptp.
   Qed.
 End wptp.
 
+(** Induction and inversion principles for [wptp]. *)
 Section wptp_induction.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
 
@@ -404,51 +456,6 @@ Section wptp_induction.
     iApply "HPre". iApply (wptpF_mono with "[] Hwptp").
     iIntros "!>" (???) "[? _]". by iFrame.
   Qed.
-
-  (*
-  Lemma wptp_iter' (G : itree (threadpoolE +' E) R -> list (itree (threadpoolE +' E) R) -> (R -d> iPropO Σ) -> iPropO Σ):
-    (∀ t tp, NonExpansive (G t tp)) →
-    (□ ∀ Φ tp r, (|={∅,⊤}=> Φ r) -∗ G (Ret r) tp Φ) -∗
-    (□ ∀ Φ tp t, (|={∅}=> G t tp Φ) -∗ G (Tau t) tp Φ) -∗
-    (□ ∀ Φ tp k,
-      (|={∅, ⊤}=> ∀ new_current_tid new_current,
-        ⌜tp !! new_current_tid = Some new_current⌝ →
-        |={⊤, ∅}=> G new_current (delete new_current_tid tp) Φ) -∗
-      G (Vis (inl1 EKillThread) k) tp Φ
-    ) -∗
-    (□ ∀ Φ k tp,
-      (|={∅, ⊤}=> (
-        (∀ new_current_tid new_current,
-            ⌜tp !! new_current_tid = Some new_current⌝ →
-            |={⊤, ∅}=> G new_current (cons (k tt) (delete new_current_tid tp)) Φ
-        ) ∧ |={⊤, ∅}=> G (k tt) tp Φ
-      )) -∗
-      G (Vis (inl1 EYield) k) tp Φ
-    ) -∗
-    (□ ∀ Φ k tp,
-      (|={∅}=> G (k CurrentThread) (cons (k NewThread) tp) Φ) -∗
-      G (Vis (inl1 EFork) k) tp Φ
-    ) -∗
-    (□ ∀ Φ A (e : E A) k tp,
-      (|={∅}=> H _ e (λ a, G (k a) tp Φ) (λ a, |={⊤, ∅}=> G (k a) tp (λ _, False))) -∗
-      G (Vis (inr1 e) k) tp Φ
-    ) -∗
-    ∀ t tp Φ, wptp H t tp Φ -∗ G t tp Φ.
-  Proof.
-    iIntros "%Hne #HRet #HTau #HKillThread #HYield #HFork #HVis". iApply (wptp_iter G). iModIntro.
-    iIntros (t tp). destruct (itree_match t) as [[r ->]|[[t' ->]|[A [e [k ->]]]]].
-    - iIntros (Φ) "HΦ". iApply "HRet". rewrite /wptpF /=. by iMod "HΦ".
-    - iIntros (Φ) "Hwp". iApply "HTau". rewrite /wptpF //.
-    - iIntros (Φ) "Hwp". destruct e as [e|e]; rewrite /wptpF /=.
-      * destruct e.
-        + by iApply "HFork".
-        + iApply "HYield". iMod "Hwp". iMod "Hwp". iModIntro. iSplit.
-          ++ iIntros (???). by iApply "Hwp".
-          ++ iDestruct "Hwp" as "[_ $]".
-        + iApply "HKillThread". iMod "Hwp". iMod "Hwp". iModIntro. iIntros (???). by iApply "Hwp".
-      * by iApply "HVis".
-  Qed.
-  *)
 
   (* TODO: Commit to the extensionality axiom in [itree.v] and remove
      unnecessary [Proper] proofs, and use equality throughout. *)
@@ -494,85 +501,28 @@ Section wptp_induction.
   Qed.
 End wptp_induction.
 
-(*
-Section wptp_proper.
-  Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
-
-  (* TODO: Don't use instances for temporary class definitions. *)
-  Global Instance wptp_proper_unidirectional :
-    Proper (eqit (=) false false ==> Forall2 (eqit (=) false false) ==> (=) ==> (⊢)) (wptp (R:=R) H).
-  Proof.
-    iIntros (t1 t2 Ht tp1 tp2 Htp Φ Φ' <-).
-    epose (G := λ (t1 : leibnizO (itree (threadpoolE +' E) R)) (tp1 : leibnizO (list (itree (threadpoolE +' E) R))) (Φ : leibnizO R -d> iPropO Σ),
-      (∀ t2 tp2, ⌜t1 ≅ t2⌝ → ⌜Forall2 (eqit (=) false false) tp1 tp2⌝ → wptp H t2 tp2 Φ)%I).
-    iAssert (∀ t tp Φ, wptp H t tp Φ -∗ G t tp Φ)%I as "Hgen"; last first.
-    { iIntros "Hwptp". by iApply ("Hgen" with "Hwptp"). }
-    iApply (wptp_iter G); clear.
-    { intros t tp n Φ1 Φ2 HΦ. rewrite /G. do 3 f_equiv.
-      do 3 f_equiv. rewrite /wptp. by apply least_fixpoint_ne.
-    }
-    iModIntro. iIntros (t1 tp1 Φ) "Hwptp". iIntros (t2 tp2 Ht Htp). rewrite wptp_unfold /wptpF.
-    punfold Ht. unfold eqit_ in Ht. remember (observe t1) as ot1. remember (observe t2) as ot2.
-    destruct Ht.
-    - by subst.
-    - rewrite /G. iMod "Hwptp". iModIntro. iApply "Hwptp". iPureIntro. pclearbot. apply REL. done.
-    - iMod "Hwptp". iModIntro. destruct e as [e|e].
-      * destruct e.
-        + simpl. rewrite /G. iApply "Hwptp". { iPureIntro. pclearbot. apply REL. }
-          iPureIntro. constructor; eauto. pclearbot. apply REL.
-        + simpl. iMod "Hwptp". iModIntro. iMod "Hwptp". iModIntro.
-          iSplit.
-          ++ iIntros (new_current_tid new_current2 Hidx2).
-             apply Forall2_lookup_l with (P := eqit eq false false) (k := tp1) in Hidx2 as (new_current1&Hidx1&Hnew_current); last done.
-             iDestruct "Hwptp" as "[Hwptp _]".
-             iSpecialize ("Hwptp" $! new_current_tid new_current1 Hidx1).
-             +++ iApply "Hwptp"; first eauto. iPureIntro. constructor.
-                 ++++ pclearbot. apply REL.
-                 ++++ apply Forall2_delete. apply Htp.
-          ++ iDestruct "Hwptp" as "[_ Hwptp]". iApply "Hwptp"; last done. iPureIntro. pclearbot.
-             apply REL.
-        + simpl. iMod "Hwptp". iModIntro. iMod "Hwptp". iModIntro.
-          iIntros (new_current_tid new_current2 Hidx2).
-          apply Forall2_lookup_l with (P := eqit eq false false) (k := tp1) in Hidx2 as (new_current1&Hidx1&Hnew_current); last done.
-          iApply ("Hwptp" $! new_current_tid new_current1 Hidx1); first done.
-          iPureIntro. apply Forall2_delete. apply Htp.
-      * iApply ihandler_mono; last done.
-        { iIntros (a) "Hwptp". iApply "Hwptp"; last done. pclearbot. iPureIntro. apply REL. }
-        iModIntro. iIntros (a) "Hwptp". iMod "Hwptp". iModIntro. iApply "Hwptp"; last done.
-        pclearbot. iPureIntro. apply REL.
-    - done.
-    - done.
-  Qed.
-  Global Instance wptp_proper :
-    Proper (eqit (=) false false ==> Forall2 (eqit (=) false false) ==> (=) ==> (⊣⊢)) (wptp (R:=R) H).
-  Proof.
-    intros t1 t2 Ht tp1 tp2 Htp Φ1 Φ2 HΦ.
-    iSplit.
-    - iIntros "Hwp". rewrite Ht Htp HΦ //.
-    - iIntros "Hwp". rewrite Ht Htp HΦ //.
-  Qed.
-End wptp_proper.
-*)
-
-Lemma big_sepL_delete' {Σ} A (Φ : A → iProp Σ) l i x :
-  l !! i = Some x →
-  ([∗ list] y ∈ l, Φ y) ⊣⊢
-  Φ x ∗ [∗ list] y ∈ (delete i l), Φ y.
-Proof.
-  intros Hidx. rewrite -(take_drop_middle l i x) // !big_sepL_app.
-  rewrite assoc -!(comm _ (Φ _)) -assoc -big_sepL_app. do 2 f_equiv.
-  rewrite -delete_take_drop. f_equiv. rewrite take_drop_middle //.
-Qed.
-
+(** In order to prove [wp_wptp], it is necessary to have an tailored induction
+principle [wpi_iter_masked] for [WPi] allowing not just [∅] but also [⊤] mask.
+Technically speaking, this is because depending on whether we are in the case
+of [tid] being [None] (outside world has control) or [Some tid'] (thread [tid']
+has control), the mask in the hypothesis has to be [⊤] or [∅] respectively. *)
 Section wpi_masked_ind.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
 
-  (** The definition of the weakest precondition, prior to taking the fixpoint. *)
-  (* TODO: Uncurry this, and don't use the -n> to iProp *)
+  (** Recursive template whose fixpoint is [|={⊤, ∅}=> WPi t @ H; ∅ {{ Φ }}] when
+  [masked = true] and [WPi t @ H; ∅ {{ Φ }}] when [masked = false]. *)
   Definition wpiF_masked (H : iHandler Σ E)
     (wpi : leibnizO bool -> leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ) :
            leibnizO bool -> leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ :=
-    (λ masked t Φ, if masked then |={⊤, ∅}=> wpi false t Φ else wpiF H (wpi false) t Φ)%I.
+    (λ masked t Φ, if masked then
+        (* The case where [masked = true], we just do a mask changing update
+        and call the unmasked case recursively. *)
+        |={⊤, ∅}=> wpi false t Φ
+      else
+        (* The unmasked case just makes use of the recursion template used to
+        define [WPi]. *)
+        wpiF H (wpi false) t Φ
+    )%I.
   Definition wpiF_masked' (H : iHandler Σ E)
     (wpi : leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ) :
            leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ :=
@@ -584,7 +534,6 @@ Section wpi_masked_ind.
     intros wp1 wp2 Hwp m1 m2 <- t1 t2 <- Φ1 Φ2 HΦ. rewrite /wpiF_masked.
     do 2 f_equiv; eauto. by apply Hwp.
   Qed.
-
   Global Instance wpiF_masked_ne' n H :
     Proper ((dist n ==> dist n) ==> dist n ==> dist n) (wpiF_masked' H).
   Proof.
@@ -616,7 +565,6 @@ Section wpi_masked_ind.
     - intros wpi HneΦ n [t Φ] [t' Φ'] [-> HΦ]. f_equiv. simpl. by f_equiv.
   Qed.
 
-  (* TODO: Rename [wpi] to [wpi_no_mask] or something along those lines. *)
   Definition wpi_masked (H : iHandler Σ E) (masked : bool) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
     bi_least_fixpoint (wpiF_masked' H) (masked, t, Φ).
 
@@ -1397,7 +1345,7 @@ Section threadpool_adequacy.
   in another section? *)
   Hint Resolve interleaves__mono : paco.
 
-  Theorem wpi_interleaving' :
+  Theorem threadpool_adequacy' :
     ∀ tid' tp Φ,
     wptp (R:=R) H tid' tp Φ -∗
     ∀ tid interleaving,
@@ -1441,7 +1389,7 @@ Section threadpool_adequacy.
   (** Adequacy for [threadpoolH ⊕ H]. This says that if you can prove the
   weakest precondition an [itree (threadpoolE +' E) R] then you get weakest
   preconditions for every interleaving [itree E R]. *)
-  Corollary wpi_interleaving `{!Sequential H}
+  Corollary threadpool_adequacy `{!Sequential H}
     (concurrent : itree (threadpoolE +' E) R)
     (interleaving : itree E R)
     (Φ : R → iProp Σ) :
@@ -1452,7 +1400,7 @@ Section threadpool_adequacy.
     iIntros "%Hinter Hwp". iApply wpi_clear_mask.
     iEval (rewrite -wpi_clear_mask) in "Hwp". iMod "Hwp".
     iDestruct (wp_wptp with "Hwp") as "Hwptp".
-    iDestruct (wpi_interleaving' with "Hwptp") as "Hwp".
+    iDestruct (threadpool_adequacy' with "Hwptp") as "Hwp".
     by iApply "Hwp".
   Qed.
 End threadpool_adequacy.
