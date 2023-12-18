@@ -1070,12 +1070,12 @@ Section threadpool_adequacy.
            |     [wptp_wptpIH']  <- [wptp_reorder'] <- [wptp_reorder]
            |           |
            |           v
-           |     [wptp_wptpIH]                              [wpi_iter_masked]
-           |           |                                           |
-  Merge lemmata        v                                           v         |
-           |     [wptp_merge_r]                                [wptp_wp]    [wptp] to [WPi]
-           |           |                                           |         |
-           |           v                                           v
+           |     [wptp_wptpIH]
+           |           |
+  Merge lemmata        v                                                    |
+           |     [wptp_merge_r]       [wpi_iter_masked]        [wptp_wp]   [wptp] to [WPi]
+           |           |                     |                     |        |
+           |           v                     v                     v
            |     [wptp_2_threads] -----> [wp_wptp] -----> [threadpool_adequacy]
                                   --- [WPi] to [wptp] ---
 
@@ -1088,16 +1088,18 @@ Section threadpool_adequacy.
   [wptp_wp].
 
   [wp_wptp] is the more intricate step out of the two. It is proven by
-  induction over [WPi], but difficulty is encountered in the case of the
-  [EFork] event. In particular, it is necessary to prove a lemma of the form
-  [wptp_2_threads]. This is generalized to [wptp_merge_r], whose proof in
-  essence comes down to nested induction. The reader is encouraged to first
-  study the proof of [twptp_app] in [iris/program_logic/total_adequacy.v]. This
-  is a proof that follows the same structure of nested induction but is much
-  simpler, a simplicity afforded from "all threads being equal", meaning that
-  their [twptp] has no notion of currently focused thread. (Note that to
-  even state this lemma in our setting, we needed the technical idea of
-  allowing the threadpool to be suspended, that is, [tid = None]).
+  induction over [WPi], but because of technicalities with masks, one must
+  use an induction principle [wpi_iter_masked] tailored for [WPi] with masks
+  [∅] and [⊤]. A difficulty is encountered in the case of the [EFork] event. In
+  particular, it is necessary to prove a lemma of the form [wptp_2_threads].
+  This is generalized to [wptp_merge_r], whose proof in essence comes down to
+  nested induction. The reader is encouraged to first study the proof of
+  [twptp_app] in [iris/program_logic/total_adequacy.v]. This is a proof that
+  follows the same structure of nested induction but is much simpler, a
+  simplicity afforded from "all threads being equal", meaning that their
+  [twptp] has no notion of currently focused thread. (Note that to even state
+  this lemma in our setting, we needed the technical idea of allowing the
+  threadpool to be suspended, that is, [tid = None]).
 
   Let us elaborate further on the proof of [wptp_merge_r]. [wptp_merge_r] is
   generalized to [wptp_wptpIH]: it is very important that the induction
@@ -1117,13 +1119,10 @@ Section threadpool_adequacy.
   the concatenated threadpool as opposed to in the beginning. In order to match
   up the order of the threads in the [wptp] in the assumption and the [wptp] in
   the conclusion, it is necessary to prove the reordering principle
-  [wptp_reorder']. This is proven by generalizing it to [wptp_reorder]. To
-  state this generalization, it is necessary to define a notion of "pointed
-  permutations", as is covered in the section [pointed_permutations].
-
-  On the other hand, for [wptp_wp] the main technical ingredient is an
-  induction principle [wpi_iter_masked] tailored for [WPi] with masks [∅] and
-  [⊤]. With this induction principle, the proof is fairly straight forward. *)
+  [wptp_reorder']. This is proven by generalizing it to [wptp_reorder], which
+  is amenable to induction. To state this generalization, it is necessary to
+  define a notion of "pointed permutations", as is covered in the section
+  [pointed_permutations]. *)
 
   (** Reordering lemmata. *)
 
