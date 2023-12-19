@@ -1067,6 +1067,7 @@ Section threadpool_adequacy.
   outlined as follows:
 
                                     ----- Reordering lemmata --------
+
            |     [wptp_wptpIH']  <- [wptp_reorder'] <- [wptp_reorder]
            |           |
            |           v
@@ -1077,6 +1078,7 @@ Section threadpool_adequacy.
            |           |                     |                     |        |
            |           v                     v                     v
            |     [wptp_2_threads] -----> [wp_wptp] -----> [threadpool_adequacy]
+
                                   --- [WPi] to [wptp] ---
 
   Let us explain the high-level structure of the proof working backwards from
@@ -1102,23 +1104,23 @@ Section threadpool_adequacy.
   threadpool to be suspended, that is, [tid = None]).
 
   Let us elaborate further on the proof of [wptp_merge_r]. [wptp_merge_r] is
-  generalized to [wptp_wptpIH]: it is very important that the induction
+  generalized to [wptp_wptpIH_left]: it is very important that the induction
   hypothesis takes the right form (weakening it a bit will give you issue
   when you step the [wptp] in the goal and it yields to the outside world; a
-  point we shall return to later). To prove [wptp_wptpIH], we first do
-  induction on the [wptp] for the left threadpool (we get to assume [wptpIH]
-  "on step later"), and then inside that induction proof, we do induction on
-  the right threadpool (we get to further assume [wptpIH_right] "on step
-  later"). The latter induction argument is found in the proof of
+  point we shall return to later). To prove [wptp_wptpIH_left], we first do
+  induction on the [wptp] for the left threadpool (we get to assume
+  [wptpIH_left] "one step later"), and then inside that induction proof, we
+  do induction on the right threadpool (we get to further assume [wptpIH_right]
+  "one step later"). The latter induction argument is found in the proof of
   [wptp_wptpIH_right]. The reason that [wptpIH_right] refers to
-  [wptp_wptpIH] in its definition is exactly because the latter induction
+  [wptp_wptpIH_left] in its definition is exactly because the latter induction
   happens nested within the former.
 
-  One technicality arises in the induction argument in [wptp_wptpIH] when the
-  threadpool to the right spawns a new thread, and it ends up in the middle of
-  the concatenated threadpool as opposed to in the beginning. In order to match
-  up the order of the threads in the [wptp] in the assumption and the [wptp] in
-  the conclusion, it is necessary to prove the reordering principle
+  One technicality arises in the induction argument in [wptp_wptpIH_left] when
+  the threadpool to the right spawns a new thread, and it ends up in the middle
+  of the concatenated threadpool as opposed to in the beginning. In order to
+  match up the order of the threads in the [wptp] in the assumption and the
+  [wptp] in the conclusion, it is necessary to prove the reordering principle
   [wptp_reorder']. This is proven by generalizing it to [wptp_reorder], which
   is amenable to induction. To state this generalization, it is necessary to
   define a notion of "pointed permutations", as is covered in the section
@@ -1196,42 +1198,50 @@ Section threadpool_adequacy.
 
   (** Merge lemmata. *)
 
-  Definition wptp_IH (tid : option nat) (tp : list (itree (threadpoolE +' E) R)) Φ : iProp Σ :=
+  (** The induction hypothesis for the left threadpool. *)
+  Definition wptp_IH_left (tid : option nat) (tp : list (itree (threadpoolE +' E) R)) Φ : iProp Σ :=
     wptp H tid tp Φ ∧
     match tid with
+    (** When the threadpool is currently executing, we can extended it on the
+    right by a suspended threadpool. *)
     | Some tid => ∀ tp', wptp H None tp' Φ -∗ wptp H (Some tid) (tp ++ tp') Φ
+    (** When the threadpool is suspended, ... *)
     | None =>
+        (** we can extend the threadpool from the right by another suspended
+        threadpool. This matters for the cases in [wptp_wptpIH_right] where the
+        goal steps and passes control to the "outside world". And, ... *)
         (∀ tp', wptp H None tp' Φ -∗ wptp H None (tp ++ tp') Φ) ∧
+        (** we can extend the threadpool from the right by a currently
+        executing threadpool. *)
         (∀ tp' tid' tid_app, ⌜tid_app = (length tp + tid')%nat⌝ →
           wptp H (Some tid') tp' Φ -∗ wptp H (Some tid_app) (tp ++ tp') Φ)
     end.
+  (** The induction hypothesis for the right threadpool. This takes effectively
+  the same shape as [wptp_IH_left], aside from two differences. First, we are
+  extending on the right instead of the left. Second, the hypotheses in the
+  magic wands are [wptpF H wptp_IH_left] as opposed to [wptp H]. This reflects
+  how this induction hypothesis is used for an induction nested inside of the
+  induction on the [wptp] for the left threadpool. *)
   Definition wptp_IH_right (tid' : option nat) (tp' : list (itree (threadpoolE +' E) R)) Φ : iProp Σ :=
     wptp H tid' tp' Φ ∧
     match tid' with
     | Some tid' => ∀ tp tid_app, ⌜tid_app = (length tp + tid')%nat⌝ →
-      wptpF H wptp_IH None tp Φ -∗ wptp H (Some tid_app) (tp ++ tp') Φ
+      wptpF H wptp_IH_left None tp Φ -∗ wptp H (Some tid_app) (tp ++ tp') Φ
     | None =>
-      (∀ tp, wptpF H wptp_IH None tp Φ -∗ wptp H None (tp ++ tp') Φ) ∧
-      (∀ tid tp, wptpF H wptp_IH (Some tid) tp Φ -∗ wptp H (Some tid) (tp ++ tp') Φ)
+      (∀ tp, wptpF H wptp_IH_left None tp Φ -∗ wptp H None (tp ++ tp') Φ) ∧
+      (∀ tid tp, wptpF H wptp_IH_left (Some tid) tp Φ -∗ wptp H (Some tid) (tp ++ tp') Φ)
     end.
 
-  Instance wpi_IH_proper n t tp :
-    Proper (pointwise_relation R (dist n) ==> dist n) (wptp_IH t tp).
+  Instance wptp_IH_left_proper n t tp :
+    Proper (pointwise_relation R (dist n) ==> dist n) (wptp_IH_left t tp).
   Proof.
-    intros Φ1 Φ2 HΦ. rewrite /wptp_IH. repeat f_equiv.
+    intros Φ1 Φ2 HΦ. rewrite /wptp_IH_left. repeat f_equiv.
   Qed.
   Instance wpi_IH_right_proper n t tp :
     Proper (pointwise_relation R (dist n) ==> dist n) (wptp_IH_right t tp).
   Proof.
     intros Φ1 Φ2 HΦ. rewrite /wptp_IH_right. repeat ( done || apply wptpF_ne || f_equiv );
     clear; intros tid1 tid2 <- tp1 tp2 <- Φ1 Φ2 HΦ; repeat f_equiv.
-  Qed.
-
-  Lemma wptp_IH_right_wptp tid tp Φ :
-    wptpF H wptp_IH_right tid tp Φ -∗ wptp (R:=R) H tid tp Φ.
-  Proof.
-    iIntros "Hwptp". rewrite wptp_unfold /=. iApply wptpF_mono; last done. iModIntro. clear.
-    iIntros (t tp Φ) "Hwptp". iDestruct "Hwptp" as "[$ _]".
   Qed.
 
   Lemma wptp_None tp Φ :
@@ -1241,13 +1251,18 @@ Section threadpool_adequacy.
     iIntros "Hwptp". by iEval (rewrite wptp_unfold).
   Qed.
 
-  Lemma wptp_wptpIH' tid' tp' Φ :
+  (** A lemma used for proving [wptp_wptpIH_left]. This contains the inner
+  nested induction. *)
+  Lemma wptp_wptpIH_right tid' tp' Φ :
     wptp H tid' tp' Φ -∗ wptp_IH_right tid' tp' Φ.
   Proof.
     generalize tid' tp' Φ.
     iApply (wptp_iter _); first solve_proper.
     iModIntro. clear tid' tp' Φ. iIntros (tid' tp' Φ) "Hwptp'".
-    iSplit; first by iApply wptp_IH_right_wptp.
+    iSplit.
+    { rewrite wptp_unfold /=. iApply wptpF_mono; last done. iModIntro. clear.
+      iIntros (t tp Φ) "Hwptp". iDestruct "Hwptp" as "[$ _]".
+    }
     destruct tid' as [tid'|].
     - iIntros (tp tid_app ->) "Hwptp".
       iEval (rewrite wptp_unfold /=).
@@ -1258,8 +1273,10 @@ Section threadpool_adequacy.
         simpl. iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']". iModIntro.
         rewrite insert_app_r. by iApply "Hwptp''".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
-        simpl. rewrite insert_app_r. iApply wptp_reorder'. iMod "Hwptp''".
-        iDestruct "Hwptp''" as "[_ Hwptp'']".
+        simpl. rewrite insert_app_r.
+        (* Here we use the reordering lemma to get the goal to a shape where
+        [Hwptp''] can be used: *) iApply wptp_reorder'.
+        iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']".
         iApply "Hwptp''". { iPureIntro. lia. } done.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         iModIntro. iSplit.
@@ -1355,12 +1372,12 @@ Section threadpool_adequacy.
         + eauto.
   Qed.
 
-  Lemma wptp_wptpIH tid tp Φ :
+  Lemma wptp_wptpIH_left tid tp Φ :
     wptp H tid tp Φ -∗
-    wptp_IH tid tp Φ.
+    wptp_IH_left tid tp Φ.
   Proof.
     generalize tid tp Φ.
-    iApply (wptp_iter wptp_IH); first solve_proper.
+    iApply (wptp_iter wptp_IH_left); first solve_proper.
     iModIntro. clear tid tp Φ. iIntros (tid tp Φ) "Hwptp".
     iSplit.
     { rewrite wptp_unfold /=. iApply wptpF_mono; last done. iModIntro. clear.
@@ -1368,12 +1385,12 @@ Section threadpool_adequacy.
     }
     destruct tid as [|tid].
     - iIntros (tp') "Hwptp'".
-      iDestruct (wptp_wptpIH' with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
+      iDestruct (wptp_wptpIH_right with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
     - iSplit.
       * iIntros (tp') "Hwptp'".
-        iDestruct (wptp_wptpIH' with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
+        iDestruct (wptp_wptpIH_right with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
       * iIntros (tp' tid' tid_app ->) "Hwptp'".
-        iDestruct (wptp_wptpIH' with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
+        iDestruct (wptp_wptpIH_right with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
   Qed.
 
   Lemma wptp_merge_l tp tp' i Φ :
@@ -1381,7 +1398,7 @@ Section threadpool_adequacy.
     wptp H None tp' Φ -∗
     wptp (R:=R) H (Some i) (tp ++ tp') Φ.
   Proof.
-    iIntros "Hwptp Hwptp'". iDestruct (wptp_wptpIH with "Hwptp") as "[_ Hwptp]".
+    iIntros "Hwptp Hwptp'". iDestruct (wptp_wptpIH_left with "Hwptp") as "[_ Hwptp]".
     by iApply "Hwptp".
   Qed.
   Lemma wptp_merge_r tp tp' i Φ :
@@ -1389,7 +1406,7 @@ Section threadpool_adequacy.
     wptp H (Some i) tp' Φ -∗
     wptp (R:=R) H (Some (length tp + i)) (tp ++ tp') Φ.
   Proof.
-    iIntros "Hwptp Hwptp'". iDestruct (wptp_wptpIH with "Hwptp") as "[_ [_ Hwptp]]".
+    iIntros "Hwptp Hwptp'". iDestruct (wptp_wptpIH_left with "Hwptp") as "[_ [_ Hwptp]]".
     by iApply "Hwptp".
   Qed.
 
@@ -1406,9 +1423,6 @@ Section threadpool_adequacy.
   Lemma wp_wptp {Hseq : Sequential H} (t : itree (threadpoolE +' E) R) Φ :
     WPi t @ (threadpoolH ⊕ H); ∅ {{ v, |={∅, ⊤}=> Φ v }} -∗
     wptp H (Some 0) [t] Φ.
-  (* TODO: Prove this by giving a version of WPi that incorporates the full
-  mask into the induction. Basically, whether the mask is full should be a part
-  of the induction. Or maybe even generic over any mask. *)
   Proof.
     epose (G := (λ (masked : bool) (t : itree (threadpoolE +' E) R) (Φ_fupd : leibnizO R -d> iPropO Σ),
       ∀ Φ, (∀ r, Φ_fupd r -∗ (|={∅, ⊤}=> Φ r)) -∗
@@ -1432,7 +1446,13 @@ Section threadpool_adequacy.
         destruct e as [e|e].
         + iExists _. iSplit. { iPureIntro. reflexivity. }
           destruct e.
-          ++ iMod "Hwp" as "[Hcurrent Hnew]". iApply (wptp_2_threads with "[Hnew]").
+          ++ iMod "Hwp" as "[Hcurrent Hnew]". simpl.
+             (** The induction hypotheses [Hcurrent] and [Hnew] can only be
+             used to prove [wptp]s for singleton threadpools, and yet the goal
+             is a [wptp] for two threads (the current one and the newly forked
+             one). We use a "merge lemma" to split this goal into two pieces, a
+             [wptp] for each of the two threads: *)
+             iApply (wptp_2_threads with "[Hnew]").
              +++ iApply wptp_None. iIntros (tid' t' Hidx). iMod "Hnew".
                  apply list_lookup_singleton_Some in Hidx as [-> _].
                  iApply "Hnew". iModIntro. by iIntros (r) "?".
@@ -1516,7 +1536,9 @@ Section threadpool_adequacy.
   Proof.
     iIntros "%Hinter Hwp". iApply wpi_clear_mask.
     iEval (rewrite -wpi_clear_mask) in "Hwp". iMod "Hwp".
+    (** Pass to [wptp]: *)
     iDestruct (wp_wptp with "Hwp") as "Hwptp".
+    (** Pass to [WPi] of interleaving: *)
     iDestruct (wptp_wp with "Hwptp") as "Hwp".
     by iApply "Hwp".
   Qed.
