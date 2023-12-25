@@ -31,7 +31,7 @@ Section stateH.
     IHandler (λ A e,
       match e with
       | EGetState    => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s  ∗ Φ s ))
-      | ESetState s' => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ tt))
+      | ESetState s' => λ Φ _, (∀ s, state_interp s ={∅}=∗ (state_interp s' ∗ Φ ()))
       end
     )%I _.
   Next Obligation.
@@ -43,7 +43,7 @@ Section stateH.
   Global Instance stateH_Sequential :
     Sequential stateH.
   Proof.
-    iIntros (A e Φ s s') "HH". by destruct e.
+    iIntros (A e Φ s) "HH". by destruct e.
   Qed.
 End stateH.
 
@@ -186,15 +186,15 @@ Section stateH_adequacy.
     WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Φ v }}.
   Proof.
     iIntros "%Heval Hstate Hwp".
-    unshelve epose (G := (λne (t : leibnizO (itree (stateE S +' E) R)) (Φ : leibnizO R -d> iPropO Σ),
+    pose (G := (λ (t : itree (stateE S +' E) R) (Φ : R -d> iPropO Σ),
       ∀ t' s Ψ,
         ⌜eval s t t'⌝ →
         state_interp s -∗
         (∀ v, Φ v -∗ |={∅, M}=> Ψ v) -∗
         WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Ψ v }}
-    )%I); try apply _; try solve_proper.
+    )%I).
     iApply (wpi_iter' (H := stateH S ⊕ H) G with "[] [] [] [Hwp] [] Hstate").
-    - intros n t1 t2 Ht Φ1 Φ2 HΦ. rewrite /G. by repeat f_equiv.
+    - solve_proper.
     - clear. iModIntro. iIntros (Φ r) "HΦ". iIntros (t s Ψ Heval) "Hstate HΨ".
       punfold Heval. inversion Heval. simplify_obs.
       iApply wpi_ret. iMod "HΦ". iMod ("HΨ" with "HΦ") as "HΨ". iModIntro. iFrame.
@@ -209,7 +209,7 @@ Section stateH_adequacy.
         iApply (ihandler_mono with "[Hstate Hwand]"); last done.
         + iIntros (a) "Hwp". iApply wpi_update_post. iApply ("Hwp" with "[] Hstate Hwand").
           iPureIntro. pclearbot. apply H4.
-        + eauto.
+        + by iIntros "!>" (?) "?".
       * simplify_K. simplify_obs. simplify_K. simpl. rewrite -wpi_tau. iApply wpi_update. iMod "HH".
         iMod ("HH" with "Hstate") as "[Hstate HH]". pclearbot. by iApply ("HH" with "[] Hstate").
       * simplify_K. simplify_obs. simplify_K. simpl. rewrite -wpi_tau. iApply wpi_update. iMod "HH".

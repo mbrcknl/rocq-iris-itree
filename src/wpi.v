@@ -237,7 +237,7 @@ Section wp_itree.
     Proper (eutt (=) ==> (=) ==> (⊢)) (wpi (R:=R) H).
   Proof.
     iIntros (t1 t2 Hbisim Φ Φ' <-).
-    epose (G := λ (t1 : leibnizO (itree E R)) (Φ : R -d> iPropO Σ), (∀ t2, ⌜t1 ≈ t2⌝ → WPi t2 @ H {{ Φ }})%I).
+    pose (G := λ (t1 : leibnizO (itree E R)) (Φ : R -d> iPropO Σ), (∀ t2, ⌜t1 ≈ t2⌝ → WPi t2 @ H {{ Φ }})%I).
     iAssert (∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hint".
     - iApply (wpi_iter_emp_mask G); first solve_proper.
       clear Φ. iModIntro. iIntros (t Φ) "Hwp". iIntros (t') "%Ht". rewrite wpi_unfold_emp_mask /wpiF.
@@ -297,7 +297,7 @@ Section wp_itree.
     WPi t @ H {{ Ψ }}.
   Proof.
     iIntros "Hwand Hwp".
-    epose (G := (λ (t : leibnizO (itree E R)) (Φ : R -d> iPropO Σ), ∀ Ψ, (∀ r : R, (|={∅}=> Φ r) -∗ (|={∅}=> Ψ r)) -∗ WPi t @ H {{ Ψ }})%I).
+    pose (G := (λ (t : leibnizO (itree E R)) (Φ : R -d> iPropO Σ), ∀ Ψ, (∀ r : R, (|={∅}=> Φ r) -∗ (|={∅}=> Ψ r)) -∗ WPi t @ H {{ Ψ }})%I).
     iAssert (∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { rewrite /G. simpl. iApply ("Hgen" with "Hwp Hwand"). }
     iApply (wpi_iter_emp_mask' G); clear.
@@ -334,7 +334,7 @@ Section wp_itree.
     WPi (ITree.bind t k) @ H {{ Φ }}.
   Proof.
     iIntros "Hwp".
-    epose (G := (λ (t : leibnizO (itree E T)) (Φ : T -d> iPropO Σ), ∀ (Ψ : R → iProp Σ) k, (∀ x : T, Φ x -∗ WPi (k x) @ H {{ Ψ }}) -∗ WPi (ITree.bind t k) @ H {{ Ψ }})%I).
+    pose (G := (λ (t : leibnizO (itree E T)) (Φ : T -d> iPropO Σ), ∀ (Ψ : R → iProp Σ) k, (∀ x : T, Φ x -∗ WPi (k x) @ H {{ Ψ }}) -∗ WPi (ITree.bind t k) @ H {{ Ψ }})%I).
     iAssert (∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { rewrite /G. simpl. iApply ("Hgen" with "Hwp"). eauto. }
     iApply (wpi_iter_emp_mask' G); clear.
@@ -652,7 +652,7 @@ Section translation.
     WPi t @ H1; ∅ {{ Φ }} -∗ WPi (interp f t) @ H2; ∅ {{ Φ }}.
   Proof.
     iIntros "#HH Hwp".
-    epose (G := (λ (t : leibnizO (itree E1 R)) (Φ : R -d> iPropO Σ), WPi (interp f t) @ H2; ∅ {{ Φ }})%I).
+    pose (G := (λ (t : leibnizO (itree E1 R)) (Φ : R -d> iPropO Σ), WPi (interp f t) @ H2; ∅ {{ Φ }})%I).
     iApply (wpi_iter' G); clear.
     - solve_proper.
     - iModIntro. iIntros (Φ r) "Hwp". rewrite /G. simpl. rewrite interp_ret -!wpi_ret' //.
@@ -721,7 +721,7 @@ Section inH.
           + iIntros (a) "Hwp". by iApply wpi_update_post.
           + iModIntro. by iIntros (a) "Hwp".
         * done.
-    - epose (G := (λ (t : leibnizO (itree E2 R)) (Φ : R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I).
+    - pose (G := (λ (t : leibnizO (itree E2 R)) (Φ : R -d> iPropO Σ), ∀ t', ⌜translate (λ A e', subevent A e') t' ≅ t⌝ → WPi t' @ H1; ∅ {{ Φ }})%I).
       iAssert (∀ t Φ, WPi t @ H2; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
       { rewrite /G. simpl. iIntros "Hwp". by iApply ("Hgen" with "Hwp"). }
       iApply (wpi_iter' G).

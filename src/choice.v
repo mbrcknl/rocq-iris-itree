@@ -164,7 +164,7 @@ Section demonic_adequacy.
     iIntros (Hinstant) "Hwp".
     (* TODO: A lot of these explicitly spelled out [G]'s can be replaced by
     appropriate [iRevert]s. See [threadpool.v]. *)
-    epose (G := λ (t : leibnizO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I).
+    pose (G := λ (t : leibnizO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I).
     iApply (wpi_iter' (H := demonicH ⊕ H) G with "[] [] [] Hwp [//]"); first solve_proper; clear.
     - iModIntro. iIntros (Φ r) "HΦ". iIntros (t Hinst). punfold Hinst. inversion Hinst.
       simplify_obs. rewrite -wpi_ret' //.
@@ -315,7 +315,7 @@ Section demonic_angelic_adequacy.
     WPi t @ angelicH ⊕ demonicH; ∅ {{ r, ⌜Q r⌝ }} -∗
     |={∅}=> ⌜angel_wins t Q⌝.
   Proof.
-    epose (G := λ (t : itree (angelicE +' demonicE) R) (Φ : leibnizO R -d> iPropO Σ),
+    pose (G := λ (t : itree (angelicE +' demonicE) R) (Φ : leibnizO R -d> iPropO Σ),
       (|={∅}=> ∀ Q, (∀ r, Φ r  -∗ (⌜Q r⌝)) -∗ ⌜angel_wins t Q⌝)%I).
     iAssert (∀ t Φ, WPi t @ angelicH ⊕ demonicH; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { iIntros "Hwp". iApply ("Hgen" with "Hwp"). eauto. }
