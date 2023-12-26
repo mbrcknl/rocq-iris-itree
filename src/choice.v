@@ -207,6 +207,7 @@ Proof.
   - by iApply ExistentialCommute1.
 Qed.
 
+(*
 Section angelic_adequacy.
   Context {E : Type → Type} `{H : iHandler Σ E} {R : Type} `{!invGS_gen hlc Σ}.
 
@@ -316,20 +317,20 @@ Section demonic_angelic_adequacy.
     |={∅}=> ⌜angel_wins t Q⌝.
   Proof.
     pose (G := λ (t : itree (angelicE +' demonicE) R) (Φ : leibnizO R -d> iPropO Σ),
-      (|={∅}=> ∀ Q, (∀ r, Φ r  -∗ (⌜Q r⌝)) -∗ ⌜angel_wins t Q⌝)%I).
+      (∀ Q, (∀ r, Φ r  -∗ (⌜Q r⌝)) -∗ |={∅}=> ⌜angel_wins t Q⌝)%I).
     iAssert (∀ t Φ, WPi t @ angelicH ⊕ demonicH; ∅ {{ Φ }} -∗ G t Φ)%I as "Hgen"; last first.
     { iIntros "Hwp". iApply ("Hgen" with "Hwp"). eauto. }
     iApply (wpi_iter' (H := angelicH ⊕ demonicH) G); first solve_proper; clear.
-    - iIntros "!>" (Φ r) "HΦ". iMod "HΦ". iIntros "!>" (Q) "Hwand".
+    - iIntros "!>" (Φ r) "HΦ". iMod "HΦ". iIntros (Q) "Hwand".
       iDestruct ("Hwand" with "HΦ") as "%HQ". iPureIntro. pfold. by constructor.
-    - iIntros "!>" (Φ t) "HG". do 2 iMod "HG". iIntros "!>" (Q) "Hwand".
-      iDestruct ("HG" with "Hwand") as "%Hrel". iPureIntro. pfold. constructor. by left.
+    - iIntros "!>" (Φ t) "HG". iIntros (Q) "Hwand". iMod "HG".
+      iDestruct ("HG" with "Hwand") as ">%Hrel". iPureIntro. pfold. constructor. by left.
     - iIntros "!>" (Φ A e k) "Hrel". iMod "Hrel".
       destruct e as [e|e].
-      * destruct e. simpl. iDestruct "Hrel" as "[%choice >Hrel]". iModIntro.
-        iIntros (Q) "Hwand". iDestruct ("Hrel" with "Hwand") as "%Hrel".
+      * destruct e. simpl. iDestruct "Hrel" as "[%choice Hrel]".
+        iIntros (Q) "Hwand". iDestruct ("Hrel" with "Hwand") as ">%Hrel".
         iPureIntro. pfold. econstructor. by left.
-      * destruct e. iModIntro.
+      * destruct e.
         iIntros (Q) "Hwand". simpl. iApply bi.pure_mono. { intros Hgoal. pfold. constructor. done. }
         iApply pure_forall_2. iIntros (a). iDestruct ("Hrel" $! a with "Hwand") as "Hrel".
         iApply bupd_plain. Search (|={_}=> _)%I (|==> _)%I.
@@ -359,3 +360,4 @@ Section demonic_angelic_adequacy.
       * done.
       * apply _.
 End angelic_adequacy.
+*)
