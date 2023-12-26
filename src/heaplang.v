@@ -1,6 +1,6 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion.
-From iris.itree Require Import threadpool choice state handler.
+From iris.itree Require Import threadpool choice ub state handler.
 From iris.prelude Require Import prelude.
 From iris Require Import gmap_view.
 From iris.base_logic.lib Require Import ghost_var.
@@ -371,8 +371,6 @@ Definition state_init_heap (l : loc) (n : Z) (v : val) (σ : state) : state :=
   state_upd_heap (λ h, heap_array l (replicate (Z.to_nat n) v) ∪ h) σ.
 
 (* TODO: This demonic choice should be angelic. Have separate UB. *)
-Definition ub {R : Type} `{demonicE -< E} : itree E R :=
-  vis (EDemonic Empty_set) (λ (a : Empty_set), match a with end).
 
 (* TODO: Use stdpp's notation *)
 Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
@@ -385,7 +383,7 @@ Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z en
 Notation "x ;; z" := (ITree.bind x (fun _ => z))
   (at level 100, z at level 200, right associativity) : itree_scope.
 
-Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state.
+Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' ubE.
 
 Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   match e with
@@ -585,5 +583,5 @@ Section heaplangH.
   Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
     own heaplangH_name (gmap_view_auth (DfracOwn 1) (id <$> σ.(heap))).
 
-  Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state.
+  Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
 End heaplangH.
