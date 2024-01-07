@@ -93,6 +93,12 @@ Proof.
   - apply eqitree_inv_Tau_r in H as [t [H _]]. discriminate.
 Qed.
 
+Lemma eqit_flip' {R E} b1 b2 (t1 t2 : itree E R) :
+  eqit (=) b1 b2 t1 t2 → eqit (=) b2 b1 t2 t1.
+Proof.
+  intros Heqit. apply eqit_flip. eapply eqit_mon; last apply Heqit; eauto. by intros.
+Qed.
+
 Ltac simplify_obs :=
   repeat match goal with
   | H : RetF _ = observe _ |- _ =>

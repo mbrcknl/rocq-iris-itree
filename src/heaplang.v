@@ -1,9 +1,10 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
-From ITree Require Import ITree Recursion.
-From iris.itree Require Import threadpool choice ub state handler.
+From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
+From iris.itree Require Import wpi threadpool choice ub state handler.
 From iris.prelude Require Import prelude.
 From iris Require Import gmap_view.
 From iris.base_logic.lib Require Import ghost_var.
+From iris.proofmode Require Import proofmode.
 
 Record loc := Loc { loc_car : Z }.
 
@@ -323,7 +324,7 @@ Record state : Type := {
   heap: gmap loc (option val);
 }.
 
-Definition state_upd_heap (f: gmap loc (option val) → gmap loc (option val)) (σ: state) : state :=
+Definition state_upd_heap (f: gmap loc (option val) → gmap loc (option val)) (σ : state) : state :=
   {| heap := f σ.(heap) |}.
 Global Arguments state_upd_heap _ !_ /.
 
@@ -584,4 +585,19 @@ Section heaplangH.
     own heaplangH_name (gmap_view_auth (DfracOwn 1) (id <$> σ.(heap))).
 
   Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
+
+  Lemma wpi_Fork e :
+    WPi compile_expr e @ heaplangH; ⊤ {{ _, True }} -∗
+    WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ _, True }}.
+  Proof.
+    iIntros "Hwp". iEval (rewrite /compile_expr rec_as_interp /= interp_bind ).
+    iApply wpi_bind.
+    setoid_rewrite interp_trigger. iApply (wpi_yield (H := heaplangH)).
+    rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
+    rewrite bind_trigger. iApply (wpi_fork (H := heaplangH)). iSplitR.
+    - rewrite interp_ret. by iApply wpi_ret.
+    - rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger. simpl.
+      iApply wpi_wand; last done. iIntros (r) "_". rewrite interp_bind. iApply wpi_bind.
+      setoid_rewrite interp_trigger. simpl. iApply (wpi_kill (H := heaplangH)).
+  Qed.
 End heaplangH.

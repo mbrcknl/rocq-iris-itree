@@ -233,11 +233,11 @@ Section wp_itree.
   Qed.
 
   (* TODO: Don't use instances for temporary class definitions. *)
-  Global Instance wpi_ext_unidirectional_emp_mask R :
-    Proper (eutt (=) ==> (=) ==> (⊢)) (wpi (R:=R) H).
+  Global Instance wpi_ext_unidirectional_emp_mask R b1 b2 :
+    Proper (eqit (=) b1 b2 ==> (=) ==> (⊢)) (wpi (E:=E) (R:=R) H).
   Proof.
     iIntros (t1 t2 Hbisim Φ Φ' <-).
-    pose (G := λ (t1 : leibnizO (itree E R)) (Φ : R -d> iPropO Σ), (∀ t2, ⌜t1 ≈ t2⌝ → WPi t2 @ H {{ Φ }})%I).
+    pose (G := λ (t1 : leibnizO (itree E R)) (Φ : R -d> iPropO Σ), (∀ t2, ⌜eqit (=) b1 b2 t1 t2⌝ → WPi t2 @ H {{ Φ }})%I).
     iAssert (∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ)%I as "Hint".
     - iApply (wpi_iter_emp_mask G); first solve_proper.
       clear Φ. iModIntro. iIntros (t Φ) "Hwp". iIntros (t') "%Ht". rewrite wpi_unfold_emp_mask /wpiF.
@@ -254,30 +254,13 @@ Section wp_itree.
       * rewrite wpi_unfold_emp_mask/wpiF. iModIntro. by iApply "IH".
     - iIntros "Hwp". rewrite /G. simpl. iSpecialize ("Hint" with "Hwp"). by iApply "Hint".
   Qed.
-  Global Instance wpi_proper_emp_mask R :
-    Proper (eutt (=) ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi (E:=E) (R:=R) H).
+  Global Instance wpi_proper_emp_mask R b1 b2 :
+    Proper (eqit (=) b1 b2 ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi (E:=E) (R:=R) H).
   Proof.
     intros t1 t2 Hbisim Φ1 Φ2 HΦ.
     iSplit.
-    - iIntros "Hwp". rewrite Hbisim HΦ //.
-    - iIntros "Hwp". rewrite Hbisim HΦ //.
-  Qed.
-  Global Instance wpi_proper_emp_mask' R :
-    Proper (eqit (=) false false ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi (E:=E) (R:=R) H).
-  Proof.
-    intros t1 t2 Hbisim Φ1 Φ2 HΦ.
-    iSplit.
-    - iIntros "Hwp". rewrite Hbisim HΦ //.
-    - iIntros "Hwp". rewrite Hbisim HΦ //.
-  Qed.
-
-  Global Instance wpi_proper_eqit_emp_mask R :
-    Proper ((eqit (E:=E) (=) false false) ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi H).
-  Proof.
-    intros t1 t2 Hbisim Φ1 Φ2 HΦ.
-    assert (Hbisim' : t1 ≈ t2).
-    - rewrite Hbisim //.
-    - rewrite Hbisim' HΦ //.
+    - iIntros "Hwp". setoid_rewrite Hbisim. rewrite HΦ //.
+    - iIntros "Hwp". apply eqit_flip' in Hbisim. setoid_rewrite Hbisim. rewrite HΦ //.
   Qed.
 
   (* Structural rules. *)

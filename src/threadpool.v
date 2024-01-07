@@ -75,17 +75,17 @@ Section wp_threadpool.
   This means that you cannot step over an [EYield] if there are open
   invariants. It amounts to the typical requirement of atomicity in the
   invariant opening rule known from "normal Iris". *)
-  Lemma wpi_yield {R} (k : unit → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    WPi (k ()) @ H; ⊤ {{ Φ }} -∗
-    WPi (vis EYield k) @ H; ⊤ {{ Φ }}.
+  Lemma wpi_yield (Φ : () → iProp Σ) :
+    Φ () -∗
+    WPi (trigger EYield) @ H; ⊤ {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_vis. iApply is_inH. simpl.
+    iIntros "HΦ". iApply wpi_vis. iApply is_inH. simpl.
     iApply fupd_mask_intro_subseteq; first done.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    rewrite -wpi_clear_mask. iApply wpi_update. iMod "Hfupd". by iMod "Hwp".
+    iApply wpi_ret. by iMod "Hfupd".
   Qed.
 
-  Lemma wpi_kill {R} (k : Empty_set → itree E R) (M : coPset) (Φ : R → iProp Σ) :
+  Lemma wpi_kill {R} (k : Empty_set → itree E R) (Φ : R → iProp Σ) :
     ⊢ WPi (vis EKillThread k) @ H; ⊤ {{ Φ }}.
   Proof.
     iApply wpi_vis. iApply is_inH. simpl.
@@ -1383,7 +1383,7 @@ Section threadpool_adequacy.
     { rewrite wptp_unfold /=. iApply wptpF_mono; last done. iModIntro. clear.
       iIntros (t tp Φ) "Hwptp". iDestruct "Hwptp" as "[$ _]".
     }
-    destruct tid as [|tid].
+    destruct tid as [|].
     - iIntros (tp') "Hwptp'".
       iDestruct (wptp_wptpIH_right with "Hwptp'") as "[_ Hwptp']". by iApply "Hwptp'".
     - iSplit.
