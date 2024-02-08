@@ -2,7 +2,7 @@ From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.itree Require Import wpi threadpool choice ub state handler.
 From iris.prelude Require Import prelude.
-From iris Require Import gmap_view.
+From iris Require Import ghost_map.
 From iris.base_logic.lib Require Import ghost_var.
 From iris.proofmode Require Import proofmode.
 
@@ -321,25 +321,25 @@ Definition bin_op_eval (op : bin_op) (v1 v2 : val) : option val :=
 
 (** The state: heaps of [option val]s, with [None] representing deallocated locations. *)
 Record state : Type := {
-  heap: gmap loc (option val);
+  heap: gmap loc val;
 }.
 
-Definition state_upd_heap (f: gmap loc (option val) → gmap loc (option val)) (σ : state) : state :=
+Definition state_upd_heap (f: gmap loc val → gmap loc val) (σ : state) : state :=
   {| heap := f σ.(heap) |}.
 Global Arguments state_upd_heap _ !_ /.
 
-Fixpoint heap_array (l : loc) (vs : list val) : gmap loc (option val) :=
+Fixpoint heap_array (l : loc) (vs : list val) : gmap loc val :=
   match vs with
   | [] => ∅
-  | v :: vs' => {[l := Some v]} ∪ heap_array (l +ₗ 1) vs'
+  | v :: vs' => {[l := v]} ∪ heap_array (l +ₗ 1) vs'
   end.
 
-Lemma heap_array_singleton l v : heap_array l [v] = {[l := Some v]}.
+Lemma heap_array_singleton l v : heap_array l [v] = {[l := v]}.
 Proof. by rewrite /heap_array right_id. Qed.
 
 Lemma heap_array_lookup l vs ow k :
   heap_array l vs !! k = Some ow ↔
-  ∃ j w, (0 ≤ j)%Z ∧ k = l +ₗ j ∧ ow = Some w ∧ vs !! (Z.to_nat j) = Some w.
+  ∃ j w, (0 ≤ j)%Z ∧ k = l +ₗ j ∧ ow = w ∧ vs !! (Z.to_nat j) = Some w.
 Proof.
   revert k l; induction vs as [|v' vs IH]=> l' l /=.
   { rewrite lookup_empty. naive_solver lia. }
@@ -358,7 +358,7 @@ Proof.
     auto with lia.
 Qed.
 
-Lemma heap_array_map_disjoint (h : gmap loc (option val)) (l : loc) (vs : list val) :
+Lemma heap_array_map_disjoint (h : gmap loc val) (l : loc) (vs : list val) :
   (∀ i, (0 ≤ i)%Z → (i < length vs)%Z → h !! (l +ₗ i) = None) →
   (heap_array l vs) ##ₘ h.
 Proof.
@@ -371,9 +371,6 @@ Qed.
 Definition state_init_heap (l : loc) (n : Z) (v : val) (σ : state) : state :=
   state_upd_heap (λ h, heap_array l (replicate (Z.to_nat n) v) ∪ h) σ.
 
-(* TODO: This demonic choice should be angelic. Have separate UB. *)
-
-(* TODO: Use stdpp's notation *)
 Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
 Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z))
   (at level 20, y at level 100, z at level 200,
@@ -451,10 +448,13 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       match thread with
       | CurrentThread => Ret (LitV LitUnit)
       | NewThread =>
-          (* TODO: Should threads be allowed to return anything they would like? *)
-          call e;;
-          x ← trigger EKillThread : itree _ Empty_set;
-          match x with end
+          v ← call e;
+          match v with
+          | LitV LitUnit =>
+              x ← trigger EKillThread : itree _ Empty_set;
+              match x with end
+          | _ => ub
+          end
       end
   | AllocN ne e =>
       v ← call e;
@@ -475,8 +475,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
-          | Some (Some v) =>
-              trigger (ESetState (state_upd_heap <[l:=None]> σ));;
+          | Some _ =>
+              trigger (ESetState (state_upd_heap (delete l) σ));;
               Ret (LitV LitUnit)
           | _ => ub
           end
@@ -489,7 +489,7 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
-          | Some (Some v) =>
+          | Some v =>
               Ret v
           | _ => ub
           end
@@ -503,8 +503,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
-          | Some (Some w) =>
-              trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
+          | Some w =>
+              trigger (ESetState (state_upd_heap <[l:=v]> σ));;
               Ret (LitV LitUnit)
           | _ => ub
           end
@@ -518,8 +518,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
-          | Some (Some w) =>
-              trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
+          | Some w =>
+              trigger (ESetState (state_upd_heap <[l:=v]> σ));;
               Ret w
           | _ => ub
           end
@@ -534,11 +534,11 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
-          | Some (Some w) =>
+          | Some w =>
               (* Asserts that equality coincides with the equality of the language. *)
               trigger (EDemonic (vals_compare_safe v1 w));;
               if decide (v1 = w) then
-                trigger (ESetState (state_upd_heap <[l:=Some v2]> σ));;
+                trigger (ESetState (state_upd_heap <[l:=v2]> σ));;
                 Ret w
               else Ret w
           | _ => ub
@@ -553,8 +553,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
-          | Some (Some (LitV (LitInt n))) =>
-              trigger (ESetState (state_upd_heap <[l:=Some (LitV (LitInt (n + v)))]> σ));;
+          | Some (LitV (LitInt n)) =>
+              trigger (ESetState (state_upd_heap <[l:=LitV (LitInt (n + v))]> σ));;
               Ret (LitV (LitInt n))
           | _ => ub
           end
@@ -565,39 +565,34 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
 
 Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
 
-Class heaplangHPreG (Σ : gFunctors) := HeapLangHPreG {
-  heaplangH_pre_ghost_varG :> inG Σ (gmap_viewUR loc (optionO (leibnizO val)));
-}.
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
-  heaplangH_ghost_varG :> inG Σ (gmap_viewUR loc (optionO (leibnizO val)));
+  heaplangH_ghost_varG :> ghost_mapG Σ loc val;
   heaplangH_name : gname;
 }.
 Definition heaplangHΣ : gFunctors :=
-  #[ GFunctor (gmap_viewUR loc (optionO (leibnizO val))) ].
-Global Instance subG_heaplangHΣ Σ :
-  subG heaplangHΣ Σ → heaplangHPreG Σ.
-Proof. solve_inG. Qed.
+  ghost_mapΣ loc val.
 
 Section heaplangH.
   Context {Σ} `{!stateHGS Σ state} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
   Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
-    own heaplangH_name (gmap_view_auth (DfracOwn 1) (id <$> σ.(heap))).
+    ghost_map_auth heaplangH_name 1 σ.(heap).
 
   Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
 
-  Lemma wpi_Fork e :
-    WPi compile_expr e @ heaplangH; ⊤ {{ _, True }} -∗
-    WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ _, True }}.
+  Lemma wpi_Fork e Φ :
+    Φ (LitV LitUnit) -∗
+    WPi compile_expr e @ heaplangH; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
+    WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
-    iIntros "Hwp". iEval (rewrite /compile_expr rec_as_interp /= interp_bind ).
+    iIntros "HΦ Hwp". iEval (rewrite /compile_expr rec_as_interp /= interp_bind ).
     iApply wpi_bind.
     setoid_rewrite interp_trigger. iApply (wpi_yield (H := heaplangH)).
     rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
-    rewrite bind_trigger. iApply (wpi_fork (H := heaplangH)). iSplitR.
+    rewrite bind_trigger. iApply (wpi_fork (H := heaplangH)). iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.
     - rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger. simpl.
-      iApply wpi_wand; last done. iIntros (r) "_". rewrite interp_bind. iApply wpi_bind.
+      iApply wpi_wand; last done. iIntros (r ->). rewrite interp_bind. iApply wpi_bind.
       setoid_rewrite interp_trigger. simpl. iApply (wpi_kill (H := heaplangH)).
   Qed.
 End heaplangH.
