@@ -20,11 +20,9 @@ Section wp_itree.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
 
   (** The definition of the weakest precondition, prior to taking the fixpoint. *)
-  (* TODO: Uncurry this, and don't use the -n> to iProp *)
-  (* TODO: Use unicode notation for [->] across this and other files. *)
   Definition wpiF (H : iHandler Σ E)
-    (wpi : leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ) :
-           leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ :=
+    (wpi : leibnizO (itree E R) → (R -d> iPropO Σ) → iPropO Σ) :
+           leibnizO (itree E R) → (R -d> iPropO Σ) → iPropO Σ :=
     λ t Φ,
       (|={∅}=>
         match observe t with
@@ -37,8 +35,8 @@ Section wp_itree.
         end
       )%I.
   Definition wpiF' (H : iHandler Σ E)
-    (wpi : leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ) :
-           leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ :=
+    (wpi : leibnizO (itree E R) * (R -d> iPropO Σ) → iPropO Σ) :
+           leibnizO (itree E R) * (R -d> iPropO Σ) → iPropO Σ :=
     λ pair, let (t, Φ) := pair in wpiF H (curry wpi) t Φ.
 
   Lemma wpiF_wand H wpi t Φ Ψ :
@@ -186,7 +184,7 @@ Section wp_itree.
 
   (* Induction principles for WPi. *)
 
-  Lemma wpi_ind_emp_mask {R} (G : itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_ind_emp_mask {R} (G : itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ t, NonExpansive (G t)) →
     (□ ∀ t Φ, wpiF H (λ t' Ψ, G t' Ψ ∧ WPi t' @ H {{ Ψ }}) t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ.
@@ -198,7 +196,7 @@ Section wp_itree.
     iIntros "!>" ([??]) "Hwp" => /=. by iApply "HPre".
   Qed.
 
-  Lemma wpi_iter_emp_mask {R} (G : itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_iter_emp_mask {R} (G : itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ t, NonExpansive (G t)) →
     (□ ∀ t Φ, wpiF H G t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H {{ Φ }} -∗ G t Φ.
@@ -207,7 +205,7 @@ Section wp_itree.
     iApply "HPre". iApply (wpiF_mono with "[] Hwp").
     iIntros "!>" (??) "[? _]". by iFrame.
   Qed.
-  Lemma wpi_iter_emp_mask' {R} (G : itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_iter_emp_mask' {R} (G : itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ t, NonExpansive (G t)) →
     (□ ∀ Φ r, (|={∅}=> Φ r) -∗ G (Ret r) Φ) -∗
     (□ ∀ Φ t, (|={∅}=> G t Φ) -∗ G (Tau t) Φ) -∗
@@ -407,7 +405,7 @@ Section wp_itree_mask.
 
   (* Induction principles for WPi. *)
 
-  Lemma wpi_ind {R} (G : itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_ind {R} (G : itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ t, NonExpansive (G t)) →
     (□ ∀ t Φ, wpiF H (λ t' Ψ, G t' Ψ ∧ WPi t' @ H; ∅ {{ Ψ }}) t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H; ∅ {{ Φ }} -∗ G t Φ.
@@ -420,7 +418,7 @@ Section wp_itree_mask.
     - iDestruct "Hwp" as "[_ Hwp]". rewrite wpi_update_emp_mask wpi_update_post_emp_mask //.
   Qed.
 
-  Lemma wpi_iter {R} (G : itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_iter {R} (G : itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ t, NonExpansive (G t)) →
     (□ ∀ t Φ, wpiF H G t Φ -∗ G t Φ) -∗
     ∀ t Φ, WPi t @ H; ∅ {{ Φ }} -∗ G t Φ.
@@ -429,7 +427,7 @@ Section wp_itree_mask.
     iApply "HPre". iApply (wpiF_mono with "[] Hwp").
     iIntros "!>" (??) "[? _]". by iFrame.
   Qed.
-  Lemma wpi_iter' {R} (G : itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_iter' {R} (G : itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ t, NonExpansive (G t)) →
     (□ ∀ Φ r, (|={∅}=> Φ r) -∗ G (Ret r) Φ) -∗
     (□ ∀ Φ t, (|={∅}=> G t Φ) -∗ G (Tau t) Φ) -∗

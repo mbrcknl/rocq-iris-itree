@@ -15,8 +15,6 @@ From ITree Require Import ITree.
 From ITree Require Import Basics.Monad.
 From ITree Require Import Eqit.
 
-(* TODO: Use syntactic sugar such as stdpp's Equiv (≡) and (>>=). *)
-
 Variant demonicE : Type → Type :=
   | EDemonic (A : Type) : demonicE A.
 Variant angelicE : Type → Type :=

@@ -280,8 +280,8 @@ Section wptp.
     (tid : nat)
     (t : itree (threadpoolE +' E) R)
     (tp : list (itree (threadpoolE +' E) R))
-    (Φ : leibnizO R -> iPropO Σ)
-    (wptp : leibnizO (option nat) -> leibnizO (list (itree (threadpoolE +' E) R)) -> (leibnizO R -> iPropO Σ) -> iPropO Σ)
+    (Φ : leibnizO R → iPropO Σ)
+    (wptp : leibnizO (option nat) → leibnizO (list (itree (threadpoolE +' E) R)) → (leibnizO R → iPropO Σ) → iPropO Σ)
     (A : Type)
     (e : threadpoolE A)
     : (A → itree (threadpoolE +' E) R) → iProp Σ :=
@@ -316,8 +316,8 @@ Section wptp.
   (** The definition of the weakest precondition, prior to taking the least
   fixpoint. *)
   Definition wptpF (H : iHandler Σ E)
-    (wptp : leibnizO (option nat) -> leibnizO (list (itree (threadpoolE +' E) R)) -> (R -d> iPropO Σ) -> iPropO Σ) :
-            leibnizO (option nat) -> leibnizO (list (itree (threadpoolE +' E) R)) -> (R -d> iPropO Σ) -> iPropO Σ :=
+    (wptp : leibnizO (option nat) → leibnizO (list (itree (threadpoolE +' E) R)) → (R -d> iPropO Σ) → iPropO Σ) :
+            leibnizO (option nat) → leibnizO (list (itree (threadpoolE +' E) R)) → (R -d> iPropO Σ) → iPropO Σ :=
     λ tid tp Φ, (
       match tid with
       (** The threadpool is suspended but can be resumed at any thread in it
@@ -342,8 +342,8 @@ Section wptp.
       end
     )%I.
   Definition wptpF' (H : iHandler Σ E)
-    (wptp : leibnizO (option nat) * leibnizO (list (itree (threadpoolE +' E) R)) * (R -d> iPropO Σ) -> iPropO Σ) :
-            leibnizO (option nat) * leibnizO (list (itree (threadpoolE +' E) R)) * (R -d> iPropO Σ) -> iPropO Σ :=
+    (wptp : leibnizO (option nat) * leibnizO (list (itree (threadpoolE +' E) R)) * (R -d> iPropO Σ) → iPropO Σ) :
+            leibnizO (option nat) * leibnizO (list (itree (threadpoolE +' E) R)) * (R -d> iPropO Σ) → iPropO Σ :=
     λ pair, match pair with (t, tp, Φ) => wptpF H (curry3 wptp) t tp Φ end.
 
   Global Instance wptpF_ne n H :
@@ -416,7 +416,7 @@ Section wptp.
     - intros wpi HneΦ n [t Φ] [t' Φ'] [-> HΦ]. f_equiv. simpl. by f_equiv.
   Qed.
 
-  Definition wptp (H : iHandler Σ E) (tid : option nat) (tp : list (itree (threadpoolE +' E) R)) (Φ : R -> iPropO Σ) : iProp Σ :=
+  Definition wptp (H : iHandler Σ E) (tid : option nat) (tp : list (itree (threadpoolE +' E) R)) (Φ : R → iPropO Σ) : iProp Σ :=
     bi_least_fixpoint (wptpF' H) ((tid, tp), Φ).
 
   Lemma wptp_unfold H tid tp Φ :
@@ -444,7 +444,7 @@ End wptp.
 Section wptp_induction.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
 
-  Lemma wptp_ind (G : option nat -> list (itree (threadpoolE +' E) R) -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wptp_ind (G : option nat → list (itree (threadpoolE +' E) R) → (R -d> iPropO Σ) → iPropO Σ):
     (∀ t tp, NonExpansive (G t tp)) →
     (□ ∀ tid tp Φ, wptpF H (λ tid' tp' Ψ, G tid' tp' Ψ ∧ wptp H tid' tp' Ψ) tid tp Φ -∗ G tid tp Φ) -∗
     ∀ tid tp Φ, wptp H tid tp Φ -∗ G tid tp Φ.
@@ -456,7 +456,7 @@ Section wptp_induction.
     iIntros "!>" ([[??]?]) "Hwp" => /=. by iApply "HPre".
   Qed.
 
-  Lemma wptp_iter (G : option nat -> list (itree (threadpoolE +' E) R) -> (R -d> iPropO Σ) -> iPropO Σ) :
+  Lemma wptp_iter (G : option nat → list (itree (threadpoolE +' E) R) → (R -d> iPropO Σ) → iPropO Σ) :
     (∀ tid tp, NonExpansive (G tid tp)) →
     (□ ∀ tid tp Φ, wptpF H G tid tp Φ -∗ G tid tp Φ) -∗
     ∀ tid tp Φ, wptp H tid tp Φ -∗ G tid tp Φ.
@@ -521,8 +521,8 @@ Section wpi_masked_ind.
   (** Recursive template whose fixpoint is [|={⊤, ∅}=> WPi t @ H; ∅ {{ Φ }}] when
   [masked = true] and [WPi t @ H; ∅ {{ Φ }}] when [masked = false]. *)
   Definition wpiF_masked (H : iHandler Σ E)
-    (wpi : leibnizO bool -> leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ) :
-           leibnizO bool -> leibnizO (itree E R) -> (R -d> iPropO Σ) -> iPropO Σ :=
+    (wpi : leibnizO bool → leibnizO (itree E R) → (R -d> iPropO Σ) → iPropO Σ) :
+           leibnizO bool → leibnizO (itree E R) → (R -d> iPropO Σ) → iPropO Σ :=
     (λ masked t Φ, if masked then
         (* The case where [masked = true], we just do a mask changing update
         and call the unmasked case recursively. *)
@@ -533,8 +533,8 @@ Section wpi_masked_ind.
         wpiF H (wpi false) t Φ
     )%I.
   Definition wpiF_masked' (H : iHandler Σ E)
-    (wpi : leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ) :
-           leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) -> iPropO Σ :=
+    (wpi : leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) → iPropO Σ) :
+           leibnizO bool * leibnizO (itree E R) * (R -d> iPropO Σ) → iPropO Σ :=
     λ pair, let (rest, Φ) := pair in let (masked, t) := rest in wpiF_masked H (curry3 wpi) masked t Φ.
 
   Global Instance wpiF_masked_ne n H :
@@ -585,7 +585,7 @@ Section wpi_masked_ind.
     iApply wpiF_mono; last done. clear. by iIntros "!>" (t Φ) "Hwp".
   Qed.
 
-  Lemma wpi_iter_masked' (H : iHandler Σ E) (G : bool -> itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_iter_masked' (H : iHandler Σ E) (G : bool → itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ b t, NonExpansive (G b t)) →
     (□ ∀ t Φ, wpiF H (G false) t Φ -∗ G false t Φ) -∗
     (□ ∀ t Φ, (|={⊤, ∅}=> G false t Φ) -∗ G true t Φ) -∗
@@ -601,7 +601,7 @@ Section wpi_masked_ind.
     - by iApply "Hnomask".
   Qed.
 
-  Lemma wpi_iter_masked (H : iHandler Σ E) (G : bool -> itree E R -> (R -d> iPropO Σ) -> iPropO Σ):
+  Lemma wpi_iter_masked (H : iHandler Σ E) (G : bool → itree E R → (R -d> iPropO Σ) → iPropO Σ):
     (∀ b t, NonExpansive (G b t)) →
     (□ ∀ t Φ, wpiF H (G false) t Φ -∗ G false t Φ) -∗
     (□ ∀ t Φ, (|={⊤, ∅}=> G false t Φ) -∗ G true t Φ) -∗

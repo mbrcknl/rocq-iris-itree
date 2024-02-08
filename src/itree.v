@@ -72,7 +72,7 @@ Proof.
 Qed.
 
 Lemma translate_Ret_inv {E1 E2 R} (f : E1 ~> E2) (t : itree E1 R) (r : R) :
-  translate f t ≅ Ret r ->
+  translate f t ≅ Ret r →
   t ≅ Ret r.
 Proof.
   intros. rewrite (itree_eta t) in H. setoid_rewrite (itree_eta t).
@@ -83,7 +83,7 @@ Proof.
 Qed.
 
 Lemma translate_Tau_inv {E1 E2 R} (f : E1 ~> E2) (t1 : itree E1 R) (t2' : itree E2 R) :
-  translate f t1 ≅ Tau t2' ->
+  translate f t1 ≅ Tau t2' →
   ∃ t1', t1 ≅ Tau t1' ∧ translate f t1' ≅ t2'.
 Proof.
   intros. rewrite (itree_eta t1) in H. setoid_rewrite (itree_eta t1).
