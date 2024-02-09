@@ -2,9 +2,10 @@ From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.itree Require Import wpi threadpool choice ub state handler.
 From iris.prelude Require Import prelude.
-From iris Require Import ghost_map.
+From iris Require Import gen_heap.
 From iris.base_logic.lib Require Import ghost_var.
 From iris.proofmode Require Import proofmode.
+From iris.bi.lib Require Import fractional.
 
 Record loc := Loc { loc_car : Z }.
 
@@ -565,18 +566,26 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
 
 Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
 
+Class heaplangHPreG (Σ : gFunctors) := HeapLangHPreG {
+  heaplangH_pre_ghost_varG :> gen_heapGpreS loc val Σ;
+}.
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
-  heaplangH_ghost_varG :> ghost_mapG Σ loc val;
-  heaplangH_name : gname;
+  heaplangH_ghost_varGS :> gen_heapGS loc val Σ;
 }.
 Definition heaplangHΣ : gFunctors :=
-  ghost_mapΣ loc val.
+  gen_heapΣ loc val.
+Global Instance subG_heaplangHΣ Σ :
+  subG heaplangHΣ Σ → heaplangHPreG Σ.
+Proof. solve_inG. Qed.
+
+Global Notation "l ↦ v" := (mapsto l (DfracOwn 1) v)
+  (at level 20, format "l  ↦  v") : bi_scope.
 
 Section heaplangH.
   Context {Σ} `{!stateHGS Σ state} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
   Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
-    ghost_map_auth heaplangH_name 1 σ.(heap).
+    gen_heap_interp σ.(heap).
 
   Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
 
@@ -595,4 +604,28 @@ Section heaplangH.
       iApply wpi_wand; last done. iIntros (r ->). rewrite interp_bind. iApply wpi_bind.
       setoid_rewrite interp_trigger. simpl. iApply (wpi_kill (H := heaplangH)).
   Qed.
+
+  Lemma wpi_AllocN ev v en n :
+    (0 < n)%Z →
+    WPi compile_expr en @ heaplangH; ⊤ {{ n', ⌜n' = LitV (LitInt n)⌝ }} -∗
+    WPi compile_expr ev @ heaplangH; ⊤ {{ v', ⌜v' = v⌝ }} -∗
+    WPi compile_expr (AllocN en ev) @ heaplangH; ⊤
+    {{ l', ∃ l, ⌜l' = LitV (LitLoc l)⌝ ∧ [∗ list] i ∈ seq 0 (Z.to_nat n),
+        (l +ₗ (i : nat)) ↦ v ∗ meta_token (l +ₗ (i : nat)) ⊤ }}.
+  Proof.
+    iIntros (Hpos) "Hn Hv".
+    iEval (rewrite /compile_expr rec_as_interp /= interp_bind).
+    iApply wpi_bind.
+    setoid_rewrite interp_trigger. iApply (wpi_wand with "[Hn] Hv"). iIntros (r ->).
+    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
+    iApply (wpi_wand with "[] Hn"). iIntros (r ->).
+    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
+    iApply (wpi_yield (H := heaplangH)).
+    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
+    iApply (wpi_get (H := heaplangH)).
+    iIntros (s) "$ !>". iApply wpi_ret.
+    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
+    iApply (wpi_demonic (H := heaplangH)). iIntros (l). iApply wpi_ret.
+    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
+    iApply (wpi_set (H := heaplangH)). iIntros (s') "Hstate".
 End heaplangH.
