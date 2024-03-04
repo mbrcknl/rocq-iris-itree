@@ -99,6 +99,12 @@ Proof.
   intros Heqit. apply eqit_flip. eapply eqit_mon; last apply Heqit; eauto. by intros.
 Qed.
 
+Lemma map_vis {E A B T} (f : A → B) (e : E T) (k : T → itree E A) :
+  @ITree.map E _ _ f (Vis e k) ≅ Vis e (λ a, ITree.map f (k a)).
+Proof.
+  rewrite /ITree.map bind_vis //.
+Qed.
+
 Ltac simplify_obs :=
   repeat match goal with
   | H : RetF _ = observe _ |- _ =>

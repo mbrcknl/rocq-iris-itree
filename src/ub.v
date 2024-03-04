@@ -13,16 +13,15 @@ From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 From Paco Require Import paco2.
 From ITree Require Import ITree.
-From ITree Require Import Basics.Monad.
 From ITree Require Import Eqit.
+From ITree Require Import EqAxiom.
 
-Definition voidE : Type → Type := const void.
-
-(* TODO: Use syntactic sugar such as stdpp's Equiv (≡) and (>>=). *)
-
+(** An event type for Undefined Behavior. *)
 Variant ubE : Type → Type :=
+  (** Event for exhibiting Undefined Behavior (crash unsafely). *)
   | EUb : ubE void.
 
+(** Exhibit Undefined Behavior (crash unsafely). *)
 Definition ub {R : Type} `{ubE -< E} : itree E R :=
   vis EUb (λ (a : Empty_set), match a with end).
 
@@ -41,87 +40,98 @@ Section handler.
   Qed.
 End handler.
 
+(** "Sandbox" an [itree] with UB events by replacing UB with returning [None]
+("crashing safely"). *)
+Definition sandbox {R E} (t : itree (ubE +' E) R) : itree E (option R) :=
+  ITree.iter (λ (t : itree (ubE +' E) (option R)),
+    match observe t with
+    | RetF r => Ret (inr r)
+    | TauF t => Ret (inl t)
+    | VisF (inl1 EUb) k => Ret (inr None)
+    | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
+    end) (ITree.map Some t).
+
+Lemma sandbox_ret {E R} (r : R) :
+  sandbox (Ret r) ≅ (Ret (Some r) : itree E (option R)).
+Proof.
+  rewrite /sandbox.
+  pose (Heq := map_ret (E:=ubE +' E) Some r).
+  apply bisimulation_is_eq in Heq as ->.
+  rewrite unfold_iter bind_ret_l //.
+Qed.
+
+Lemma sandbox_tau {E R} (t : itree (ubE +' E) R) :
+  sandbox (Tau t) ≅ Tau (sandbox t).
+Proof.
+  rewrite /sandbox.
+  pose (Heq := map_tau (E:=ubE +' E) (Some : R -> option R) t).
+  apply bisimulation_is_eq in Heq as ->.
+  rewrite unfold_iter bind_ret_l //.
+Qed.
+
+Lemma sandbox_ub {E R} (k : ∅ → itree (ubE +' E) R) :
+  sandbox (Vis (inl1 EUb) k) ≅ Ret None.
+Proof.
+  rewrite /sandbox.
+  pose (Heq := map_vis (E:=ubE +' E) (Some : R -> option R) (inl1 EUb) k).
+  apply bisimulation_is_eq in Heq.
+  rewrite Heq unfold_iter bind_ret_l //.
+Qed.
+
+Lemma sandbox_vis {E R A} (e : E A) (k : A → itree (ubE +' E) R) :
+  sandbox (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (sandbox (k a))).
+Proof.
+  rewrite /sandbox.
+  pose (Heq := map_vis (E:=ubE +' E) (Some : R -> option R) (inr1 e) k).
+  apply bisimulation_is_eq in Heq as ->.
+  rewrite unfold_iter /= bind_bind bind_vis. f_equiv. f_equiv. intros a.
+  rewrite !bind_ret_l //.
+Qed.
+
 Section ub_adequacy.
-  (** TODO: [invGS_gen hlc Σ] should imply [invGpresS Σ]. *)
-  Context `{!invGS_gen hlc Σ} `{invGpreS Σ} {R : Type}.
+  Context {R : Type} {E : Type → Type}.
+  Context `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
 
-  Inductive no_ub : itree ubE R → Prop :=
-  | NoUbRet r :
-    no_ub (Ret r)
-  | NoUbTau t :
-    no_ub t →
-    no_ub (Tau t).
-
-  Inductive returns : itree ubE R → R → Prop :=
-  | ReturnsRet r :
-    returns (Ret r) r
-  | ReturnsTau t r :
-    returns t r →
-    returns (Tau t) r.
-
-  Lemma no_ub_returns t :
-    no_ub t → ∃ r, returns t r.
+  (** Intermediate statement of UB adequacy for empty masks. See below for
+  general statement. *)
+  Theorem ub_adequacy' (t : itree (ubE +' E) R) Φ :
+    WPi t @ ubH ⊕ H; ∅ {{ Φ }} -∗
+    WPi sandbox t @ H; ∅ {{ r,
+      match r with
+      | Some r => Φ r
+      | None => False
+      end
+    }}.
   Proof.
-    induction 1 as [|? ? [? ?]]; eexists; constructor; eauto.
+    iRevert (t Φ). iApply wpi_iter'; first solve_proper.
+    - iIntros "!>" (Φ t) "Hwp". by iEval (rewrite sandbox_ret -wpi_ret').
+    - iIntros "!>" (Φ t) "Hwp". rewrite sandbox_tau -wpi_tau. by iApply wpi_update.
+    - iIntros "!>" (Φ A [[]|e] k) "HH".
+      * simpl. rewrite sandbox_ub. by iApply wpi_ret'.
+      * simpl. rewrite sandbox_vis. iApply wpi_vis.
+        iApply ihandler_mono; last done.
+        + iIntros (a) "Hwp". rewrite wpi_tau. by iApply wpi_update_post.
+        + iIntros "!>" (a) "Hwp". rewrite -wpi_tau. iApply wpi_clear_mask.
+          iMod "Hwp". iModIntro. iApply wpi_wand; last done.
+          iIntros (r). destruct r; by iIntros "Hfalse".
   Qed.
 
-  Lemma ub_adequacy' t Φ :
-    WPi t @ ubH; ∅ {{ Φ }} -∗ |={∅}=> ⌜no_ub t⌝.
+  (** Adequacy theorem for UB. *)
+  Theorem ub_adequacy (t : itree (ubE +' E) R) M Φ :
+    WPi t @ ubH ⊕ H; M {{ Φ }} -∗
+    WPi sandbox t @ H; M {{ r,
+      match r with
+      | Some r => Φ r
+      | None => False
+      end
+    }}.
   Proof.
-    iRevert (t Φ). iApply wpi_iter'.
-    - iIntros "!>" (Φ r) "Hwp". iPureIntro. constructor.
-    - iIntros "!>" (Φ t) ">>%Hwp". iPureIntro. by constructor.
-    - iIntros "!>" (Φ A [] k) ">[]".
+    iIntros "Hwp".
+    rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
+    iMod "Hwp". iModIntro.
+    iPoseProof ub_adequacy' as "Had". iSpecialize ("Had" with "Hwp").
+    iApply wpi_wand; last done. iIntros (r). destruct r.
+    - eauto.
+    - by iIntros "Hfalse".
   Qed.
-
-  (* TODO: Prove full adequacy theorem.
-
-  (** TODO: A lemma like this is in the new Iris, but I need to update. *)
-  Lemma fupd_soundness_gen `{!invGpreS Σ} (φ : Prop) n E1 E2 :
-    (∀ `{Hinv : invGS_gen hlc Σ},
-      £ n ={E1,E2}=∗ ⌜ φ ⌝) →
-    φ.
-  Proof.
-    destruct hlc.
-    - apply fupd_soundness_lc.
-    - intros Hφ.
-      apply (pure_soundness (M:=iResUR Σ) φ).
-      apply fupd_plain_soundness_no_lc with (E1 := E1) (E2 := E2) (m := n).
-      { apply _. }
-      done.
-  Qed.
-
-  Lemma fupd_pure E1 E2 φ :
-    (∀ `{Hinv : invGS_gen hlc Σ}, ⊢@{iProp Σ} |={E1,E2}=> ⌜φ⌝) → φ.
-  Proof.
-    intros Hφ.
-    apply fupd_soundness_gen with (n := 0) (E1 := E1) (E2 := E2).
-    iIntros (Hinv) "_". iApply Hφ.
-  Qed.
-
-  Lemma ub_adequacy'' t Φ :
-    (∀ `{Hinv : invGS_gen hlc Σ}, ⊢ WPi t @ ubH; ∅ {{ r, ⌜Φ r⌝ }}) → ∃ r, returns t r ∧ Φ r.
-  Proof.
-    intros Hwp.
-    assert (Hub : ∀ Hinv : invGS_gen hlc Σ, ⊢@{iProp Σ} |={∅}=> ⌜no_ub t⌝).
-    { iIntros (Hinv). specialize (Hwp Hinv). rewrite ub_adequacy' in Hwp. }
-    rewrite ub_adequacy' in Hwp'. apply fupd_pure in Hwp' as Hub.
-    apply no_ub_returns in Hub as [r Hret]. exists r. split; first done.
-    induction Hret as [|t r Hret IH].
-    - rewrite -wpi_ret' in Hwp. by apply fupd_pure in Hwp.
-    - apply IH.
-      * by rewrite -wpi_tau in Hwp.
-      * apply fupd_pure in Hwp'. inversion Hwp'. eauto.
-  Qed.
-
-    apply fancy_updates.fupd_soundness_gen in Hwp.
-    iRevert (t Φ). iApply wpi_iter'.
-    - iIntros "!>" (Φ r) "Hwp". iPureIntro. constructor.
-    - iIntros "!>" (Φ t) ">>%Hwp". iPureIntro. by constructor.
-    - iIntros "!>" (Φ A [] k) ">[]".
-  Qed.
-
-  (** TODO: Enhance with masks. *)
-
-  *)
 End ub_adequacy.
