@@ -4,7 +4,7 @@ maintainer: "Max Vistrup <contact@maxv.dk>"
 synopsis: "Scaling reasoning about operational semantics using itrees."
 
 depends: [
-  "coq-iris" { (= "dev.2023-10-16.2.5e58df61") }
+  "coq-iris" { (= "dev.2023-10-16.2.5e58df61") | (= "dev") }
   "coq-itree" { (= "5.1.2") }
   "coq-elpi" { (= "1.18.0") | (= "1.19.0") }
 ]

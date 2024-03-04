@@ -34,3 +34,18 @@ build-coq.8.18.0:
   <<: *template
   variables:
     OPAM_PINS: "coq version 8.18.0"
+
+trigger-iris.dev:
+  <<: *template
+  variables:
+    STDPP_REPO: "iris/stdpp"
+    IRIS_REPO: "iris/iris"
+    OPAM_PINS: "coq version 8.18.0   git+https://gitlab.mpi-sws.org/$STDPP_REPO#$STDPP_REV   git+https://gitlab.mpi-sws.org/$IRIS_REPO#$IRIS_REV"
+  except:
+  only:
+    refs:
+    - triggers
+    - schedules
+    - api
+    variables:
+    - $TIMING_AD_HOC_ID == null
