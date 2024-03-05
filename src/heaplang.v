@@ -578,7 +578,7 @@ Global Instance subG_heaplangHΣ Σ :
   subG heaplangHΣ Σ → heaplangHPreG Σ.
 Proof. solve_inG. Qed.
 
-Global Notation "l ↦ v" := (mapsto l (DfracOwn 1) v)
+Global Notation "l ↦ v" := (pointsto l (DfracOwn 1) v)
   (at level 20, format "l  ↦  v") : bi_scope.
 
 Section heaplangH.
@@ -594,13 +594,12 @@ Section heaplangH.
     WPi compile_expr e @ heaplangH; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
     WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
-    iIntros "HΦ Hwp". iEval (rewrite /compile_expr rec_as_interp /= interp_bind ).
-    iApply wpi_bind.
-    setoid_rewrite interp_trigger. iApply (wpi_yield (H := heaplangH)).
+    iIntros "HΦ Hwp". iEval (rewrite /compile_expr rec_as_interp /=).
+    iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
     rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
     rewrite bind_trigger. iApply (wpi_fork (H := heaplangH)). iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.
-    - rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger. simpl.
+    - iApply wpi_interp_bind.
       iApply wpi_wand; last done. iIntros (r ->). rewrite interp_bind. iApply wpi_bind.
       setoid_rewrite interp_trigger. simpl. iApply (wpi_kill (H := heaplangH)).
   Qed.
@@ -614,18 +613,11 @@ Section heaplangH.
         (l +ₗ (i : nat)) ↦ v ∗ meta_token (l +ₗ (i : nat)) ⊤ }}.
   Proof.
     iIntros (Hpos) "Hn Hv".
-    iEval (rewrite /compile_expr rec_as_interp /= interp_bind).
-    iApply wpi_bind.
-    setoid_rewrite interp_trigger. iApply (wpi_wand with "[Hn] Hv"). iIntros (r ->).
-    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
-    iApply (wpi_wand with "[] Hn"). iIntros (r ->).
-    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
-    iApply (wpi_yield (H := heaplangH)).
-    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
-    iApply (wpi_get (H := heaplangH)).
-    iIntros (s) "$ !>". iApply wpi_ret.
-    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
-    iApply (wpi_demonic (H := heaplangH)). iIntros (l). iApply wpi_ret.
-    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
-    iApply (wpi_set (H := heaplangH)). iIntros (s') "Hstate".
+    iEval (rewrite /compile_expr rec_as_interp).
+    iApply wpi_interp_bind. iApply (wpi_wand with "[Hn] Hv"). iIntros (r ->).
+    iApply wpi_interp_bind. iApply (wpi_wand with "[] Hn"). iIntros (r ->).
+    iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
+    iApply wpi_interp_bind. iApply (wpi_get (H := heaplangH)). iIntros (s) "$ !>". iApply wpi_ret.
+    iApply wpi_interp_bind. iApply (wpi_demonic (H := heaplangH)). iIntros (l). iApply wpi_ret.
+    iApply wpi_interp_bind. iApply (wpi_set (H := heaplangH)). iIntros (s') "Hstate".
 End heaplangH.
