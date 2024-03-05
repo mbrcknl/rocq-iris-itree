@@ -609,7 +609,7 @@ Section wpi_masked_ind.
   Proof.
     iIntros (Hne) "#Hnomask #Hmask". iIntros (t Φ) "Hwp".
     iApply (wpi_iter_masked' H G with "Hnomask Hmask").
-    rewrite wpi_without_mask //.
+    by iApply wpi_without_mask.
   Qed.
 End wpi_masked_ind.
 
@@ -628,7 +628,7 @@ Section list.
     Proof.
       rewrite !delete_take_drop.
       replace (S (length xs + n)) with (length xs + (1 + n)) by lia.
-      rewrite take_add_app // drop_add_app // -app_assoc //.
+      rewrite take_app_add' // drop_app_add' // -app_assoc //.
     Qed.
     Lemma delete_app_l {A} (xs ys : list A) n :
       n < length xs →

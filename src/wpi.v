@@ -222,7 +222,7 @@ Section wp_itree.
 
   (* [Proper] instances. *)
 
-  Global Instance wpi_proper_post_emp_mask R :
+  Local Instance wpi_proper_post_emp_mask R :
     Proper ((=) ==> ((pointwise_relation R (⊣⊢)) ==> (⊣⊢))) (wpi (E:=E) (R:=R) H).
   Proof.
     intros t1 t2 <- Φ1 Φ2 HΦ.
@@ -231,7 +231,7 @@ Section wp_itree.
   Qed.
 
   (* TODO: Don't use instances for temporary class definitions. *)
-  Global Instance wpi_ext_unidirectional_emp_mask R b1 b2 :
+  Local Instance wpi_ext_unidirectional_emp_mask R b1 b2 :
     Proper (eqit (=) b1 b2 ==> (=) ==> (⊢)) (wpi (E:=E) (R:=R) H).
   Proof.
     iIntros (t1 t2 Hbisim Φ Φ' <-).

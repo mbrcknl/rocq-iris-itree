@@ -8,3 +8,4 @@ src/itree.v
 src/state.v
 src/threadpool.v
 src/wpi.v
+src/heaplang.v
