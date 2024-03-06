@@ -816,7 +816,7 @@ Section pointed_permutations.
 
   Definition remove {A} (idx : nat) (xs : list (nat * A)) : list (nat * A) :=
     mbind (λ i, if fst i =? idx then [] else if fst i <? idx then [(fst i, snd i)] else [(fst i - 1, snd i)]) xs.
-  Instance remove_proper {A} idx :
+  Global Instance remove_proper {A} idx :
     Proper ((≡ₚ) ==> (≡ₚ)) (remove (A:=A) idx).
   Proof.
     intros xs xs' Hperm. rewrite /remove Hperm //.
@@ -1232,12 +1232,12 @@ Section threadpool_adequacy.
       (∀ tid tp, wptpF H wptp_IH_left (Some tid) tp Φ -∗ wptp H (Some tid) (tp ++ tp') Φ)
     end.
 
-  Instance wptp_IH_left_proper n t tp :
+  Local Instance wptp_IH_left_proper n t tp :
     Proper (pointwise_relation R (dist n) ==> dist n) (wptp_IH_left t tp).
   Proof.
     intros Φ1 Φ2 HΦ. rewrite /wptp_IH_left. repeat f_equiv.
   Qed.
-  Instance wpi_IH_right_proper n t tp :
+  Local Instance wpi_IH_right_proper n t tp :
     Proper (pointwise_relation R (dist n) ==> dist n) (wptp_IH_right t tp).
   Proof.
     intros Φ1 Φ2 HΦ. rewrite /wptp_IH_right. repeat ( done || apply wptpF_ne || f_equiv );
