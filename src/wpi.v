@@ -359,19 +359,14 @@ Section wp_itree_mask.
   lock Definition wpi_mask {R} (M : coPset) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ :=
     (|={M, ∅}=> wpi H t%itree (λ v, |={∅, M}=> Φ v))%I.
 
-  (* Properness lemmata. *)
-
-  Global Instance wpi_proper R M :
-    Proper (eutt (=) ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi_mask (R:=R) M).
+  Global Instance wpi_proper b1 b2 R M :
+    Proper (eqit (=) b1 b2 ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi_mask (R:=R) M).
   Proof.
-    intros t1 t2 Ht Φ1 Φ2 HΦ. rewrite /wpi_mask unlock. f_equiv. rewrite Ht. by setoid_rewrite HΦ.
-  Qed.
-  Global Instance wpi_proper' R M :
-    Proper (eqit (=) false false ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi_mask (R:=R) M).
-  Proof.
-    intros t1 t2 Ht Φ1 Φ2 HΦ. rewrite /wpi_mask. rewrite Ht. by setoid_rewrite HΦ.
+    intros t1 t2 Ht Φ1 Φ2 HΦ. rewrite /wpi_mask unlock. setoid_rewrite Ht. by setoid_rewrite HΦ.
   Qed.
 End wp_itree_mask.
+
+Global Instance: Params (@wpi_mask) 7 := {}.
 
 Notation "'WPi' t @ H ; M {{ v , Q } }" := (wpi_mask (H := H) M t (λ v, Q))
   (at level 20, t, Q at level 200,
@@ -396,10 +391,10 @@ Section wp_itree_mask.
   Qed.
 
   (* Nonexpansiveness lemmata. *)
-  Global Instance wpi_proper_dist R M n :
-    Proper (eqit (=) false false ==> (pointwise_relation R (dist n)) ==> (dist n)) (wpi_mask (E:=E) (H:=H) (R:=R) M).
+  Global Instance wpi_ne R M n t :
+    Proper ((pointwise_relation R (dist n)) ==> (dist n)) (wpi_mask (E:=E) (H:=H) (R:=R) M t).
   Proof.
-    intros t1 t2 Ht Φ1 Φ2 HΦ. rewrite /wpi_mask unlock Ht. f_equiv. apply wpi_ne_emp_mask.
+    intros Φ1 Φ2 HΦ. rewrite /wpi_mask unlock. f_equiv. apply wpi_ne_emp_mask.
     intros v. by f_equiv.
   Qed.
 
