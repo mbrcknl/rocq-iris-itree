@@ -20,60 +20,60 @@ Notation "x ;; z" := (ITree.bind x (fun _ => z))
 
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' ubE.
 
-Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
+Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   match e with
   | Val v => Ret v
   | Rec f x e => Ret (RecV f x e)
   | App e1 e2 =>
-      x ← call e2;
-      f ← call e1;
+      x ← compile_expr' e2;
+      f ← compile_expr' e1;
       match f with
-      | RecV f_ x_ e => call (subst' f_ f (subst' x_ x e1))
+      | RecV f_ x_ e => call (subst' f_ f (subst' x_ x e))
       | _ => ub
       end
   | UnOp op e =>
-      v ← call e;
+      v ← compile_expr' e;
       match un_op_eval op v with
       | Some v => Ret v
       | None => ub
       end
   | BinOp op e1 e2 =>
-      v1 ← call e1;
-      v2 ← call e2;
+      v1 ← compile_expr' e2;
+      v2 ← compile_expr' e1;
       match bin_op_eval op v1 v2 with
       | Some v => Ret v
       | None => ub
       end
   | If e0 e1 e2 =>
-      v0 ← call e0;
+      v0 ← compile_expr' e0;
       match v0 with
-      | LitV (LitBool b) => if b then call e1 else call e2
+      | LitV (LitBool b) => if b then compile_expr' e1 else compile_expr' e2
       | _ => ub
       end
   | Pair e1 e2 =>
-      v1 ← call e1;
-      v2 ← call e2;
+      v1 ← compile_expr' e2;
+      v2 ← compile_expr' e1;
       Ret (PairV v1 v2)
   | Fst e =>
-      v ← call e;
+      v ← compile_expr' e;
       match v with
       | PairV x _ => Ret x
       | _ => ub
       end
   | Snd e =>
-      v ← call e;
+      v ← compile_expr' e;
       match v with
       | PairV _ y => Ret y
       | _ => ub
       end
   | InjL e =>
-      v ← call e;
+      v ← compile_expr' e;
       Ret (InjLV v)
   | InjR e =>
-      v ← call e;
+      v ← compile_expr' e;
       Ret (InjRV v)
   | Case e0 e1 e2 =>
-      v0 ← call e0;
+      v0 ← compile_expr' e0;
       match v0 with
       | InjLV v => call (App e1 (Val v))
       | InjRV v => call (App e2 (Val v))
@@ -85,7 +85,7 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       match thread with
       | CurrentThread => Ret (LitV LitUnit)
       | NewThread =>
-          v ← call e;
+          v ← compile_expr' e;
           match v with
           | LitV LitUnit =>
               x ← trigger EKillThread : itree _ Empty_set;
@@ -94,8 +94,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           end
       end
   | AllocN ne e =>
-      v ← call e;
-      n ← call ne;
+      v ← compile_expr' e;
+      n ← compile_expr' ne;
       match n with
       | LitV (LitInt n) =>
           trigger EYield;;
@@ -107,7 +107,7 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | _ => ub
       end
   | Free e =>
-      l ← call e;
+      l ← compile_expr' e;
       match l with
       | LitV (LitLoc l) =>
           trigger EYield;;
@@ -121,7 +121,7 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | _ => ub
       end
   | Load e =>
-      l ← call e;
+      l ← compile_expr' e;
       match l with
       | LitV (LitLoc l) =>
           trigger EYield;;
@@ -134,8 +134,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | _ => ub
       end
   | Store e1 e2 =>
-      v ← call e2;
-      l ← call e1;
+      v ← compile_expr' e2;
+      l ← compile_expr' e1;
       match l with
       | LitV (LitLoc l) =>
           trigger EYield;;
@@ -149,8 +149,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | _ => ub
       end
   | Xchg e1 e2 =>
-      v ← call e2;
-      l ← call e1;
+      v ← compile_expr' e2;
+      l ← compile_expr' e1;
       match l with
       | LitV (LitLoc l) =>
           trigger EYield;;
@@ -164,9 +164,9 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | _ => ub
       end
   | CmpXchg le e1 e2 =>
-      v2 ← call e2;
-      v1 ← call e1;
-      l ← call le;
+      v2 ← compile_expr' e2;
+      v1 ← compile_expr' e1;
+      l ← compile_expr' le;
       match l with
       | LitV (LitLoc l) =>
           trigger EYield;;
@@ -184,8 +184,8 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | _ => ub
       end
   | FAA e1 e2 =>
-      v ← call e2;
-      l ← call e1;
+      v ← compile_expr' e2;
+      l ← compile_expr' e1;
       match (v, l) with
       | (LitV (LitInt v), LitV (LitLoc l)) =>
           trigger EYield;;
@@ -202,6 +202,78 @@ Definition compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   end%itree.
 
 Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
+
+Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
+  match Ki with
+  | ResolveLCtx _ _ _ => False
+  | ResolveMCtx _ _ => False
+  | ResolveRCtx _ _ => False
+  | _ => True
+  end.
+
+Lemma compile_expr_bind (Ki : ectx_item) (e : expr) :
+  supported_subset_ectx Ki →
+  compile_expr (fill_item Ki e) ≈
+  v ← compile_expr e ; compile_expr (fill_item Ki (Val v)).
+Proof.
+  intros Hsubset. destruct Ki; simpl; rewrite /compile_expr rec_as_interp /=.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp interp_ret.
+    rewrite bind_ret_l interp_bind. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - rewrite interp_bind rec_as_interp. f_equiv.
+    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
+  - contradiction.
+  - contradiction.
+  - contradiction.
+Qed.
 
 Class heaplangHPreG (Σ : gFunctors) := HeapLangHPreG {
   heaplangH_pre_ghost_varG :> gen_heapGpreS loc (option val) Σ;
