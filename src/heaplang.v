@@ -218,6 +218,26 @@ Proof. solve_inG. Qed.
 Global Notation "l ↦ v" := (pointsto l (DfracOwn 1) (Some v))
   (at level 20, format "l  ↦  v") : bi_scope.
 
+Section gen_heap.
+  Context `{Countable L, hG : !gen_heapGS L V Σ}.
+
+  From stdpp Require Export namespaces.
+  From iris.algebra Require Import reservation_map agree frac.
+  From iris.algebra Require Export dfrac.
+  From iris.bi.lib Require Import fractional.
+  From iris.proofmode Require Import proofmode.
+  From iris.base_logic.lib Require Export own.
+  From iris.base_logic.lib Require Import ghost_map.
+  From iris.prelude Require Import options.
+
+  Definition gen_heap_interp_half (σ : gmap L V) : iProp Σ := ∃ m : gmap L gname,
+    (* The [⊆] is used to avoid assigning ghost information to the locations in
+    the initial heap (see [gen_heap_init]). *)
+    ⌜ dom m ⊆ dom σ ⌝ ∗
+    ghost_map_auth (gen_heap_name hG) (1/2) σ ∗
+    ghost_map_auth (gen_meta_name hG) (1/2) m.
+End gen_heap.
+
 Section heaplangH.
   Context {Σ} `{!stateHGS Σ state} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
