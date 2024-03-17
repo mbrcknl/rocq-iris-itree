@@ -55,19 +55,25 @@ Qed.
 Notation "H1 ⊕ H2" := (sumH H1 H2)
   (at level 59, right associativity) : type_scope.
 
-Global Instance sumH_inH_l {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :
-  inH H1 (H1 ⊕ H2).
+Global Instance inH_reflexivity {Σ E} (H : iHandler Σ E) :
+  inH H H.
+Proof. done. Qed.
+
+Global Instance sumH_inH_l {Σ E1 E2 E3} `{E1 -< E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) (H3 : iHandler Σ E3) :
+  inH H1 H2 →
+  inH H1 (H2 ⊕ H3).
 Proof.
-  intros ????. iSplit.
-  - by iIntros "?".
-  - by iIntros "?".
+  intros Hin ????. iSplit.
+  - iIntros "?". by iApply Hin.
+  - iIntros "?". by iApply Hin.
 Qed.
-Global Instance sumH_inH_r {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :
-  inH H2 (H1 ⊕ H2).
+Global Instance sumH_inH_r {Σ E1 E2 E3} `{E1 -< E3} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) (H3 : iHandler Σ E3) :
+  inH H1 H3 →
+  inH H1 (H2 ⊕ H3).
 Proof.
-  intros ????. iSplit.
-  - by iIntros "?".
-  - by iIntros "?".
+  intros Hin ????. iSplit.
+  - iIntros "?". by iApply Hin.
+  - iIntros "?". by iApply Hin.
 Qed.
 
 (** This class covers "sequential" [iHandler]s which are insensitive to the

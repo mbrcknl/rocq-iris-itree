@@ -2,8 +2,9 @@ From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.itree Require Import wpi threadpool choice ub state handler.
 From iris.prelude Require Import prelude.
-From iris Require Import gen_heap.
-From iris.heap_lang Require Export lang.
+From iris Require Import ghost_map.
+From iris Require Import invariants.
+From iris.heap_lang Require Export lang locations.
 From iris.base_logic.lib Require Import ghost_var.
 From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
@@ -102,8 +103,8 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           σ ← trigger EGetState;
           (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
           l ← trigger (EDemonic {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)});
-          trigger (ESetState (state_init_heap (proj1_sig l) n v σ));;
-          Ret (LitV LitUnit)
+          trigger (ESetState (state_init_heap (`l) n v σ));;
+          Ret (LitV (LitLoc (`l)))
       | _ => ub
       end
   | Free e =>
@@ -275,46 +276,24 @@ Proof.
   - contradiction.
 Qed.
 
-Class heaplangHPreG (Σ : gFunctors) := HeapLangHPreG {
-  heaplangH_pre_ghost_varG :> gen_heapGpreS loc (option val) Σ;
-}.
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
-  heaplangH_ghost_varGS :> gen_heapGS loc (option val) Σ;
+  heaplangH_ghost_varG :> ghost_mapG Σ loc (option val);
+  heaplangH_heap_name : gname;
+  heaplangH_inv_name : namespace;
 }.
-Definition heaplangHΣ : gFunctors :=
-  gen_heapΣ loc (option val).
-Global Instance subG_heaplangHΣ Σ :
-  subG heaplangHΣ Σ → heaplangHPreG Σ.
-Proof. solve_inG. Qed.
 
-Global Notation "l ↦ v" := (pointsto l (DfracOwn 1) (Some v))
+Definition pointsto `{!heaplangHGS Σ} (l : loc) (v : val) : iProp Σ :=
+  l ↪[ heaplangH_heap_name ] (Some v).
+
+Global Notation "l ↦ v" := (pointsto l v)
   (at level 20, format "l  ↦  v") : bi_scope.
 
-Section gen_heap.
-  Context `{Countable L, hG : !gen_heapGS L V Σ}.
-
-  From stdpp Require Export namespaces.
-  From iris.algebra Require Import reservation_map agree frac.
-  From iris.algebra Require Export dfrac.
-  From iris.bi.lib Require Import fractional.
-  From iris.proofmode Require Import proofmode.
-  From iris.base_logic.lib Require Export own.
-  From iris.base_logic.lib Require Import ghost_map.
-  From iris.prelude Require Import options.
-
-  Definition gen_heap_interp_half (σ : gmap L V) : iProp Σ := ∃ m : gmap L gname,
-    (* The [⊆] is used to avoid assigning ghost information to the locations in
-    the initial heap (see [gen_heap_init]). *)
-    ⌜ dom m ⊆ dom σ ⌝ ∗
-    ghost_map_auth (gen_heap_name hG) (1/2) σ ∗
-    ghost_map_auth (gen_meta_name hG) (1/2) m.
-End gen_heap.
-
 Section heaplangH.
-  Context {Σ} `{!stateHGS Σ state} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
+  Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
   Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
-    gen_heap_interp σ.(heap).
+    (ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap) ∧
+    inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)))%I.
 
   Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
 
@@ -323,31 +302,52 @@ Section heaplangH.
     WPi compile_expr e @ heaplangH; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
     WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
-    iIntros "HΦ Hwp". iEval (rewrite /compile_expr rec_as_interp /=).
+    iIntros "HΦ Hwp". rewrite /compile_expr !rec_as_interp /=.
     iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
     rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
     rewrite bind_trigger. iApply (wpi_fork (H := heaplangH)). iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.
-    - iApply wpi_interp_bind.
+    - rewrite interp_bind. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->). rewrite interp_bind. iApply wpi_bind.
       setoid_rewrite interp_trigger. simpl. iApply (wpi_kill (H := heaplangH)).
   Qed.
 
-  Lemma wpi_AllocN ev v en n :
-    (0 < n)%Z →
-    WPi compile_expr en @ heaplangH; ⊤ {{ n', ⌜n' = LitV (LitInt n)⌝ }} -∗
-    WPi compile_expr ev @ heaplangH; ⊤ {{ v', ⌜v' = v⌝ }} -∗
-    WPi compile_expr (AllocN en ev) @ heaplangH; ⊤
+  Lemma wpi_AllocN v n :
+    (0 < n)%Z → ⊢
+    WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; ⊤
     {{ l', ∃ l, ⌜l' = LitV (LitLoc l)⌝ ∧ [∗ list] i ∈ seq 0 (Z.to_nat n),
-        (l +ₗ (i : nat)) ↦ v ∗ meta_token (l +ₗ (i : nat)) ⊤ }}.
+        (l +ₗ (i : nat)) ↦ v }}.
   Proof.
-    iIntros (Hpos) "Hn Hv".
-    iEval (rewrite /compile_expr rec_as_interp).
-    iApply wpi_interp_bind. iApply (wpi_wand with "[Hn] Hv"). iIntros (r ->).
-    iApply wpi_interp_bind. iApply (wpi_wand with "[] Hn"). iIntros (r ->).
+    intros Hpos. iIntros.
+    rewrite /compile_expr rec_as_interp /=.
+    rewrite !bind_ret_l.
     iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
-    iApply wpi_interp_bind. iApply (wpi_get (H := heaplangH)). iIntros (s) "$ !>". iApply wpi_ret.
-    iApply wpi_interp_bind. iApply (wpi_demonic (H := heaplangH)). iIntros (l). iApply wpi_ret.
-    iApply wpi_interp_bind. iApply (wpi_set (H := heaplangH)). iIntros (s') "Hstate".
+    iApply wpi_clear_mask.
+    iApply wpi_interp_bind.
+    iApply (wpi_get (H := heaplangH)).
+    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
+    iIntros (σ) "[Hauth #Hinv]".
+    iDestruct (inv_acc_timeless ⊤ _ _ with "Hinv") as "Hσ"; first done.
+    iMod "Hfupd" as "_".
+    iMod "Hσ" as "[[%σ' Hauth'] Hclose]".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iFrame. iFrame "Hinv". 
+    iApply wpi_ret.
+    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
+    iApply wpi_interp_bind. simpl. iApply (wpi_demonic (H := heaplangH)). iIntros (l).
+    iApply wpi_ret. iApply wpi_interp_bind. iApply (wpi_set (H := heaplangH)).
+    iIntros (σ'') "[Hauth' _]". iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iCombine "Hauth Hauth'" as "Hauth".
+    iDestruct (ghost_map_insert_big (heap_array (`l) (replicate (Z.to_nat n) v)) with "Hauth") as "Hauth".
+    { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
+      rewrite replicate_length in Hlt. apply Hl; first done. lia. }
+    iMod "Hauth" as "[Hauth Hfrag]".
+    iDestruct "Hauth" as "[Hauth Hauth']".
+    iFrame. iFrame "Hinv".
+    iApply wpi_ret. rewrite interp_ret. iApply wpi_ret.
+    iModIntro. iMod "Hfupd" as "_". iMod ("Hclose" with "[Hauth]").
+    { by iExists (state_init_heap (`l) n v σ). }
+    iModIntro. iExists (`l). iSplit; first done.
+    remember (Z.to_nat n) as n'.
   Abort.
 End heaplangH.

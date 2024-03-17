@@ -522,10 +522,10 @@ Section wp_itree_mask.
   Lemma wpi_open_invariant {R} N M (Φ : R → iProp Σ) t P :
     ↑N ⊆ M →
     (▷ P -∗ WPi t @ H; M ∖ ↑N {{ v, ▷ P ∗ Φ v }}) -∗
-    own_inv N P -∗ WPi t @ H; M {{ Φ }}.
+    inv N P -∗ WPi t @ H; M {{ Φ }}.
   Proof.
     iIntros (Hsubset) "Hwp Hinv". rewrite /wpi_mask unlock.
-    iMod (own_inv_acc _ with "Hinv") as "[HP Hclose]"; first done.
+    iMod (inv_acc _ with "Hinv") as "[HP Hclose]"; first done.
     iSpecialize ("Hwp" with "HP").
     iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp //]").
     iIntros (r) "HP". iMod "HP" as "[HP HΦ]". by iMod ("Hclose" with "HP").

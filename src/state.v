@@ -48,7 +48,7 @@ Section stateH.
 End stateH.
 
 Section wp_state.
-  Context {S : Type} `{!stateHGS Σ S} {E : Type → Type} `{!invGS_gen hlc Σ}.
+  Context {S : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context `{!stateInterp Σ S}.
   Context {H : iHandler Σ E} `{stateE S -< E} `{inH Σ (stateE S) E (stateH S) H}.
 
@@ -78,7 +78,7 @@ Section wp_state.
 End wp_state.
 
 Section stateH_adequacy.
-  Context {S : Type} `{!stateHGS Σ S} {E : Type → Type} `{!invGS_gen hlc Σ}.
+  Context {S : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context `{!stateInterp Σ S}.
   Context {H : iHandler Σ E} `{stateE S -< E} `{inH Σ (stateE S) E (stateH S) H}.
   Context {R : Type}.
