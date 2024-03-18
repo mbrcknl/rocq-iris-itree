@@ -28,12 +28,14 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | App e1 e2 =>
       x ← compile_expr' e2;
       f ← compile_expr' e1;
+      trigger EYield;;
       match f with
       | RecV f_ x_ e => call (subst' f_ f (subst' x_ x e))
       | _ => ub
       end
   | UnOp op e =>
       v ← compile_expr' e;
+      trigger EYield;;
       match un_op_eval op v with
       | Some v => Ret v
       | None => ub
@@ -41,12 +43,14 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | BinOp op e1 e2 =>
       v1 ← compile_expr' e2;
       v2 ← compile_expr' e1;
+      trigger EYield;;
       match bin_op_eval op v1 v2 with
       | Some v => Ret v
       | None => ub
       end
   | If e0 e1 e2 =>
       v0 ← compile_expr' e0;
+      trigger EYield;;
       match v0 with
       | LitV (LitBool b) => if b then compile_expr' e1 else compile_expr' e2
       | _ => ub
@@ -54,27 +58,33 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | Pair e1 e2 =>
       v1 ← compile_expr' e2;
       v2 ← compile_expr' e1;
+      trigger EYield;;
       Ret (PairV v1 v2)
   | Fst e =>
       v ← compile_expr' e;
+      trigger EYield;;
       match v with
       | PairV x _ => Ret x
       | _ => ub
       end
   | Snd e =>
       v ← compile_expr' e;
+      trigger EYield;;
       match v with
       | PairV _ y => Ret y
       | _ => ub
       end
   | InjL e =>
       v ← compile_expr' e;
+      trigger EYield;;
       Ret (InjLV v)
   | InjR e =>
       v ← compile_expr' e;
+      trigger EYield;;
       Ret (InjRV v)
   | Case e0 e1 e2 =>
       v0 ← compile_expr' e0;
+      trigger EYield;;
       match v0 with
       | InjLV v => call (App e1 (Val v))
       | InjRV v => call (App e2 (Val v))
@@ -97,9 +107,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | AllocN ne e =>
       v ← compile_expr' e;
       n ← compile_expr' ne;
+      trigger EYield;;
       match n with
       | LitV (LitInt n) =>
-          trigger EYield;;
           σ ← trigger EGetState;
           (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
           l ← trigger (EDemonic {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)});
@@ -109,9 +119,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | Free e =>
       l ← compile_expr' e;
+      trigger EYield;;
       match l with
       | LitV (LitLoc l) =>
-          trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
           | Some (Some _) =>
@@ -123,9 +133,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | Load e =>
       l ← compile_expr' e;
+      trigger EYield;;
       match l with
       | LitV (LitLoc l) =>
-          trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
           | Some (Some v) =>
@@ -137,9 +147,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | Store e1 e2 =>
       v ← compile_expr' e2;
       l ← compile_expr' e1;
+      trigger EYield;;
       match l with
       | LitV (LitLoc l) =>
-          trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
           | Some (Some w) =>
@@ -152,9 +162,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | Xchg e1 e2 =>
       v ← compile_expr' e2;
       l ← compile_expr' e1;
+      trigger EYield;;
       match l with
       | LitV (LitLoc l) =>
-          trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
           | Some (Some w) =>
@@ -168,9 +178,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       v2 ← compile_expr' e2;
       v1 ← compile_expr' e1;
       l ← compile_expr' le;
+      trigger EYield;;
       match l with
       | LitV (LitLoc l) =>
-          trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
           | Some (Some w) =>
@@ -187,9 +197,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | FAA e1 e2 =>
       v ← compile_expr' e2;
       l ← compile_expr' e1;
+      trigger EYield;;
       match (v, l) with
       | (LitV (LitInt v), LitV (LitLoc l)) =>
-          trigger EYield;;
           σ ← trigger EGetState;
           match σ.(heap) !! l with
           | Some (Some (LitV (LitInt n))) =>
