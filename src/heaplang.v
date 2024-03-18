@@ -312,6 +312,23 @@ Section heaplangH.
       setoid_rewrite interp_trigger. simpl. iApply (wpi_kill (H := heaplangH)).
   Qed.
 
+  Lemma big_sep_map_list_heap_array l n m v :
+    ([∗ map] k↦v0 ∈ heap_array (l +ₗ Z.of_nat m) (replicate n v), k ↪[heaplangH_heap_name] v0) -∗
+    [∗ list] i ∈ seq m n, (l +ₗ Z.of_nat i) ↦ v.
+  Proof.
+    iIntros "Hsep".
+    iInduction n as [|n'] "IH" forall (m).
+    - done.
+    - simpl. 
+      iDestruct (big_sepM_union with "Hsep") as "[Hfirst Hsep]".
+      { symmetry. apply heap_array_map_disjoint. intros i Hnz Hlt. rewrite lookup_singleton_None.
+        rewrite Loc.eq_spec. simpl. lia. }
+      rewrite big_sepM_singleton. iFrame.
+      iApply "IH".
+      replace (l +ₗ S m) with (l +ₗ m +ₗ 1); last first. { rewrite Loc.add_assoc. f_equiv. lia. }
+      done.
+  Qed.
+
   Lemma wpi_AllocN v n :
     (0 < n)%Z → ⊢
     WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; ⊤
@@ -348,6 +365,6 @@ Section heaplangH.
     iModIntro. iMod "Hfupd" as "_". iMod ("Hclose" with "[Hauth]").
     { by iExists (state_init_heap (`l) n v σ). }
     iModIntro. iExists (`l). iSplit; first done.
-    remember (Z.to_nat n) as n'.
-  Abort.
+    iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
+  Qed.
 End heaplangH.
