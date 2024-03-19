@@ -112,6 +112,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | LitV (LitInt n) =>
           σ ← trigger EGetState;
           (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
+          (* TODO: There should be a proof obligation for this being nonempty. *)
           l ← trigger (EDemonic {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)});
           trigger (ESetState (state_init_heap (`l) n v σ));;
           Ret (LitV (LitLoc (`l)))
@@ -134,6 +135,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | Load e =>
       l ← compile_expr' e;
       trigger EYield;;
+      (* TODO: Notation for partial match. *)
       match l with
       | LitV (LitLoc l) =>
           σ ← trigger EGetState;
@@ -185,7 +187,8 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           match σ.(heap) !! l with
           | Some (Some w) =>
               (* Asserts that equality coincides with the equality of the language. *)
-              trigger (EDemonic (vals_compare_safe v1 w));;
+              (* TODO: Define [assert] function. *)
+              assert (vals_compare_safe v1 w) ;;
               if decide (v1 = w) then
                 trigger (ESetState (state_upd_heap <[l:=Some v2]> σ));;
                 Ret w
@@ -228,62 +231,16 @@ Lemma compile_expr_bind (Ki : ectx_item) (e : expr) :
   v ← compile_expr e ; compile_expr (fill_item Ki (Val v)).
 Proof.
   intros Hsubset. destruct Ki; simpl; rewrite /compile_expr rec_as_interp /=.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp interp_ret.
-    rewrite bind_ret_l interp_bind. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - rewrite interp_bind rec_as_interp. f_equiv.
-    intros v. rewrite rec_as_interp /=. f_equiv. rewrite !bind_ret_l //.
-  - contradiction.
-  - contradiction.
-  - contradiction.
+  all:solve
+    [ rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp; f_equiv;
+      intros v; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
+    | rewrite interp_bind rec_as_interp; f_equiv;
+      intros v; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
+    | rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp interp_ret;
+      rewrite bind_ret_l interp_bind; f_equiv;
+      intros v; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
+    | contradiction
+    ].
 Qed.
 
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
@@ -304,10 +261,24 @@ Section heaplangH.
   Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
   Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
-    (ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap) ∧
-    inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)))%I.
+    ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap).
 
   Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
+
+  Definition heap_inv : iProp Σ :=
+    inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)).
+
+  (*
+  (* TODO: Create abstraction for WPi for heaplang. This should handle the invariant. *)
+
+  Definition wp_heaplang (e : expr) (M : coPset) (Φ : val → iProp Σ) : iProp Σ :=
+    heap_inv -∗
+    WPi compile_expr e @ heaplangH; M {{ Φ }}.
+
+  From iris.bi Require Import weakestpre.
+  Global Instance wp_heaplang_wp `{!invGS_gen hlc Σ} :
+    Wp (iProp Σ) expr val () := λ _ M e Φ, wp_heaplang e M Φ.
+ *)
 
   Lemma wpi_Fork e Φ :
     Φ (LitV LitUnit) -∗
@@ -315,13 +286,13 @@ Section heaplangH.
     WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
     iIntros "HΦ Hwp". rewrite /compile_expr !rec_as_interp /=.
-    iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
+    iApply wpi_interp_bind. iApply @wpi_yield.
     rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
-    rewrite bind_trigger. iApply (wpi_fork (H := heaplangH)). iSplitL "HΦ".
+    rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.
     - rewrite interp_bind. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->). rewrite interp_bind. iApply wpi_bind.
-      setoid_rewrite interp_trigger. simpl. iApply (wpi_kill (H := heaplangH)).
+      setoid_rewrite interp_trigger. simpl. iApply @wpi_kill. done.
   Qed.
 
   Lemma big_sep_map_list_heap_array l n m v :
@@ -342,41 +313,32 @@ Section heaplangH.
   Qed.
 
   Lemma wpi_AllocN v n :
-    (0 < n)%Z → ⊢
+    (0 < n)%Z →
+    heap_inv -∗
     WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; ⊤
     {{ l', ∃ l, ⌜l' = LitV (LitLoc l)⌝ ∧ [∗ list] i ∈ seq 0 (Z.to_nat n),
         (l +ₗ (i : nat)) ↦ v }}.
   Proof.
-    intros Hpos. iIntros.
+    intros Hpos. iIntros "#Hinv".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
-    iApply wpi_clear_mask.
-    iApply wpi_interp_bind.
-    iApply (wpi_get (H := heaplangH)).
-    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
-    iIntros (σ) "[Hauth #Hinv]".
-    iDestruct (inv_acc_timeless ⊤ _ _ with "Hinv") as "Hσ"; first done.
-    iMod "Hfupd" as "_".
-    iMod "Hσ" as "[[%σ' Hauth'] Hclose]".
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
+    iApply wpi_interp_bind. simpl. iApply @wpi_demonic. iIntros (l). iApply wpi_ret.
+    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
-    iFrame. iFrame "Hinv". 
-    iApply wpi_ret.
-    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
-    iApply wpi_interp_bind. simpl. iApply (wpi_demonic (H := heaplangH)). iIntros (l).
-    iApply wpi_ret. iApply wpi_interp_bind. iApply (wpi_set (H := heaplangH)).
-    iIntros (σ'') "[Hauth' _]". iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_insert_big (heap_array (`l) (replicate (Z.to_nat n) v)) with "Hauth") as "Hauth".
     { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
       rewrite replicate_length in Hlt. apply Hl; first done. lia. }
-    iMod "Hauth" as "[Hauth Hfrag]".
-    iDestruct "Hauth" as "[Hauth Hauth']".
-    iFrame. iFrame "Hinv".
+    iMod "Hauth" as "[Hauth Hfrag]". iDestruct "Hauth" as "[Hauth Hauth']". iFrame.
     iApply wpi_ret. rewrite interp_ret. iApply wpi_ret.
-    iModIntro. iMod "Hfupd" as "_". iMod ("Hclose" with "[Hauth]").
-    { by iExists (state_init_heap (`l) n v σ). }
-    iModIntro. iExists (`l). iSplit; first done.
-    iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
+    iModIntro. iSplitL "Hauth". { by iExists (state_init_heap (`l) n v σ). }
+    iExists (`l). iSplit; first done. iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
   Qed.
 
   Lemma wpi_Load l v dq :
@@ -386,70 +348,61 @@ Section heaplangH.
   Proof.
     iIntros "Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
-    iApply wpi_interp_bind. iApply (wpi_get (H := heaplangH)).
-    iIntros (s) "[Hauth #Hinv]".
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (s) "Hauth".
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %Hlu.
-    iFrame. iFrame "Hinv". iApply wpi_ret. rewrite Hlu. rewrite interp_ret. iApply wpi_ret. eauto.
+    iFrame. iApply wpi_ret. rewrite Hlu. rewrite interp_ret. iApply wpi_ret. eauto.
   Qed.
 
   Lemma wpi_Store l v v' :
+    heap_inv -∗
     l ↦ v -∗
     WPi compile_expr (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH; ⊤
     {{ r, ⌜r = LitV (LitUnit)⌝ ∧ l ↦ v' }}.
   Proof.
-    iIntros "Hpointsto".
+    iIntros "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
-    iApply wpi_clear_mask.
-    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
-    iApply wpi_interp_bind. iApply (wpi_get (H := heaplangH)).
-    iIntros (σ) "[Hauth #Hinv]".
-    iMod "Hfupd" as "_".
-    iMod (inv_acc_timeless ⊤ _ _ with "Hinv") as "[[%σ' Hauth'] Hclose]"; first done.
-    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
-    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
-    iFrame. iFrame "Hinv". iApply wpi_ret.
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    iApply wpi_interp_bind. simpl. iApply (wpi_set (H := heaplangH)).
-    iIntros (σ'') "[Hauth' _]".
+    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update (Some v') with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
-    iFrame. iFrame "Hinv". iApply wpi_ret. rewrite interp_ret. iApply wpi_ret.
-    iModIntro. iMod "Hfupd". iMod ("Hclose" with "[Hauth]").
-    { by iExists (state_upd_heap (<[l:=Some v']>) σ). }
+    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some v']>) σ). }
     eauto.
   Qed.
 
   Lemma wpi_Free l v :
+    heap_inv -∗
     l ↦ v -∗
     WPi compile_expr (Free (Val $ LitV $ LitLoc l)) @ heaplangH; ⊤
     {{ r, ⌜r = LitV (LitUnit)⌝ }}.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
-    iIntros "Hpointsto".
+    iIntros "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply (wpi_yield (H := heaplangH)).
-    iApply wpi_clear_mask.
-    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
-    iApply wpi_interp_bind. iApply (wpi_get (H := heaplangH)).
-    iIntros (σ) "[Hauth #Hinv]".
-    iMod "Hfupd" as "_".
-    iMod (inv_acc_timeless ⊤ _ _ with "Hinv") as "[[%σ' Hauth'] Hclose]"; first done.
-    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
-    iApply fupd_mask_intro. { apply namespaces.coPset_empty_subseteq. } iIntros "Hfupd".
-    iFrame. iFrame "Hinv". iApply wpi_ret.
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    iApply wpi_interp_bind. simpl. iApply (wpi_set (H := heaplangH)).
-    iIntros (σ'') "[Hauth' _]".
+    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update None with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
-    iFrame. iFrame "Hinv". iApply wpi_ret. rewrite interp_ret. iApply wpi_ret.
-    iModIntro. iMod "Hfupd". iMod ("Hclose" with "[Hauth]").
-    { by iExists (state_upd_heap (<[l:=None]>) σ). }
+    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=None]>) σ). }
     eauto.
   Qed.
-
 End heaplangH.

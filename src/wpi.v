@@ -368,6 +368,11 @@ End wp_itree_mask.
 
 Global Instance: Params (@wpi_mask) 7 := {}.
 
+(* TODO: Implement [Wp]?
+Global Instance wp_wp `{!invGS_gen hlc Σ} E R :
+  Wp (iProp Σ) (itree E R) R (iHandler Σ E) := λ H M t Φ, wpi_mask (H := H) M t Φ.
+*)
+
 Notation "'WPi' t @ H ; M {{ v , Q } }" := (wpi_mask (H := H) M t (λ v, Q))
   (at level 20, t, Q at level 200,
    format "'[hv' 'WPi'  t  '/' @  '[' H ; M ']'  '/' {{  '[' v ,  '/' Q  ']' } } ']'") : bi_scope.
@@ -458,6 +463,7 @@ Section wp_itree_mask.
     iIntros (a) "Hwp". iApply wpi_update_emp_mask. by iMod "Hwp".
   Qed.
 
+  (* TODO: Rename these to fupd_wpi and wpi_fupd. *)
   Lemma wpi_update {R} M Φ (t : itree E R) :
     (|={M}=> WPi t @ H; M {{ Φ }}) ⊣⊢
     (WPi t @ H; M {{ Φ }}).
@@ -490,6 +496,7 @@ Section wp_itree_mask.
     iIntros (r) "Hgoal". iMod "Hgoal". by iMod "Hgoal".
   Qed.
 
+  (* TODO: Rename to wpi_atomic? *)
   Lemma wpi_clear_mask {R} M (Φ : R → iProp Σ) t :
     (|={M, ∅}=> WPi t @ H; ∅ {{ v, |={∅, M}=> Φ v }}) ⊣⊢
     WPi t @ H; M {{ Φ }}.
@@ -521,11 +528,26 @@ Section wp_itree_mask.
   (* TODO: Make this rule derived. *)
   Lemma wpi_open_invariant {R} N M (Φ : R → iProp Σ) t P :
     ↑N ⊆ M →
+    inv N P -∗ 
     (▷ P -∗ WPi t @ H; M ∖ ↑N {{ v, ▷ P ∗ Φ v }}) -∗
-    inv N P -∗ WPi t @ H; M {{ Φ }}.
+    WPi t @ H; M {{ Φ }}.
   Proof.
-    iIntros (Hsubset) "Hwp Hinv". rewrite /wpi_mask unlock.
+    iIntros (Hsubset) "Hinv Hwp". rewrite /wpi_mask unlock.
     iMod (inv_acc _ with "Hinv") as "[HP Hclose]"; first done.
+    iSpecialize ("Hwp" with "HP").
+    iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp //]").
+    iIntros (r) "HP". iMod "HP" as "[HP HΦ]". by iMod ("Hclose" with "HP").
+  Qed.
+
+  Lemma wpi_open_invariant_timeless {R} N M (Φ : R → iProp Σ) t P :
+    Timeless P →
+    ↑N ⊆ M →
+    inv N P -∗ 
+    (P -∗ WPi t @ H; M ∖ ↑N {{ v, P ∗ Φ v }}) -∗
+    WPi t @ H; M {{ Φ }}.
+  Proof.
+    iIntros (Htimeless Hsubset) "Hinv Hwp". rewrite /wpi_mask unlock.
+    iMod (inv_acc_timeless _ with "Hinv") as "[HP Hclose]"; first done.
     iSpecialize ("Hwp" with "HP").
     iMod "Hwp". iModIntro. iApply (wpi_wand_emp_mask with "[Hclose] [Hwp //]").
     iIntros (r) "HP". iMod "HP" as "[HP HΦ]". by iMod ("Hclose" with "HP").

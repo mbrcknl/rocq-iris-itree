@@ -135,3 +135,23 @@ Section ub_adequacy.
     - by iIntros "Hfalse".
   Qed.
 End ub_adequacy.
+
+Definition assert {E} `{ubE -< E} (P : Prop) `{Decision P} : itree E () :=
+  if decide P then
+    Ret ()
+  else ub.
+
+Section wp_ub.
+  Context {E : Type → Type} `{H : iHandler Σ E} `{ubE -< E} `{inH Σ ubE E ubH H}.
+  Context `{!invGS_gen hlc Σ}.
+
+  Lemma wpi_assert M P `{Decision P} Φ :
+    P →
+    Φ () -∗
+    WPi assert P @ H; M {{ Φ }}.
+  Proof.
+    iIntros (HP). rewrite /assert. destruct (decide P).
+    - iApply wpi_ret.
+    - contradiction.
+  Qed.
+End wp_ub.
