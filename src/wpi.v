@@ -396,6 +396,12 @@ Section wp_itree_mask.
   Qed.
 
   (* Nonexpansiveness lemmata. *)
+  (** We deliberatey do *not* support [eqit] here. If we support it then
+  rewriting with an [eqit] has two choices, this lemma and the [wpi_proper]
+  above. That leads to backtracking as rewriting tries to figure out which one
+  to use. It is always better to use [wpi_proper] as it gives a strictly
+  stronger relation for the result, so let's not even give rewriting the option
+  of making the wrong choice. *)
   Global Instance wpi_ne R M n t :
     Proper ((pointwise_relation R (dist n)) ==> (dist n)) (wpi_mask (E:=E) (H:=H) (R:=R) M t).
   Proof.
