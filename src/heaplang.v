@@ -176,10 +176,10 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           end
       | _ => ub
       end
-  | CmpXchg le e1 e2 =>
-      v2 ← compile_expr' e2;
-      v1 ← compile_expr' e1;
-      l ← compile_expr' le;
+  | CmpXchg e1 e2 e3 =>
+      v2 ← compile_expr' e3;
+      v1 ← compile_expr' e2;
+      l ← compile_expr' e1;
       trigger EYield;;
       match l with
       | LitV (LitLoc l) =>
@@ -191,8 +191,8 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
               assert (vals_compare_safe v1 w) ;;
               if decide (v1 = w) then
                 trigger (ESetState (state_upd_heap <[l:=Some v2]> σ));;
-                Ret w
-              else Ret w
+                Ret (PairV w (LitV (LitBool true)))
+              else Ret (PairV w (LitV (LitBool false)))
           | _ => ub
           end
       | _ => ub
@@ -316,8 +316,8 @@ Section heaplangH.
     (0 < n)%Z →
     heap_inv -∗
     WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; ⊤
-    {{ l', ∃ l, ⌜l' = LitV (LitLoc l)⌝ ∧ [∗ list] i ∈ seq 0 (Z.to_nat n),
-        (l +ₗ (i : nat)) ↦ v }}.
+      {{ l', ∃ l, ⌜l' = LitV (LitLoc l)⌝ ∧ [∗ list] i ∈ seq 0 (Z.to_nat n),
+          (l +ₗ (i : nat)) ↦ v }}.
   Proof.
     intros Hpos. iIntros "#Hinv".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
@@ -344,7 +344,7 @@ Section heaplangH.
   Lemma wpi_Load l v dq :
     l ↦{dq} v -∗
     WPi compile_expr (Load (Val $ LitV $ LitLoc l)) @ heaplangH; ⊤
-    {{ v', ⌜v' = v⌝ ∧ l ↦{dq} v }}.
+      {{ v', ⌜v' = v⌝ ∧ l ↦{dq} v }}.
   Proof.
     iIntros "Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
@@ -359,7 +359,7 @@ Section heaplangH.
     heap_inv -∗
     l ↦ v -∗
     WPi compile_expr (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH; ⊤
-    {{ r, ⌜r = LitV (LitUnit)⌝ ∧ l ↦ v' }}.
+      {{ r, ⌜r = LitV (LitUnit)⌝ ∧ l ↦ v' }}.
   Proof.
     iIntros "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
@@ -384,7 +384,7 @@ Section heaplangH.
     heap_inv -∗
     l ↦ v -∗
     WPi compile_expr (Free (Val $ LitV $ LitLoc l)) @ heaplangH; ⊤
-    {{ r, ⌜r = LitV (LitUnit)⌝ }}.
+      {{ r, ⌜r = LitV (LitUnit)⌝ }}.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
     iIntros "#Hinv Hpointsto".
@@ -403,6 +403,109 @@ Section heaplangH.
     iDestruct (ghost_map_update None with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
     iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
     iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=None]>) σ). }
+    eauto.
+  Qed.
+
+  Lemma wp_Xchg l v v' :
+    heap_inv -∗
+    l ↦ v -∗
+    WPi compile_expr (Xchg (Val $ LitV (LitLoc l)) (Val v')) @ heaplangH; ⊤
+      {{ r, ⌜r = v⌝ ∧ l ↦ v' }}.
+  Proof.
+    iIntros "#Hinv Hpointsto".
+    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
+    iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
+    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    rewrite /state_interp/stateInterp_heaplang.
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iCombine "Hauth Hauth'" as "Hauth".
+    iDestruct (ghost_map_update (Some v') with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
+    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some v']>) σ). }
+    eauto.
+  Qed.
+
+  Lemma wpi_CmpXchg_fail l dq v' v1 v2 :
+    v' ≠ v1 →
+    vals_compare_safe v' v1 →
+    heap_inv -∗
+    l ↦{dq} v' -∗
+    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; ⊤
+      {{ r, ⌜r = PairV v' (LitV $ LitBool false)⌝ ∧ l ↦{dq} v' }}.
+  Proof.
+    iIntros (Hneq Hcmp) "#Hinv Hpointsto".
+    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
+    iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
+    rewrite interp_bind /assert. rewrite decide_True // decide_False //.
+    rewrite interp_ret bind_ret_l interp_ret. iApply wpi_ret.
+    iSplitL "Hauth"; first eauto.
+    eauto.
+  Qed.
+
+  Lemma wpi_CmpXchg_suc l v' v1 v2 :
+    v' = v1 →
+    vals_compare_safe v' v1 →
+    heap_inv -∗
+    l ↦ v' -∗
+    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; ⊤
+      {{ r, ⌜r = PairV v' (LitV $ LitBool true)⌝ ∧ l ↦ v2 }}.
+  Proof.
+    iIntros (Heq Hcmp) "#Hinv Hpointsto".
+    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
+    iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
+    rewrite interp_bind /assert. rewrite decide_True // decide_True //.
+    rewrite interp_ret bind_ret_l.
+    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    rewrite /state_interp/stateInterp_heaplang.
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iCombine "Hauth Hauth'" as "Hauth".
+    iDestruct (ghost_map_update (Some v2) with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
+    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some v2]>) σ). }
+    eauto.
+  Qed.
+
+  Lemma wpi_FAA l i1 i2 :
+    heap_inv -∗
+    l ↦ LitV (LitInt i1) -∗
+    WPi compile_expr (FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2)) @ heaplangH; ⊤
+      {{ r, ⌜r = LitV (LitInt i1)⌝ ∧ l ↦ LitV (LitInt (i1 + i2)) }}.
+  Proof.
+    iIntros "#Hinv Hpointsto".
+    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    iApply wpi_interp_bind. iApply @wpi_yield.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    iApply wpi_interp_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
+    iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
+    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    rewrite /state_interp/stateInterp_heaplang.
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iCombine "Hauth Hauth'" as "Hauth".
+    iDestruct (ghost_map_update (Some (LitV (LitInt (i1 + i2)))) with "Hauth Hpointsto")
+      as ">[[Hauth Hauth'] Hpointsto]".
+    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some (LitV (LitInt (i1 + i2)))]>) σ). }
     eauto.
   Qed.
 End heaplangH.
