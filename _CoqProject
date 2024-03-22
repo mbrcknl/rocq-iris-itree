@@ -6,6 +6,7 @@ src/ub.v
 src/handler.v
 src/itree.v
 src/state.v
-src/threadpool.v
+src/threadpool/handler.v
+src/threadpool/interleaving.v
 src/wpi.v
 src/heaplang.v
