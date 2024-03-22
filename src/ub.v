@@ -14,7 +14,6 @@ From Paco Require Import paco.
 From Paco Require Import paco2.
 From ITree Require Import ITree.
 From ITree Require Import Eqit.
-From ITree Require Import EqAxiom.
 
 (** An event type for Undefined Behavior. *)
 Variant ubE : Type → Type :=

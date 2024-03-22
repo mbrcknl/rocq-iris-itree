@@ -1,6 +1,6 @@
+From iris.itree Require Import axioms.
 From ITree Require Import ITree.
 From ITree Require Import Eqit.
-From ITree Require Import EqAxiom.
 From ITree Require Import TranslateFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.

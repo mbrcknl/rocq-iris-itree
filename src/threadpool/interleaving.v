@@ -14,13 +14,13 @@ From stdpp Require Import list.
 From Paco Require Import paco.
 From Paco Require Import paco3.
 
+(** Value that is returned to indicate that the last thread was safely
+killed, i.e., the program terminated safely. *)
+Variant last_thread_killed := LastThreadKilled.
+
 (** The interleaving relation. *)
 Section interleaving.
-  Context `{!invGS_gen hlc Σ} {E : Type → Type} {H : iHandler Σ E} {R : Type}.
-
-  (** Value that is returned to indicate that the last thread was safely
-  killed, i.e., the program terminated safely. *)
-  Variant last_thread_killed := LastThreadKilled.
+  Context {E : Type → Type} {R : Type}.
 
   (** The interleaving relation. This relation encodes what it means for an
   [itree E R] to refine an itree [itree (threadpoolE +' E) R] that can emit
@@ -155,7 +155,7 @@ Section interleaving.
     intros Hinter. punfold Hinter. destruct Hinter as [t [Hidx Hinter]].
     simpl in Hidx. injection Hidx as <-.
     inversion Hinter.
-    - subst. pclearbot. simplify_K. simpl in H4. apply interleaves_lookup in H4 as [? [=]].
+    - subst. pclearbot. simplify_K. simpl in H3. apply interleaves_lookup in H3 as [? [=]].
     - subst. by simplify_obs.
   Qed.
   Lemma interleaves_inversion_Vis_EYield tid tp k interleaving :
@@ -215,44 +215,6 @@ With (a carefully chosen) definition of [wptp], the proof of
 Section wptp.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
 
-  (** An intermediate definition to placate Coq's dependent pattern matching mechanism. *)
-  Definition handle_threadpoolE
-    (tid : nat)
-    (t : itree (threadpoolE +' E) R)
-    (tp : list (itree (threadpoolE +' E) R))
-    (Φ : leibnizO R → iPropO Σ)
-    (wptp : leibnizO (option nat) → leibnizO (list (itree (threadpoolE +' E) R)) → (leibnizO R → iPropO Σ) → iPropO Σ)
-    (A : Type)
-    (e : threadpoolE A)
-    : (A → itree (threadpoolE +' E) R) → iProp Σ :=
-    (** Trick: To have Coq not complain about dependent types, it is important
-    to introduce the dependently typed binders sufficiently late. This is why
-    we put a lambda after each arm, as opposed to on the outside. *)
-    match e with
-    (* TODO: Unify [EKillThread] and [EYield] by having a unified insert/delete
-    accepting an [option nat]. *)
-    | EKillThread => λ k,
-      (
-      (** After killing the current thread, control can be yielded to the
-      outside world (in which case all invariants must be closed so that they
-      can be accessed when resuming another suspended threadpool) or ... *)
-      (|={∅, ⊤}=> wptp None (delete tid tp) Φ)
-      (** ... to another thread in the threadpool. *)
-      ∧ ∀ tid' t', ⌜(delete tid tp) !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (delete tid tp) Φ
-      )
-    | EYield => λ k,
-      (
-      (** [EYield] can yield control to the outside world (in which case all
-      invariants must be closed so that they can be accessed when resuming
-      another suspended threadpool) or ... *)
-      (|={∅, ⊤}=> wptp None (<[tid:=k ()]>tp) Φ)
-      (** ... to another thread in the threadpool. *)
-      ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (<[tid:=k ()]>tp) Φ
-      )
-    | EFork => λ k,
-      (** Newly forked threads are just prepended to the threadpool. *)
-      wptp (Some (S tid)) (k NewThread :: <[tid:=k CurrentThread]>tp) Φ
-    end%I.
   (** The definition of the weakest precondition, prior to taking the least
   fixpoint. *)
   Definition wptpF (H : iHandler Σ E)
@@ -271,9 +233,35 @@ Section wptp.
         | RetF r  => |={∅, ⊤}=> Φ r
         (** We simply skip over silent steps. *)
         | TauF t' => wptp (Some tid) (<[tid := t']>tp) Φ
-        (** [threadpoolE] events are handled using the function
-        [handle_threadpoolE]. *)
-        | @VisF _ _ _  A (inl1 e) k => handle_threadpoolE tid t tp Φ wptp A e k
+        | @VisF _ _ _  A (inl1 e) k =>
+          (** Trick: To have Coq not complain about dependent types, it is important
+          to introduce the dependently typed binders sufficiently late. This is why
+          we put a lambda after each arm, as opposed to on the outside. *)
+          (match (e : threadpoolE A) with
+          (* TODO: Unify [EKillThread] and [EYield] by having a unified insert/delete
+          accepting an [option nat]. *)
+          | EKillThread => λ k,
+            (
+            (** After killing the current thread, control can be yielded to the
+            outside world (in which case all invariants must be closed so that they
+            can be accessed when resuming another suspended threadpool) or ... *)
+            (|={∅, ⊤}=> wptp None (delete tid tp) Φ)
+            (** ... to another thread in the threadpool. *)
+            ∧ ∀ tid' t', ⌜(delete tid tp) !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (delete tid tp) Φ
+            )
+          | EYield => λ k,
+            (
+            (** [EYield] can yield control to the outside world (in which case all
+            invariants must be closed so that they can be accessed when resuming
+            another suspended threadpool) or ... *)
+            (|={∅, ⊤}=> wptp None (<[tid:=k ()]>tp) Φ)
+            (** ... to another thread in the threadpool. *)
+            ∧ ∀ tid' t', ⌜tp !! tid' = Some t'⌝ → |={∅}=> wptp (Some tid') (<[tid:=k ()]>tp) Φ
+            )
+          | EFork => λ (k : thread → _),
+            (** Newly forked threads are just prepended to the threadpool. *)
+            wptp (Some (S tid)) (k NewThread :: <[tid:=k CurrentThread]>tp) Φ
+          end : (A → _) → _) k
         (** Non-threadpool events are handled using the handler [H]. *)
         | VisF (inr1 e) k => H _ e
             (λ a, wptp (Some tid) (<[tid:=k a]>tp) Φ)
@@ -294,9 +282,8 @@ Section wptp.
     - rewrite /curry3. do 4 f_equiv.
       * by f_equiv.
       * by apply Hwptp.
-      * rewrite /handle_threadpoolE.
-        destruct e as [e'|e'].
-        + rewrite /handle_threadpoolE. destruct e'.
+      * destruct e as [e'|e'].
+        + destruct e'.
           ++ by apply Hwptp.
           ++ repeat f_equiv; by apply Hwptp.
           ++ repeat f_equiv; first by apply Hwptp. repeat f_equiv. by apply Hwptp.
@@ -321,7 +308,7 @@ Section wptp.
       iMod "Hwptp". iModIntro. destruct (observe t).
       * done.
       * by iApply "Hwand".
-      * rewrite /handle_threadpoolE. destruct e as [e|e].
+      * destruct e as [e|e].
         + destruct e.
           ++ by iApply "Hwand".
           ++ iSplit.
@@ -555,158 +542,176 @@ End wpi_masked_ind.
 
 (** List lemmata. *)
 Section list.
-    Lemma lookup_app_r_Some {A} (xs ys : list A) y n :
-      ys !! n = Some y →
-      (xs ++ ys) !! (length xs + n) = Some y.
-    Proof.
-      intros Hidx. rewrite lookup_app_r; last lia.
-      by replace (length xs + n - length xs) with n by lia.
-    Qed.
+  Lemma singleton_or_more {A} (xs : list A) idx i :
+    xs !! idx = Some i →
+    ((idx = 0 ∧ xs = [i]) ∨ (length xs > 1 ∧ xs !! idx = Some i)).
+  Proof.
+    intros Hidx.
+      destruct (decide (length xs = 1)) as [Hlen|Hlen].
+      - left. destruct xs as [|t ts]; first discriminate.
+        simpl in Hlen. injection Hlen as Hlen. apply nil_length_inv in Hlen as ->.
+        destruct idx; last discriminate. simpl in Hidx. injection Hidx as ->.
+        done.
+      - right.
+        destruct xs; first discriminate.
+        destruct xs. { simpl in Hlen. contradiction. }
+        simpl. split.
+        * lia.
+        * done.
+  Qed.
 
-    Lemma delete_app_r {A} (xs ys : list A) n :
-      delete (length xs + n) (xs ++ ys) = xs ++ delete n ys.
-    Proof.
-      rewrite !delete_take_drop.
-      replace (S (length xs + n)) with (length xs + (1 + n)) by lia.
-      rewrite take_app_add' // drop_app_add' // -app_assoc //.
-    Qed.
-    Lemma delete_app_l {A} (xs ys : list A) n :
-      n < length xs →
-      delete n (xs ++ ys) = delete n xs ++ ys.
-    Proof.
-      intros Hlt.
-      rewrite !delete_take_drop take_app_le; last by lia.
-      rewrite drop_app_le; last by lia.
-      rewrite app_assoc //.
-    Qed.
+  Lemma lookup_app_r_Some {A} (xs ys : list A) y n :
+    ys !! n = Some y →
+    (xs ++ ys) !! (length xs + n) = Some y.
+  Proof.
+    intros Hidx. rewrite lookup_app_r; last lia.
+    by replace (length xs + n - length xs) with n by lia.
+  Qed.
 
-    Lemma app_lookup {A} (idx : nat) (xs ys : list A) :
-      ((xs ++ ys) !! idx = None) ∨
-      (∃ x, (xs ++ ys) !! idx = xs !! idx ∧ xs !! idx = Some x) ∨
-      (∃ y, (xs ++ ys) !! idx = ys !! (idx - length xs) ∧ ys !! (idx - length xs) = Some y).
-    Proof.
-      destruct (idx <? length xs) eqn:Heq.
-      - apply Nat.ltb_lt in Heq as Hbound. right. left.
-        assert (Hbound' := Hbound).
-        apply lookup_lt_is_Some_2 in Hbound as [x Hidx].
-        eexists. by split; first by apply lookup_app_l.
-      - apply Nat.ltb_nlt in Heq as Hbound.
-        destruct (idx <? length xs + length ys) eqn:Heq'.
-        * apply Nat.ltb_lt in Heq' as Hbound'. right. right.
-          rewrite -app_length in Hbound'.
-          apply lookup_lt_is_Some_2 in Hbound' as [x Hidx].
-          eexists. split.
-          + apply lookup_app_r. lia.
-          + rewrite -lookup_app_r; first done. lia.
-        * apply Nat.ltb_nlt in Heq' as Hbound'. left. apply lookup_ge_None_2. rewrite app_length. lia.
-    Qed.
+  Lemma delete_app_r {A} (xs ys : list A) n :
+    delete (length xs + n) (xs ++ ys) = xs ++ delete n ys.
+  Proof.
+    rewrite !delete_take_drop.
+    replace (S (length xs + n)) with (length xs + (1 + n)) by lia.
+    rewrite take_app_add' // drop_app_add' // -app_assoc //.
+  Qed.
+  Lemma delete_app_l {A} (xs ys : list A) n :
+    n < length xs →
+    delete n (xs ++ ys) = delete n xs ++ ys.
+  Proof.
+    intros Hlt.
+    rewrite !delete_take_drop take_app_le; last by lia.
+    rewrite drop_app_le; last by lia.
+    rewrite app_assoc //.
+  Qed.
 
-    Lemma zip_length {A B} (xs : list A) (ys : list B) :
-      length (zip xs ys) = min (length xs) (length ys).
-    Proof. apply zip_with_length. Qed.
+  Lemma app_lookup {A} (idx : nat) (xs ys : list A) :
+    ((xs ++ ys) !! idx = None) ∨
+    (∃ x, (xs ++ ys) !! idx = xs !! idx ∧ xs !! idx = Some x) ∨
+    (∃ y, (xs ++ ys) !! idx = ys !! (idx - length xs) ∧ ys !! (idx - length xs) = Some y).
+  Proof.
+    destruct (idx <? length xs) eqn:Heq.
+    - apply Nat.ltb_lt in Heq as Hbound. right. left.
+      assert (Hbound' := Hbound).
+      apply lookup_lt_is_Some_2 in Hbound as [x Hidx].
+      eexists. by split; first by apply lookup_app_l.
+    - apply Nat.ltb_nlt in Heq as Hbound.
+      destruct (idx <? length xs + length ys) eqn:Heq'.
+      * apply Nat.ltb_lt in Heq' as Hbound'. right. right.
+        rewrite -app_length in Hbound'.
+        apply lookup_lt_is_Some_2 in Hbound' as [x Hidx].
+        eexists. split.
+        + apply lookup_app_r. lia.
+        + rewrite -lookup_app_r; first done. lia.
+      * apply Nat.ltb_nlt in Heq' as Hbound'. left. apply lookup_ge_None_2. rewrite app_length. lia.
+  Qed.
 
-    Lemma zip_lookup {A B} (xs : list A) (a : A) (ys : list B) (b : B) (idx : nat) :
-      (zip xs ys) !! idx = Some (a, b) →
-      xs !! idx = Some a ∧ ys !! idx = Some b.
-    Proof.
-      rewrite lookup_zip_with. intros Hidx.
-      destruct (xs !! idx) as [x|]; last done.
-      destruct (ys !! idx) as [y|]; last done.
-      by injection Hidx as -> ->.
-    Qed.
+  Lemma zip_length {A B} (xs : list A) (ys : list B) :
+    length (zip xs ys) = min (length xs) (length ys).
+  Proof. apply zip_with_length. Qed.
 
-    Lemma zip_insert {A B} (xs : list A) (a : A) (ys : list B) (b : B) (idx : nat) :
-      <[idx:=(a, b)]>(zip xs ys) = zip (<[idx:=a]>xs) (<[idx:=b]>ys).
-    Proof. apply insert_zip_with. Qed.
+  Lemma zip_lookup {A B} (xs : list A) (a : A) (ys : list B) (b : B) (idx : nat) :
+    (zip xs ys) !! idx = Some (a, b) →
+    xs !! idx = Some a ∧ ys !! idx = Some b.
+  Proof.
+    rewrite lookup_zip_with. intros Hidx.
+    destruct (xs !! idx) as [x|]; last done.
+    destruct (ys !! idx) as [y|]; last done.
+    by injection Hidx as -> ->.
+  Qed.
 
-    Lemma seq_0_insert (idx len : nat) :
-      <[idx := idx]>(seq 0 len) = seq 0 len.
-    Proof.
-      apply list_eq. intros i.
-      destruct (i <? len) eqn:Hineq.
-      - apply Nat.ltb_lt in Hineq.
-        destruct (i =? idx) eqn:Heq.
-        * apply Nat.eqb_eq in Heq as ->.
-          rewrite list_lookup_insert; last rewrite seq_length //. rewrite lookup_seq_lt //.
-        * apply Nat.eqb_neq in Heq. rewrite list_lookup_insert_ne //.
-      - apply Nat.ltb_ge in Hineq.
-        rewrite !lookup_ge_None_2 //. { rewrite seq_length //. }
-        rewrite insert_length seq_length //.
-    Qed.
+  Lemma zip_insert {A B} (xs : list A) (a : A) (ys : list B) (b : B) (idx : nat) :
+    <[idx:=(a, b)]>(zip xs ys) = zip (<[idx:=a]>xs) (<[idx:=b]>ys).
+  Proof. apply insert_zip_with. Qed.
 
-    Lemma nin_cons {A} (xs : list A) (x x' : A) :
-      x' ∉ x :: xs → x' ∉ xs.
-    Proof.
-      intros Hnin. intros Hin. unshelve eassert (Hnin := Hnin _). { by constructor. } done.
-    Qed.
+  Lemma seq_0_insert (idx len : nat) :
+    <[idx := idx]>(seq 0 len) = seq 0 len.
+  Proof.
+    apply list_eq. intros i.
+    destruct (i <? len) eqn:Hineq.
+    - apply Nat.ltb_lt in Hineq.
+      destruct (i =? idx) eqn:Heq.
+      * apply Nat.eqb_eq in Heq as ->.
+        rewrite list_lookup_insert; last rewrite seq_length //. rewrite lookup_seq_lt //.
+      * apply Nat.eqb_neq in Heq. rewrite list_lookup_insert_ne //.
+    - apply Nat.ltb_ge in Hineq.
+      rewrite !lookup_ge_None_2 //. { rewrite seq_length //. }
+      rewrite insert_length seq_length //.
+  Qed.
 
-    Definition enumerate_from {A} (n : nat) (xs : list A) : list (nat * A) :=
-      zip (seq n (length xs)) xs.
-    Definition enumerate {A} (xs : list A) : list (nat * A) :=
-      enumerate_from 0 xs.
+  Lemma nin_cons {A} (xs : list A) (x x' : A) :
+    x' ∉ x :: xs → x' ∉ xs.
+  Proof.
+    intros Hnin. intros Hin. unshelve eassert (Hnin := Hnin _). { by constructor. } done.
+  Qed.
 
-    Lemma enumerate_lookup {A} (xs : list A) (idx idx' : nat) (x : A) :
-      enumerate xs !! idx = Some (idx', x) → idx = idx' ∧ xs !! idx = Some x.
-    Proof.
-      intros Hidx. rewrite /enumerate/enumerate_from in Hidx. apply zip_lookup in Hidx as [Hseq Hidx].
-      by apply lookup_seq in Hseq as [Heq Hbound].
-    Qed.
+  Definition enumerate_from {A} (n : nat) (xs : list A) : list (nat * A) :=
+    zip (seq n (length xs)) xs.
+  Definition enumerate {A} (xs : list A) : list (nat * A) :=
+    enumerate_from 0 xs.
 
-    Lemma enumerate_from_cons {A} (n : nat) (x : A) (xs : list A) :
-      enumerate_from n (x :: xs) = (n, x) :: enumerate_from (S n) xs.
-    Proof. done. Qed.
+  Lemma enumerate_lookup {A} (xs : list A) (idx idx' : nat) (x : A) :
+    enumerate xs !! idx = Some (idx', x) → idx = idx' ∧ xs !! idx = Some x.
+  Proof.
+    intros Hidx. rewrite /enumerate/enumerate_from in Hidx. apply zip_lookup in Hidx as [Hseq Hidx].
+    by apply lookup_seq in Hseq as [Heq Hbound].
+  Qed.
 
-    Lemma enumerate_from_fst {A} (n : nat) (xs : list A) :
-      fst <$> enumerate_from n xs = seq n (length xs).
-    Proof.
-      rewrite /enumerate_from fst_zip // seq_length //.
-    Qed.
+  Lemma enumerate_from_cons {A} (n : nat) (x : A) (xs : list A) :
+    enumerate_from n (x :: xs) = (n, x) :: enumerate_from (S n) xs.
+  Proof. done. Qed.
 
-    Lemma enumerate_lookup_fst {A} (xs : list A) (idx: nat) :
-      idx < length xs →
-      fst <$> enumerate xs !! idx = Some idx.
-    Proof.
-      intros Hbound. rewrite -list_lookup_fmap /enumerate enumerate_from_fst lookup_seq //.
-    Qed.
+  Lemma enumerate_from_fst {A} (n : nat) (xs : list A) :
+    fst <$> enumerate_from n xs = seq n (length xs).
+  Proof.
+    rewrite /enumerate_from fst_zip // seq_length //.
+  Qed.
 
-    Lemma enumerate_length {A} (xs : list A) :
-      length (enumerate xs) = length xs.
-    Proof.
-      rewrite /enumerate zip_length seq_length. apply Nat.min_id.
-    Qed.
+  Lemma enumerate_lookup_fst {A} (xs : list A) (idx: nat) :
+    idx < length xs →
+    fst <$> enumerate xs !! idx = Some idx.
+  Proof.
+    intros Hbound. rewrite -list_lookup_fmap /enumerate enumerate_from_fst lookup_seq //.
+  Qed.
 
-    Lemma enumerate_insert {A} (xs : list A) (i : nat) (x : A) :
-      enumerate (<[i:=x]>xs) = <[i:=(i, x)]>(enumerate xs).
-    Proof.
-      rewrite zip_insert seq_0_insert /enumerate/enumerate_from insert_length //.
-    Qed.
+  Lemma enumerate_length {A} (xs : list A) :
+    length (enumerate xs) = length xs.
+  Proof.
+    rewrite /enumerate zip_length seq_length. apply Nat.min_id.
+  Qed.
 
-    Lemma enumerate_bound {A} (xs : list A) (i : nat) (x : A) :
-      (i, x) ∈ enumerate xs → i < length xs.
-    Proof.
-      by intros [idx [<- Hbound%lookup_lt_Some]%enumerate_lookup]%elem_of_list_lookup_1.
-    Qed.
+  Lemma enumerate_insert {A} (xs : list A) (i : nat) (x : A) :
+    enumerate (<[i:=x]>xs) = <[i:=(i, x)]>(enumerate xs).
+  Proof.
+    rewrite zip_insert seq_0_insert /enumerate/enumerate_from insert_length //.
+  Qed.
 
-    Lemma enumerate_from_NoDup {A} (n : nat) (xs : list A) :
-      NoDup (fst <$> enumerate_from n xs).
-    Proof.
-      induction xs.
-      - constructor.
-      - rewrite enumerate_from_fst. apply NoDup_seq.
-    Qed.
-    Lemma enumerate_NoDup {A} (xs : list A) :
-      NoDup (fst <$> enumerate xs).
-    Proof.
-      rewrite enumerate_from_fst. apply NoDup_seq.
-    Qed.
+  Lemma enumerate_bound {A} (xs : list A) (i : nat) (x : A) :
+    (i, x) ∈ enumerate xs → i < length xs.
+  Proof.
+    by intros [idx [<- Hbound%lookup_lt_Some]%enumerate_lookup]%elem_of_list_lookup_1.
+  Qed.
 
-    Lemma enumerate_app {A} (xs xs' : list A) :
-      enumerate (xs ++ xs') = enumerate xs ++ zip (seq (length xs) (length xs')) xs'.
-    Proof.
-      rewrite /enumerate/enumerate_from -zip_with_app.
-      - f_equiv. rewrite app_length. apply seq_app.
-      - rewrite seq_length //.
-    Qed.
+  Lemma enumerate_from_NoDup {A} (n : nat) (xs : list A) :
+    NoDup (fst <$> enumerate_from n xs).
+  Proof.
+    induction xs.
+    - constructor.
+    - rewrite enumerate_from_fst. apply NoDup_seq.
+  Qed.
+  Lemma enumerate_NoDup {A} (xs : list A) :
+    NoDup (fst <$> enumerate xs).
+  Proof.
+    rewrite enumerate_from_fst. apply NoDup_seq.
+  Qed.
+
+  Lemma enumerate_app {A} (xs xs' : list A) :
+    enumerate (xs ++ xs') = enumerate xs ++ zip (seq (length xs) (length xs')) xs'.
+  Proof.
+    rewrite /enumerate/enumerate_from -zip_with_app.
+    - f_equiv. rewrite app_length. apply seq_app.
+    - rewrite seq_length //.
+  Qed.
 End list.
 
 (** In order to state the reordering principle [wptp_reorder], it is necessary
@@ -996,24 +1001,6 @@ Section pointed_permutations.
           ++ rewrite seq_length //.
   Qed.
 End pointed_permutations.
-
-Lemma singleton_or_more {A} (xs : list A) idx i :
-  xs !! idx = Some i →
-  ((idx = 0 ∧ xs = [i]) ∨ (length xs > 1 ∧ xs !! idx = Some i)).
-Proof.
-  intros Hidx.
-    destruct (decide (length xs = 1)) as [Hlen|Hlen].
-    - left. destruct xs as [|t ts]; first discriminate.
-      simpl in Hlen. injection Hlen as Hlen. apply nil_length_inv in Hlen as ->.
-      destruct idx; last discriminate. simpl in Hidx. injection Hidx as ->.
-      done.
-    - right.
-      destruct xs; first discriminate.
-      destruct xs. { simpl in Hlen. contradiction. }
-      simpl. split.
-      * lia.
-      * done.
-Qed.
 
 Section threadpool_adequacy.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.

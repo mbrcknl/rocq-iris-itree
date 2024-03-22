@@ -1,6 +1,8 @@
 From Coq.Logic Require Import ChoiceFacts EqdepFacts.
 From stdpp Require Import tactics.
 
+From ITree Require Export EqAxiom.
+
 Module Ax : EqdepElimination.
   (** Invariance by Substitution of Reflexive Equality Proofs. This is implied by
   XM. Also, it is equivalent to UIP. See [1].
