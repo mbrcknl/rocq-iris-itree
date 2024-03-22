@@ -97,8 +97,9 @@ End wp_threadpool.
 Section interleaving.
   Context `{!invGS_gen hlc Σ} {E : Type → Type} {H : iHandler Σ E} {R : Type}.
 
-  (* TODO: Update comments here in view of changes to the way that the focused
-  thread is encoded etc. *)
+  (** Value that is returned to indicate that the last thread was safely
+  killed, i.e., the program terminated safely. *)
+  Variant last_thread_killed := LastThreadKilled.
 
   (** The interleaving relation. This relation encodes what it means for an
   [itree E R] to refine an itree [itree (threadpoolE +' E) R] that can emit
@@ -109,7 +110,7 @@ Section interleaving.
   Variant interleavesF
     (** The recursive instance of the interleaving relation (doing bound
     checks). *)
-    (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop)
+    (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) → Prop)
     (** The thread ID [tid] of the currently executing thread. *)
     : nat
     (** The thread [t] that is currently being executed. *)
@@ -117,11 +118,11 @@ Section interleaving.
     (** The threadpool [tp] (supposed to satisfy [tp !! tid = Some t]) *)
     → list (itree (threadpoolE +' E) R)
     (** The interleaved [itree]. *)
-    → itree' E R
+    → itree' E (R + last_thread_killed)
     → Prop :=
   (** If a thread returns, the interleaved [itree] ends. *)
   | Return current_tid tp r :
-    interleavesF interleaves current_tid (RetF r) tp (RetF r)
+    interleavesF interleaves current_tid (RetF r) tp (RetF (inl r))
   (** If the current thread steps, so does the interleaved [itree]. *)
   | Step current_tid current' tp interleaving' :
     interleaves current_tid (<[current_tid:=current']>tp) interleaving' →
@@ -137,6 +138,11 @@ Section interleaving.
   | KillThread current_tid tp k new_current_tid interleaving' :
     interleaves new_current_tid (delete current_tid tp) interleaving' →
     interleavesF interleaves current_tid (VisF (inl1 EKillThread) k) tp (TauF interleaving')
+  (** If a thread emits the [EKillThread] event, the thread ends and control is
+  yielded to some other thread in the threadpool. The interleaved [itree] takes
+  a silent step in place of the [EKillThread]. *)
+  | KillLastThread k t :
+    interleavesF interleaves 0 (VisF (inl1 EKillThread) k) [t] (RetF (inr LastThreadKilled))
   (** The [EYield] event yields control to another thread. The
   interleaved [itree] takes a silent step in place of the [EYield]. *)
   | Yield current_tid tp k new_current_tid interleaving' :
@@ -155,10 +161,10 @@ Section interleaving.
   Hint Constructors interleavesF : iris_itree.
   (** The recuirsion template for the interleaving relation. *)
   Definition interleaves_
-    (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop)
+    (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) → Prop)
     : nat
     → list (itree (threadpoolE +' E) R)
-    → itree E R
+    → itree E (R + last_thread_killed)
     → Prop :=
     λ tid tp interleaving, ∃ t, tp !! tid = Some t ∧ interleavesF interleaves tid (observe t) tp (observe interleaving).
 
@@ -178,15 +184,22 @@ Section interleaving.
   Hint Resolve interleaves__mono : paco.
 
   (** The interleaving relation. (See comments above.) *)
-  Definition interleaves : nat → list (itree (threadpoolE +' E) R) → itree E R → Prop :=
+  Definition interleaves : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) → Prop :=
     paco3 interleaves_ bot3.
+
+  Lemma interleaves_lookup tid tp interleaving :
+    interleaves tid tp interleaving →
+    ∃ t, tp !! tid = Some t.
+  Proof.
+    intros Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]]. eauto.
+  Qed.
 
   (** Inversion lemmata. *)
 
   Lemma interleaves_inversion_Ret tid tp r interleaving :
     tp !! tid = Some (Ret r) →
     interleaves tid tp interleaving →
-    interleaving ≅ Ret r.
+    interleaving ≅ Ret (inl r).
   Proof.
     intros Hidx Hinter. punfold Hinter. destruct Hinter as [t [Hidx' Hinter]].
     rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
@@ -202,14 +215,27 @@ Section interleaving.
     inversion Hinter. subst. exists interleaving'. pclearbot. by simplify_obs.
   Qed.
   Lemma interleaves_inversion_Vis_EKillThread tid tp k interleaving :
+    length tp > 1 →
     tp !! tid = Some (Vis (inl1 EKillThread) k) →
     interleaves tid tp interleaving →
     ∃ interleaving' tid', interleaves tid' (delete tid tp) interleaving' ∧ interleaving ≅ Tau interleaving'.
   Proof.
-    intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
+    intros Hlen Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
     rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
-    inversion Hinter. subst. pclearbot. simplify_K. exists interleaving', new_current_tid.
-    split; first done. by simplify_obs.
+    inversion Hinter.
+    - subst. pclearbot. simplify_K. exists interleaving', new_current_tid.
+      split; first done. by simplify_obs.
+    - subst. simpl in Hlen. lia.
+  Qed.
+  Lemma interleaves_inversion_Vis_EKillThread_last_thread k interleaving :
+    interleaves 0 [Vis (inl1 EKillThread) k] interleaving →
+    interleaving ≅ Ret (inr LastThreadKilled).
+  Proof.
+    intros Hinter. punfold Hinter. destruct Hinter as [t [Hidx Hinter]].
+    simpl in Hidx. injection Hidx as <-.
+    inversion Hinter.
+    - subst. pclearbot. simplify_K. simpl in H4. apply interleaves_lookup in H4 as [? [=]].
+    - subst. by simplify_obs.
   Qed.
   Lemma interleaves_inversion_Vis_EYield tid tp k interleaving :
     tp !! tid = Some (Vis (inl1 EYield) k) →
@@ -238,13 +264,6 @@ Section interleaving.
     intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
     rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
     inversion Hinter. subst. pclearbot. simplify_K. exists k'. by simplify_obs.
-  Qed.
-
-  Lemma interleaves_lookup tid tp interleaving :
-    interleaves tid tp interleaving →
-    ∃ t, tp !! tid = Some t.
-  Proof.
-    intros Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]]. eauto.
   Qed.
 End interleaving.
 
@@ -1057,6 +1076,24 @@ Section pointed_permutations.
   Qed.
 End pointed_permutations.
 
+Lemma singleton_or_more {A} (xs : list A) idx i :
+  xs !! idx = Some i →
+  ((idx = 0 ∧ xs = [i]) ∨ (length xs > 1 ∧ xs !! idx = Some i)).
+Proof.
+  intros Hidx.
+    destruct (decide (length xs = 1)) as [Hlen|Hlen].
+    - left. destruct xs as [|t ts]; first discriminate.
+      simpl in Hlen. injection Hlen as Hlen. apply nil_length_inv in Hlen as ->.
+      destruct idx; last discriminate. simpl in Hidx. injection Hidx as ->.
+      done.
+    - right.
+      destruct xs; first discriminate.
+      destruct xs. { simpl in Hlen. contradiction. }
+      simpl. split.
+      * lia.
+      * done.
+Qed.
+
 Section threadpool_adequacy.
   Context {Σ : gFunctors} {R : Type} {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context {H : iHandler Σ E}.
@@ -1488,7 +1525,12 @@ Section threadpool_adequacy.
     ∀ tid interleaving,
       ⌜tid' = Some tid⌝ →
       ⌜interleaves tid tp interleaving⌝ →
-      WPi interleaving @ H; ∅ {{ r, |={∅, ⊤}=> Φ r }}.
+      WPi interleaving @ H; ∅
+        {{ r, |={∅, ⊤}=> match r with
+              | inl r => Φ r
+              | inr last_thread_ended => True
+              end
+        }}.
   Proof.
     iApply (wptp_iter _); first solve_proper.
     iIntros "!>" (tid' tp Φ) "Hwptp". iIntros (tid interleaving -> Hinter).
@@ -1509,12 +1551,15 @@ Section threadpool_adequacy.
       apply lookup_lt_Some in Hidx''. rewrite insert_length in Hidx''.
       apply lookup_lt_is_Some_2 in Hidx'' as [t' Hidx''].
       by iApply ("Hwptp'" $! tid').
-    - iApply wpi_update. iDestruct "Hwptp'" as "[_ Hwptp']".
-      apply interleaves_inversion_Vis_EKillThread with (k := k) in Hinter; last done.
-      destruct Hinter as [interleaving' [tid' [Hinter ->]]]. rewrite -wpi_tau.
-      assert (Hidx'' := interleaves_lookup _ _ _ Hinter).
-      destruct Hidx'' as [t Hidx''].
-      by iApply ("Hwptp'" $! tid').
+    - apply singleton_or_more in Hidx' as [[-> ->]|[Hlen Hidx']].
+      * apply interleaves_inversion_Vis_EKillThread_last_thread in Hinter as ->.
+        iApply wpi_ret. by iDestruct "Hwptp'" as "[>_ _]".
+      * iDestruct "Hwptp'" as "[_ Hwptp']".
+        apply interleaves_inversion_Vis_EKillThread with (k := k) in Hinter; eauto.
+        destruct Hinter as [interleaving' [tid' [Hinter ->]]]. rewrite -wpi_tau.
+        assert (Hidx'' := interleaves_lookup _ _ _ Hinter).
+        destruct Hidx'' as [t Hidx''].
+        iApply wpi_update. by iApply ("Hwptp'" $! tid').
     - iApply wpi_update. iMod "HH". iModIntro.
       apply interleaves_inversion_Vis with (k := k) (e := e) in Hinter; last done.
       destruct Hinter as [interleaving' [Hinter' ->]]. iApply wpi_vis.
@@ -1528,11 +1573,16 @@ Section threadpool_adequacy.
   preconditions for every interleaving [itree E R]. *)
   Corollary threadpool_adequacy `{!Sequential H}
     (concurrent : itree (threadpoolE +' E) R)
-    (interleaving : itree E R)
+    (interleaving : itree E (R + last_thread_killed))
     (Φ : R → iProp Σ) :
     interleaves 0 [concurrent] interleaving →
     WPi concurrent @ threadpoolH ⊕ H; ⊤ {{ Φ }} -∗
-    WPi interleaving @ H; ⊤ {{ Φ }}.
+    WPi interleaving @ H; ⊤
+      {{ r, match r with
+            | inl r => Φ r
+            | inr last_thread_ended => True
+            end
+      }}.
   Proof.
     iIntros "%Hinter Hwp". iApply wpi_clear_mask.
     iEval (rewrite -wpi_clear_mask) in "Hwp". iMod "Hwp".
