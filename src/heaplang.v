@@ -1,6 +1,7 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
-From iris.itree Require Import wpi threadpool choice ub state handler.
+From iris.itree Require Import wpi choice ub state handler.
+From iris.itree.threadpool Require Import handler.
 From iris.prelude Require Import prelude.
 From iris Require Import ghost_map.
 From iris Require Import invariants.
@@ -10,16 +11,22 @@ From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
 
 Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
-Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z))
+Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
   (at level 20, y at level 100, z at level 200,
   format "x  ←  y ;  '/' z") : itree_scope.
-Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z end))
+Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z end)%itree)
   (at level 20, x pattern, y at level 100, z at level 200,
   format "' x  ←  y ;  '/' z") : itree_scope.
-Notation "x ;; z" := (ITree.bind x (fun _ => z))
+Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
   (at level 100, z at level 200, right associativity) : itree_scope.
 
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' ubE.
+
+Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
+  match e with
+  | Val v => Ret ()
+  | _ => trigger EYield
+  end.
 
 Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   match e with
@@ -27,71 +34,85 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | Rec f x e => Ret (RecV f x e)
   | App e1 e2 =>
       x ← compile_expr' e2;
+      yield_if_not_val e2;;
       f ← compile_expr' e1;
-      trigger EYield;;
+      yield_if_not_val e1;;
       match f with
-      | RecV f_ x_ e => call (subst' f_ f (subst' x_ x e))
+      | RecV f_ x_ e => let body := (subst' f_ f (subst' x_ x e)) in
+          yield_if_not_val body;;
+          call body
       | _ => ub
       end
   | UnOp op e =>
       v ← compile_expr' e;
-      trigger EYield;;
+      yield_if_not_val e;;
       match un_op_eval op v with
       | Some v => Ret v
       | None => ub
       end
   | BinOp op e1 e2 =>
       v1 ← compile_expr' e2;
+      yield_if_not_val e2;;
       v2 ← compile_expr' e1;
-      trigger EYield;;
+      yield_if_not_val e1;;
       match bin_op_eval op v1 v2 with
       | Some v => Ret v
       | None => ub
       end
   | If e0 e1 e2 =>
       v0 ← compile_expr' e0;
-      trigger EYield;;
+      yield_if_not_val e0;;
       match v0 with
-      | LitV (LitBool b) => if b then compile_expr' e1 else compile_expr' e2
+      | LitV (LitBool b) =>
+          if b then
+            yield_if_not_val e1;;
+            compile_expr' e1
+          else
+            yield_if_not_val e2;;
+            compile_expr' e2
       | _ => ub
       end
   | Pair e1 e2 =>
       v1 ← compile_expr' e2;
+      yield_if_not_val e2;;
       v2 ← compile_expr' e1;
-      trigger EYield;;
+      yield_if_not_val e1;;
       Ret (PairV v1 v2)
   | Fst e =>
       v ← compile_expr' e;
-      trigger EYield;;
+      yield_if_not_val e;;
       match v with
       | PairV x _ => Ret x
       | _ => ub
       end
   | Snd e =>
       v ← compile_expr' e;
-      trigger EYield;;
+      yield_if_not_val e;;
       match v with
       | PairV _ y => Ret y
       | _ => ub
       end
   | InjL e =>
       v ← compile_expr' e;
-      trigger EYield;;
+      yield_if_not_val e;;
       Ret (InjLV v)
   | InjR e =>
       v ← compile_expr' e;
-      trigger EYield;;
+      yield_if_not_val e;;
       Ret (InjRV v)
   | Case e0 e1 e2 =>
       v0 ← compile_expr' e0;
-      trigger EYield;;
+      yield_if_not_val e0;;
       match v0 with
-      | InjLV v => call (App e1 (Val v))
-      | InjRV v => call (App e2 (Val v))
+      | InjLV v =>
+          yield_if_not_val e1;;
+          call (App e1 (Val v))
+      | InjRV v =>
+          yield_if_not_val e2;;
+          call (App e2 (Val v))
       | _ => ub
       end
   | Fork e =>
-      trigger EYield;;
       thread ← trigger EFork;
       match thread with
       | CurrentThread => Ret (LitV LitUnit)
@@ -106,8 +127,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | AllocN ne e =>
       v ← compile_expr' e;
+      yield_if_not_val e;;
       n ← compile_expr' ne;
-      trigger EYield;;
+      yield_if_not_val ne;;
       match n with
       | LitV (LitInt n) =>
           σ ← trigger EGetState;
@@ -120,7 +142,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | Free e =>
       l ← compile_expr' e;
-      trigger EYield;;
+      yield_if_not_val e;;
       match l with
       | LitV (LitLoc l) =>
           σ ← trigger EGetState;
@@ -134,7 +156,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | Load e =>
       l ← compile_expr' e;
-      trigger EYield;;
+      yield_if_not_val e;;
       (* TODO: Notation for partial match. *)
       match l with
       | LitV (LitLoc l) =>
@@ -148,8 +170,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | Store e1 e2 =>
       v ← compile_expr' e2;
+      yield_if_not_val e2;;
       l ← compile_expr' e1;
-      trigger EYield;;
+      yield_if_not_val e1;;
       match l with
       | LitV (LitLoc l) =>
           σ ← trigger EGetState;
@@ -163,8 +186,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | Xchg e1 e2 =>
       v ← compile_expr' e2;
+      yield_if_not_val e2;;
       l ← compile_expr' e1;
-      trigger EYield;;
+      yield_if_not_val e1;;
       match l with
       | LitV (LitLoc l) =>
           σ ← trigger EGetState;
@@ -178,9 +202,11 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | CmpXchg e1 e2 e3 =>
       v2 ← compile_expr' e3;
+      yield_if_not_val e3;;
       v1 ← compile_expr' e2;
+      yield_if_not_val e2;;
       l ← compile_expr' e1;
-      trigger EYield;;
+      yield_if_not_val e1;;
       match l with
       | LitV (LitLoc l) =>
           σ ← trigger EGetState;
@@ -199,8 +225,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       end
   | FAA e1 e2 =>
       v ← compile_expr' e2;
+      yield_if_not_val e2;;
       l ← compile_expr' e1;
-      trigger EYield;;
+      yield_if_not_val e1;;
       match (v, l) with
       | (LitV (LitInt v), LitV (LitLoc l)) =>
           σ ← trigger EGetState;
@@ -228,19 +255,19 @@ Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
 Lemma compile_expr_bind (Ki : ectx_item) (e : expr) :
   supported_subset_ectx Ki →
   compile_expr (fill_item Ki e) ≈
-  v ← compile_expr e ; compile_expr (fill_item Ki (Val v)).
+    v ← compile_expr e;
+    yield_if_not_val e;;
+    compile_expr (fill_item Ki (Val v)).
 Proof.
   intros Hsubset. destruct Ki; simpl; rewrite /compile_expr rec_as_interp /=.
-  all:solve
-    [ rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp; f_equiv;
-      intros v; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
-    | rewrite interp_bind rec_as_interp; f_equiv;
-      intros v; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
-    | rewrite interp_bind interp_ret bind_ret_l interp_bind rec_as_interp interp_ret;
-      rewrite bind_ret_l interp_bind; f_equiv;
-      intros v; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
-    | contradiction
-    ].
+  all:solve [
+    rewrite interp_bind ?interp_ret ?bind_ret_l ?interp_bind rec_as_interp; f_equiv;
+    intros v; rewrite interp_bind; f_equiv;
+    [ rewrite /yield_if_not_val;
+      destruct e; first rewrite interp_ret //; setoid_rewrite interp_trigger; done | ];
+    intros _; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
+  | contradiction
+  ].
 Qed.
 
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
@@ -279,6 +306,19 @@ Section heaplangH.
   Global Instance wp_heaplang_wp `{!invGS_gen hlc Σ} :
     Wp (iProp Σ) expr val () := λ _ M e Φ, wp_heaplang e M Φ.
  *)
+  Lemma wpi_bind_Ki (Ki : ectx_item) (e : expr) Φ :
+    supported_subset_ectx Ki →
+    WPi compile_expr e @ heaplangH; ⊤ {{ v,
+      WPi compile_expr (fill_item Ki (Val v)) @ heaplangH; ⊤ {{ Φ }}
+    }} -∗
+    WPi compile_expr (fill_item Ki e) @ heaplangH; ⊤ {{ Φ }}.
+  Proof.
+    iIntros (Hs) "Hwp". rewrite compile_expr_bind //. iApply wpi_bind.
+    iApply wpi_wand; last done. iIntros (r) "Hwp".
+    iApply wpi_bind. rewrite /yield_if_not_val. destruct e.
+    1:by iApply wpi_ret.
+    all:by iApply @wpi_yield.
+  Qed.
 
   Lemma wpi_Fork e Φ :
     Φ (LitV LitUnit) -∗
@@ -286,7 +326,6 @@ Section heaplangH.
     WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
     iIntros "HΦ Hwp". rewrite /compile_expr !rec_as_interp /=.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
     rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.
@@ -312,16 +351,16 @@ Section heaplangH.
       done.
   Qed.
 
-  Lemma wpi_AllocN v n :
+  Lemma wpi_AllocN M v n :
     (0 < n)%Z →
+    ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
-    WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; ⊤
+    WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; M
       {{ l', ∃ l, ⌜l' = LitV (LitLoc l)⌝ ∧ [∗ list] i ∈ seq 0 (Z.to_nat n),
           (l +ₗ (i : nat)) ↦ v }}.
   Proof.
-    intros Hpos. iIntros "#Hinv".
+    intros Hpos. iIntros (Hmask) "#Hinv".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
@@ -341,29 +380,29 @@ Section heaplangH.
     iExists (`l). iSplit; first done. iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
   Qed.
 
-  Lemma wpi_Load l v dq :
+  Lemma wpi_Load M l v dq :
+    ↑heaplangH_inv_name ⊆ M →
     l ↦{dq} v -∗
-    WPi compile_expr (Load (Val $ LitV $ LitLoc l)) @ heaplangH; ⊤
+    WPi compile_expr (Load (Val $ LitV $ LitLoc l)) @ heaplangH; M
       {{ v', ⌜v' = v⌝ ∧ l ↦{dq} v }}.
   Proof.
-    iIntros "Hpointsto".
+    iIntros (Hmask) "Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (s) "Hauth".
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %Hlu.
     iFrame. iApply wpi_ret. rewrite Hlu. rewrite interp_ret. iApply wpi_ret. eauto.
   Qed.
 
-  Lemma wpi_Store l v v' :
+  Lemma wpi_Store M l v v' :
+    ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ v -∗
-    WPi compile_expr (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH; ⊤
+    WPi compile_expr (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH; M
       {{ r, ⌜r = LitV (LitUnit)⌝ ∧ l ↦ v' }}.
   Proof.
-    iIntros "#Hinv Hpointsto".
+    iIntros (Hmask) "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
@@ -380,16 +419,16 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wpi_Free l v :
+  Lemma wpi_Free M l v :
+    ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ v -∗
-    WPi compile_expr (Free (Val $ LitV $ LitLoc l)) @ heaplangH; ⊤
+    WPi compile_expr (Free (Val $ LitV $ LitLoc l)) @ heaplangH; M
       {{ r, ⌜r = LitV (LitUnit)⌝ }}.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
-    iIntros "#Hinv Hpointsto".
+    iIntros (Hmask) "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
@@ -406,15 +445,15 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wp_Xchg l v v' :
+  Lemma wp_Xchg M l v v' :
+    ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ v -∗
-    WPi compile_expr (Xchg (Val $ LitV (LitLoc l)) (Val v')) @ heaplangH; ⊤
+    WPi compile_expr (Xchg (Val $ LitV (LitLoc l)) (Val v')) @ heaplangH; M
       {{ r, ⌜r = v⌝ ∧ l ↦ v' }}.
   Proof.
-    iIntros "#Hinv Hpointsto".
+    iIntros (Hmask) "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
@@ -431,17 +470,17 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wpi_CmpXchg_fail l dq v' v1 v2 :
+  Lemma wpi_CmpXchg_fail M l dq v' v1 v2 :
+    ↑heaplangH_inv_name ⊆ M →
     v' ≠ v1 →
     vals_compare_safe v' v1 →
     heap_inv -∗
     l ↦{dq} v' -∗
-    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; ⊤
+    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; M
       {{ r, ⌜r = PairV v' (LitV $ LitBool false)⌝ ∧ l ↦{dq} v' }}.
   Proof.
-    iIntros (Hneq Hcmp) "#Hinv Hpointsto".
+    iIntros (Hmask Hneq Hcmp) "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
@@ -454,17 +493,17 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wpi_CmpXchg_suc l v' v1 v2 :
+  Lemma wpi_CmpXchg_suc M l v' v1 v2 :
+    ↑heaplangH_inv_name ⊆ M →
     v' = v1 →
     vals_compare_safe v' v1 →
     heap_inv -∗
     l ↦ v' -∗
-    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; ⊤
+    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; M
       {{ r, ⌜r = PairV v' (LitV $ LitBool true)⌝ ∧ l ↦ v2 }}.
   Proof.
-    iIntros (Heq Hcmp) "#Hinv Hpointsto".
+    iIntros (Hmask Heq Hcmp) "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
@@ -483,15 +522,15 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wpi_FAA l i1 i2 :
+  Lemma wpi_FAA M l i1 i2 :
+    ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ LitV (LitInt i1) -∗
-    WPi compile_expr (FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2)) @ heaplangH; ⊤
+    WPi compile_expr (FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2)) @ heaplangH; M
       {{ r, ⌜r = LitV (LitInt i1)⌝ ∧ l ↦ LitV (LitInt (i1 + i2)) }}.
   Proof.
-    iIntros "#Hinv Hpointsto".
+    iIntros (Hmask) "#Hinv Hpointsto".
     rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_yield.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     iApply wpi_interp_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
