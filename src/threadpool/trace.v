@@ -205,6 +205,33 @@ Section is_trace.
 
   Definition is_trace (tr : trace E R) (t : itree E R) : Prop :=
     is_trace_ tr (observe t).
+
+  Global Instance is_trace_eqit :
+    Proper (pointwise_relation (trace E R) (eutt (=) ==> impl)) is_trace.
+  Proof.
+    intros tr t1 t2 Heqit Htr.
+    rewrite /is_trace. rewrite /is_trace in Htr.
+    remember (observe t1) as ot1. remember (observe t2) as ot2.
+    revert t1 t2 ot2 Heqot1 Heqot2 Heqit. induction Htr as [r|tr' A e a k Htr IH|A f e k|t|tr t' Htr IH]; intros t1 t2 ot2 Heqot1 Heqot2 Heqit.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. destruct Heqot2.
+      induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH ]; try discriminate.
+      * injection Heqot1 as ->. destruct REL. constructor.
+      * constructor. by apply IH.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. destruct Heqot2.
+      induction Heqit as [ | | B e' k1 k2 REL | | ot1 t2' _ _ IH' ]; try discriminate.
+      * simplify_K. simplify_K. constructor. apply IH with (t1 := k1 a) (t2 := k2 a); try done.
+        pclearbot. apply REL.
+      * constructor. by apply IH'.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. destruct Heqot2.
+      induction Heqit as [ | | B e' k1 k2 REL | | ot1 t2' _ _ IH' ]; try discriminate.
+      * simplify_K. simplify_K. by constructor.
+      * constructor. by apply IH'.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. destruct Heqot2.
+      induction Heqit as [ | | B e' k1 k2 REL | | ot1 t2' _ _ IH' ]; try discriminate; constructor.
+    - apply IH with (t1 := t') (t2 := t2); eauto.
+      transitivity (Tau t'). { by apply eqit_inv_Tau_l. }
+      pfold. rewrite /eqit_. simpl. rewrite Heqot1. punfold Heqit.
+  Qed.
 End is_trace.
 
 Class AnswerEqDecision (E : Type → Type) :=
