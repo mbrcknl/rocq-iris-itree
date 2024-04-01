@@ -114,7 +114,6 @@ Inductive ctrace (E : Type → Type) (R : Type) :=
   | CTRet (r : R)
   | CTVis (A : Type) (e : E A) (a : A) (tr' : ctrace E R)
   | CTVisEmpty
-  | CTTau (tr' : ctrace E R)
   | CTYield (new_tid : nat) (tr' : ctrace E R)
   | CTKillThread (new_tid : nat) (tr' : ctrace E R)
   | CTKillLastThread
@@ -124,7 +123,6 @@ Inductive ctrace (E : Type → Type) (R : Type) :=
 Arguments CTRet {_ _}.
 Arguments CTVis {_ _}.
 Arguments CTVisEmpty {_ _}.
-Arguments CTTau {_ _}.
 Arguments CTYield {_ _}.
 Arguments CTKillThread {_ _}.
 Arguments CTKillLastThread {_ _}.
@@ -147,9 +145,6 @@ Section is_ctrace.
     is_ctrace_ (CTVis A e a tr') tid (VisF (inr1 e) k) tp
   | is_CTVisEmpty tid tp A (f : A → Empty_set) (e : E A) k :
     is_ctrace_ CTVisEmpty tid (VisF (inr1 e) k) tp
-  | is_CTTau tr' tid t' tp :
-    is_ctrace_ tr' tid (observe t') (<[tid:=t']>tp) →
-    is_ctrace_ (CTTau tr') tid (TauF t') tp
   | is_CTYield tr' tid tp k t' tid' :
     <[tid := k ()]>tp !! tid' = Some t' →
     is_ctrace_ tr' tid' (observe t') (<[tid := k ()]>tp) →
@@ -164,7 +159,10 @@ Section is_ctrace.
     is_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) →
     is_ctrace_ (CTFork (k CurrentThread) tr') tid (VisF (inl1 EFork) k) tp
   | is_CTCut tid t tp :
-    is_ctrace_ CTCut tid t tp.
+    is_ctrace_ CTCut tid t tp
+  | ctrace_skip_tau tr t' tid tp :
+    is_ctrace_ tr tid (observe t') (<[tid := t']>tp) →
+    is_ctrace_ tr tid (TauF t') tp.
 
   Definition is_ctrace
     : ctrace E R
@@ -178,13 +176,11 @@ Inductive trace (E : Type → Type) (R : Type) :=
   | TRet (r : R)
   | TVis (A : Type) (e : E A) (a : A) (k : trace E R)
   | TVisEmpty
-  | TTau (k : trace E R)
   | TCut.
 
 Arguments TRet {_ _}.
 Arguments TVis {_ _}.
 Arguments TVisEmpty {_ _}.
-Arguments TTau {_ _}.
 Arguments TCut {_ _}.
 
 Section is_trace.
@@ -201,11 +197,11 @@ Section is_trace.
     is_trace_ (TVis A e a tr') (VisF e k)
   | is_TVisEmpty A (f : A → Empty_set) (e : E A) k :
     is_trace_ TVisEmpty (VisF e k)
-  | is_TTau tr' t' :
-    is_trace_ tr' (observe t') →
-    is_trace_ (TTau tr') (TauF t')
   | is_TCut t :
-    is_trace_ TCut t.
+    is_trace_ TCut t
+  | trace_skip_tau tr t' :
+    is_trace_ tr (observe t') →
+    is_trace_ tr (TauF t').
 
   Definition is_trace (tr : trace E R) (t : itree E R) : Prop :=
     is_trace_ tr (observe t).
@@ -227,11 +223,10 @@ Fixpoint sequencify {E R} (tr : ctrace E R) : trace E (R + last_thread_killed) :
   | CTRet r => TRet (inl r)
   | CTVis A e a tr' => TVis A e a (sequencify tr')
   | CTVisEmpty => TVisEmpty
-  | CTTau tr' => TTau (sequencify tr')
-  | CTYield new_tid tr' => TTau (sequencify tr')
-  | CTKillThread new_tid tr' => TTau (sequencify tr')
+  | CTYield new_tid tr' => sequencify tr'
+  | CTKillThread new_tid tr' => sequencify tr'
   | CTKillLastThread => TRet (inr LastThreadKilled)
-  | CTFork t tr' => TTau (sequencify tr')
+  | CTFork t tr' => sequencify tr'
   | CTCut => TCut
   end.
 
@@ -253,9 +248,9 @@ Section extend_ctrace.
     extends_ctrace_ (CTVis A e a tr') tid (VisF (inr1 e) k) tp (VisF e k_int)
   | extends_CTVisEmpty tid tp A (f : A → Empty_set) (e : E A) k k_int :
     extends_ctrace_ CTVisEmpty tid (VisF (inr1 e) k) tp (VisF e k_int)
-  | extends_CTTau tr' tid t' tp t'_int :
-    extends_ctrace_ tr' tid (observe t') (<[tid:=t']>tp) (observe t'_int) →
-    extends_ctrace_ (CTTau tr') tid (TauF t') tp (TauF t'_int)
+  | extends_Tau tr tid t' tp t'_int :
+    extends_ctrace_ tr tid (observe t') (<[tid:=t']>tp) (observe t'_int) →
+    extends_ctrace_ tr tid (TauF t') tp (TauF t'_int)
   | extends_CTYield tr' tid tp k t' tid' t'_int :
     <[tid := k ()]>tp !! tid' = Some t' →
     extends_ctrace_ tr' tid' (observe t') (<[tid := k ()]>tp) (observe t'_int) →
@@ -334,7 +329,7 @@ Section extend_ctrace.
     intros Hanswer [t [Hidx Htr]].
     remember (observe t) as ot.
     revert t Hidx Heqot.
-    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid t' tp Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k Htr IH|tid t' tp Htr]; intros t Hidx Heqot.
+    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k Htr IH|tid t' tp Htr|tr t' tid tp Htr IH]; intros t Hidx Heqot.
     - exists (Ret (inl r)). eexists. split; first done. destruct Heqot. constructor.
     - apply exists_vis with (t := t) (k := k); eauto.
       (* FIXME: Get rid of manual instantiation of [R]. *)
@@ -353,12 +348,6 @@ Section extend_ctrace.
         apply schedule_exists. rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1.
     - exists (Vis e (λ a, match f a with end)). eexists. split; first done. destruct Heqot.
       by constructor.
-    - unshelve epose (IH t' _ _) as Hext; eauto.
-      { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
-      destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
-      eexists. split; first done. destruct Heqot. constructor.
-      rewrite list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
-      by injection Hidx' as <-.
     - destruct (IH t' Hidx' eq_refl) as [t_int [t'' [Hidx'' Hext]]]. exists (Tau t_int).
       eexists. split; first done. destruct Heqot. by econstructor.
     - destruct (IH t' Hidx' eq_refl) as [t_int [t'' [Hidx'' Hext]]]. exists (Tau t_int).
@@ -373,6 +362,12 @@ Section extend_ctrace.
     - exists (scheduler t (delete tid tp)).
       eexists. split; first done. destruct Heqot. constructor.
       rewrite -itree_eta_. by apply schedule_exists.
+    - unshelve epose (IH t' _ _) as Hext; eauto.
+      { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
+      destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
+      eexists. split; first done. destruct Heqot. constructor.
+      rewrite /= list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
+      by injection Hidx' as <-.
   Qed.
 
   Lemma extends_ctrace_is_trace tr tid tp t_int :
@@ -397,5 +392,16 @@ Section extend_ctrace.
       apply IH with (t := k CurrentThread); eauto.
       apply list_lookup_insert. by apply lookup_lt_is_Some_1.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
+  Qed.
+
+  Theorem interleaving_extending_trace (tr : ctrace E R) tid tp :
+    AnswerEqDecision E →
+    is_ctrace tr tid tp →
+    ∃ t_int, interleaves tid tp t_int ∧ is_trace (sequencify tr) t_int.
+  Proof.
+    intros Hanswer Htr. apply ctrace_extension_exists in Htr as [t_int Hext]; last done.
+    exists t_int. split.
+    - by apply extends_ctrace_is_interleaving with (tr := tr).
+    - by apply extends_ctrace_is_trace with (tid := tid) (tp := tp).
   Qed.
 End extend_ctrace.
