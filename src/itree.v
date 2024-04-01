@@ -1,4 +1,4 @@
-From iris.itree Require Import axioms.
+From iris.itree Require Export axioms.
 From ITree Require Import ITree.
 From ITree Require Import Eqit.
 From ITree Require Import TranslateFacts.

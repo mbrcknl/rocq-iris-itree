@@ -1,9 +1,10 @@
-From iris.itree Require Import axioms.
-From iris.itree.threadpool Require Import handler interleaving.
 From ITree Require Import ITree Eqit.
 From Paco Require Import paco.
 From Paco Require Import paco2.
 From stdpp Require Import list.
+From iris.itree.threadpool Require Import handler interleaving.
+From iris.itree Require Import axioms.
+Import Coq.Logic.ClassicalChoice.
 
 Section scheduler.
   Definition scheduler {E R} : itree (threadpoolE +' E) R → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
@@ -109,18 +110,20 @@ Section scheduler.
   Qed.
 End scheduler.
 
-CoInductive ctrace (E : Type → Type) (R : Type) :=
+Inductive ctrace (E : Type → Type) (R : Type) :=
   | CTRet (r : R)
-  | CTVis (A : Type) (e : E A) (a : A) (k : ctrace E R)
-  | CTTau (k : ctrace E R)
-  | CTYield (new_tid : nat) (k : ctrace E R)
-  | CTKillThread (new_tid : nat) (k : ctrace E R)
+  | CTVis (A : Type) (e : E A) (a : A) (tr' : ctrace E R)
+  | CTVisEmpty
+  | CTTau (tr' : ctrace E R)
+  | CTYield (new_tid : nat) (tr' : ctrace E R)
+  | CTKillThread (new_tid : nat) (tr' : ctrace E R)
   | CTKillLastThread
-  | CTFork (t : itree (threadpoolE +' E) R) (k : ctrace E R)
+  | CTFork (t : itree (threadpoolE +' E) R) (tr' : ctrace E R)
   | CTCut.
 
 Arguments CTRet {_ _}.
 Arguments CTVis {_ _}.
+Arguments CTVisEmpty {_ _}.
 Arguments CTTau {_ _}.
 Arguments CTYield {_ _}.
 Arguments CTKillThread {_ _}.
@@ -128,11 +131,85 @@ Arguments CTKillLastThread {_ _}.
 Arguments CTFork {_ _}.
 Arguments CTCut {_ _}.
 
-CoInductive trace (E : Type → Type) (R : Type) :=
+Section is_ctrace.
+  Context {E : Type → Type} {R : Type}.
+
+  Inductive is_ctrace_
+    : ctrace E R
+    → nat
+    → itree' (threadpoolE +' E) R
+    → list (itree (threadpoolE +' E) R)
+    → Prop :=
+  | is_CTRet tid tp r :
+    is_ctrace_ (CTRet r) tid (RetF r) tp
+  | is_CTVis tr' tid tp A (e : E A) a k :
+    is_ctrace_ tr' tid (observe (k a)) (<[tid:=k a]>tp) →
+    is_ctrace_ (CTVis A e a tr') tid (VisF (inr1 e) k) tp
+  | is_CTVisEmpty tid tp A (f : A → Empty_set) (e : E A) k :
+    is_ctrace_ CTVisEmpty tid (VisF (inr1 e) k) tp
+  | is_CTTau tr' tid t' tp :
+    is_ctrace_ tr' tid (observe t') (<[tid:=t']>tp) →
+    is_ctrace_ (CTTau tr') tid (TauF t') tp
+  | is_CTYield tr' tid tp k t' tid' :
+    <[tid := k ()]>tp !! tid' = Some t' →
+    is_ctrace_ tr' tid' (observe t') (<[tid := k ()]>tp) →
+    is_ctrace_ (CTYield tid' tr') tid (VisF (inl1 EYield) k) tp
+  | is_CTKillThread tr' tid tp k t' tid' :
+    (delete tid tp) !! tid' = Some t' →
+    is_ctrace_ tr' tid' (observe t') (delete tid tp) →
+    is_ctrace_ (CTKillThread tid' tr') tid (VisF (inl1 EKillThread) k) tp
+  | is_CTKillLastThread k t :
+    is_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t]
+  | is_CTFork tr' tid tp k :
+    is_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) →
+    is_ctrace_ (CTFork (k CurrentThread) tr') tid (VisF (inl1 EFork) k) tp
+  | is_CTCut tid t tp :
+    is_ctrace_ CTCut tid t tp.
+
+  Definition is_ctrace
+    : ctrace E R
+    → nat
+    → list (itree (threadpoolE +' E) R)
+    → Prop :=
+    λ tr tid tp, ∃ t, tp !! tid = Some t ∧ is_ctrace_ tr tid (observe t) tp.
+End is_ctrace.
+
+Inductive trace (E : Type → Type) (R : Type) :=
   | TRet (r : R)
   | TVis (A : Type) (e : E A) (a : A) (k : trace E R)
+  | TVisEmpty
   | TTau (k : trace E R)
   | TCut.
+
+Arguments TRet {_ _}.
+Arguments TVis {_ _}.
+Arguments TVisEmpty {_ _}.
+Arguments TTau {_ _}.
+Arguments TCut {_ _}.
+
+Section is_trace.
+  Context {E : Type → Type} {R : Type}.
+
+  Inductive is_trace_
+    : trace E R
+    → itree' E R
+    → Prop :=
+  | is_TRet r :
+    is_trace_ (TRet r) (RetF r)
+  | is_TVis tr' A (e : E A) a k :
+    is_trace_ tr' (observe (k a)) →
+    is_trace_ (TVis A e a tr') (VisF e k)
+  | is_TVisEmpty A (f : A → Empty_set) (e : E A) k :
+    is_trace_ TVisEmpty (VisF e k)
+  | is_TTau tr' t' :
+    is_trace_ tr' (observe t') →
+    is_trace_ (TTau tr') (TauF t')
+  | is_TCut t :
+    is_trace_ TCut t.
+
+  Definition is_trace (tr : trace E R) (t : itree E R) : Prop :=
+    is_trace_ tr (observe t).
+End is_trace.
 
 Class AnswerEqDecision (E : Type → Type) :=
   is_AnswerEqDecision A : E A → EqDecision A.
@@ -145,140 +222,180 @@ Next Obligation.
   intros E Hdec A e a a'. by apply is_AnswerEqDecision.
 Qed.
 
+Fixpoint sequencify {E R} (tr : ctrace E R) : trace E (R + last_thread_killed) :=
+  match tr with
+  | CTRet r => TRet (inl r)
+  | CTVis A e a tr' => TVis A e a (sequencify tr')
+  | CTVisEmpty => TVisEmpty
+  | CTTau tr' => TTau (sequencify tr')
+  | CTYield new_tid tr' => TTau (sequencify tr')
+  | CTKillThread new_tid tr' => TTau (sequencify tr')
+  | CTKillLastThread => TRet (inr LastThreadKilled)
+  | CTFork t tr' => TTau (sequencify tr')
+  | CTCut => TCut
+  end.
+
 Section extend_ctrace.
-  Context {E : Type → Type} {R : Type} `{AnswerEqDecision E}.
-
-  Definition extend_ctrace_to_interleaving_ : ctrace E R → nat → itree (threadpoolE +' E) R → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
-    cofix _extend_ctrace_to_interleaving tr tid t tp :=
-        match tr with
-        | CTRet r => Ret (inl r)
-        | CTVis A e a tr' => Vis e (λ a', if equal e a a' then _extend_ctrace_to_interleaving tr' tid t tp else scheduler t (delete tid tp))
-        | CTTau tr' => Tau (_extend_ctrace_to_interleaving tr' tid t tp)
-        | CTYield new_tid tr' =>
-            match tp !! new_tid with
-            | Some t' => Tau (_extend_ctrace_to_interleaving tr' new_tid t' tp)
-            (* Placeholder: should never happen. *)
-            | None => ITree.spin
-            end
-        | _ => Ret (inr LastThreadKilled)
-        end.
-
-        | TauF t' => Tau (_scheduler t' tp)
-        | @VisF _ _ _ A (inl1 e) k =>
-          (match e with
-          | EFork => λ k, Tau (_scheduler (k CurrentThread) (k NewThread :: tp))
-          | EYield => λ k, Tau (_scheduler (k ()) tp)
-          | EKillThread => λ k,
-              match tp with
-              | [] => Ret (inr LastThreadKilled)
-              | t' :: tp' => Tau (_scheduler t' tp')
-              end
-          end : (A → _) → _) k
-        | VisF (inr1 e) k => Vis e (λ a, _scheduler (k a) tp)
-        end.
-  Notation scheduler_ t tp :=
-      match observe t with
-      | RetF r  => Ret (inl r)
-      | TauF t' => Tau (scheduler t' tp)
-      | @VisF _ _ _ A (inl1 e) k =>
-        (match e with
-        | EFork => λ k, Tau (scheduler (k CurrentThread) (k NewThread :: tp))
-        | EYield => λ k, Tau (scheduler (k ()) tp)
-        | EKillThread => λ k,
-            match tp with
-            | [] => Ret (inr LastThreadKilled)
-            | t' :: tp' => Tau (scheduler t' tp')
-            end
-        end : (A → _) → _) k
-      | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
-      end.
-
-  Lemma unfold_scheduler {E R} (t : itree (threadpoolE +' E) R) tp :
-    scheduler t tp = scheduler_ t tp.
-  Proof.
-    apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
-  Qed.
-
-extend_ctrace_to_interleaving :: ctrace → ITree (threadpoolE +' E) R → ITree E R
-is_ctrace :: ctrace → ITree (threadpoolE +' E) R → Prop
-is_trace :: trace → ITree E R → Prop
-tracify :: ctrace → trace
-
-Lemma :
-  is_ctrace ctr t →
-  interleaving t (extend_ctrace_to_interleaving ctr t).
-Lemma :
-  is_ctrace ctr t →
-  is_trace (tracify ctr) (extend_ctrace_to_interleaving ctr t).
-
-
-Section traced_interleaving.
   Context {E : Type → Type} {R : Type}.
 
-  Variant traced_interleavesF
-    (traced_interleaves : trace E R → nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) → Prop)
-    : trace E R
+  Inductive extends_ctrace_
+    : ctrace E R
     → nat
     → itree' (threadpoolE +' E) R
     → list (itree (threadpoolE +' E) R)
     → itree' E (R + last_thread_killed)
     → Prop :=
-  | Return current_tid tp r :
-    traced_interleavesF interleaves (TRet r) current_tid (RetF r) tp (RetF (inl r))
-  | Step trace' current_tid current' tp interleaving' :
-    traced_interleaves current_tid trace' (<[current_tid:=current']>tp) interleaving' →
-    traced_interleavesF interleaves (TTau trace') current_tid (TauF current') tp (TauF interleaving')
-  | Emit trace' current_tid tp A (e : E A) a k k' :
-    (∀ a, interleaves current_tid (<[current_tid:=k a]>tp) (k' a)) →
-    traced_interleavesF interleaves trace' current_tid (<[current_tid:=k a]>tp) (k' a) →
-    traced_interleavesF interleaves (TVis A e a trace') current_tid (VisF (inr1 e) k) tp (VisF e k')
-  | KillThread trace' current_tid tp k new_current_tid interleaving' :
-    traced_interleaves trace' new_current_tid (delete current_tid tp) interleaving' →
-    traced_interleavesF interleaves (TKillThread new_current_tid trace') current_tid (VisF (inl1 EKillThread) k) tp (TauF interleaving')
-  | KillLastThread k t :
-    traced_interleavesF interleaves TKillLastThread 0 (VisF (inl1 EKillThread) k) [t] (RetF (inr LastThreadKilled))
-  | Yield trace' current_tid tp k new_current_tid interleaving' :
-    traced_interleaves trace' new_current_tid (<[current_tid := k ()]>tp) interleaving' →
-    traced_interleavesF interleaves (TYield new_current_tid trace') current_tid (VisF (inl1 EYield) k) tp (TauF interleaving')
-  | Fork trace' current_tid tp k interleaving' :
-    traced_interleaves (S current_tid) (k NewThread :: <[current_tid := k CurrentThread]>tp) interleaving' →
-    traced_interleavesF interleaves (TFork (k CurrentThread) trace') current_tid (VisF (inl1 EFork) k) tp (TauF interleaving').
-  (* TODO: Somehow deal with the case where the main thread emits
-  [EKillThread]. (This case is never exhibited for typical [itree]s, because
-  [EKillThread] is generally only to be used to avoid forked threads from
-  returning.) For example, return an [option]. *)
-  Hint Constructors interleavesF : iris_itree.
-  (** The recuirsion template for the interleaving relation. *)
-  Definition interleaves_
-    (interleaves : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) → Prop)
-    : nat
+  | extends_CTRet tid tp r :
+    extends_ctrace_ (CTRet r) tid (RetF r) tp (RetF (inl r))
+  | extends_CTVis tr' tid tp A (e : E A) a k k_int :
+    (∀ a, interleaves tid (<[tid:=k a]>tp) (k_int a)) →
+    extends_ctrace_ tr' tid (observe (k a)) (<[tid:=k a]>tp) (observe (k_int a)) →
+    extends_ctrace_ (CTVis A e a tr') tid (VisF (inr1 e) k) tp (VisF e k_int)
+  | extends_CTVisEmpty tid tp A (f : A → Empty_set) (e : E A) k k_int :
+    extends_ctrace_ CTVisEmpty tid (VisF (inr1 e) k) tp (VisF e k_int)
+  | extends_CTTau tr' tid t' tp t'_int :
+    extends_ctrace_ tr' tid (observe t') (<[tid:=t']>tp) (observe t'_int) →
+    extends_ctrace_ (CTTau tr') tid (TauF t') tp (TauF t'_int)
+  | extends_CTYield tr' tid tp k t' tid' t'_int :
+    <[tid := k ()]>tp !! tid' = Some t' →
+    extends_ctrace_ tr' tid' (observe t') (<[tid := k ()]>tp) (observe t'_int) →
+    extends_ctrace_ (CTYield tid' tr') tid (VisF (inl1 EYield) k) tp (TauF t'_int)
+  | extends_CTKillThread tr' tid tp k t' tid' t'_int :
+    (delete tid tp) !! tid' = Some t' →
+    extends_ctrace_ tr' tid' (observe t') (delete tid tp) (observe t'_int) →
+    extends_ctrace_ (CTKillThread tid' tr') tid (VisF (inl1 EKillThread) k) tp (TauF t'_int)
+  | extends_CTKillLastThread k t :
+    extends_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t] (RetF (inr LastThreadKilled))
+  | extends_CTFork tr' tid tp k t_int :
+    extends_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) (observe t_int) →
+    extends_ctrace_ (CTFork (k CurrentThread) tr') tid (VisF (inl1 EFork) k) tp (TauF t_int)
+  | extends_CTCut tid t tp t_int :
+    interleaves tid tp (go t_int) →
+    extends_ctrace_ CTCut tid t tp t_int.
+
+  Definition extends_ctrace
+    : ctrace E R
+    → nat
     → list (itree (threadpoolE +' E) R)
     → itree E (R + last_thread_killed)
     → Prop :=
-    λ tid tp interleaving, ∃ t, tp !! tid = Some t ∧ interleavesF interleaves tid (observe t) tp (observe interleaving).
+    λ tr tid tp t_int, ∃ t, tp !! tid = Some t ∧ extends_ctrace_ tr tid (observe t) tp (observe t_int).
 
-  Lemma interleavesF_mono interleaves interleaves' tid t tp interleaving :
-    interleaves <3= interleaves' →
-    interleavesF interleaves tid t tp interleaving →
-    interleavesF interleaves' tid t tp interleaving.
-  Proof.
-    intros Hleq HinterleavesF. destruct HinterleavesF; eauto with iris_itree.
-  Qed.
-  Lemma interleaves__mono :
-    monotone3 interleaves_.
-  Proof.
-    rewrite /monotone3 /interleaves_. intros tid tp t r r' [t' [Hidx Hinter]] Hrel.
-    eexists. split; first done. by eapply interleavesF_mono; last done.
-  Qed.
   Hint Resolve interleaves__mono : paco.
-
-  (** The interleaving relation. (See comments above.) *)
-  Definition interleaves : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) → Prop :=
-    paco3 interleaves_ bot3.
-
-  Lemma interleaves_lookup tid tp interleaving :
-    interleaves tid tp interleaving →
-    ∃ t, tp !! tid = Some t.
+  Lemma extends_ctrace_is_interleaving tr tid tp t_int :
+    extends_ctrace tr tid tp t_int →
+    interleaves tid tp t_int.
   Proof.
-    intros Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]]. eauto.
+    intros [t [Hidx Hext]].
+    remember (observe t) as ot.
+    remember (observe t_int) as ot_int.
+    revert t_int t Hidx Heqot Heqot_int.
+    induction Hext as [tid tp r|tr' tid tp A e a k k_int Hint Hext IH|tid tp A f e k k_int|tr' tid t' tp t'_int Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|k t'|tr' tid tp k t'_int Hext IH|tid t' tp t'_int Hint]; intros t_int t Hidx Heqot Heqot_int.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      constructor.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      constructor. intros a'. left. apply Hint.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      constructor. intros a'. left. apply f in a' as a''. contradiction.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      constructor. left. apply IH with (t := t'); eauto. apply list_lookup_insert.
+      by apply lookup_lt_is_Some_1.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      apply Yield with (new_current_tid := tid'). left. apply IH with (t := t'); eauto.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      apply KillThread with (new_current_tid := tid'). left. apply IH with (t := t'); eauto.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      constructor.
+    - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
+      constructor. left. apply IH with (t := k CurrentThread); eauto.
+      simpl. apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - pfold. punfold Hint. rewrite /interleaves_. rewrite /interleaves_ in Hint. simpl in Hint.
+      rewrite -Heqot_int //.
   Qed.
+
+  Lemma exists_vis t A e a tid tp tr' k :
+    tp !! tid = Some t →
+    observe t = VisF (inr1 e) k →
+    (∃ k_int, ∀ a', interleaves tid (<[tid:=k a']>tp) (k_int a') ∧ (a = a' → extends_ctrace_ tr' tid (observe (k a')) (<[tid:=k a']>tp) (observe (k_int a')))) →
+    ∃ t, extends_ctrace (CTVis A e a tr') tid tp t.
+  Proof.
+    intros Hidx Hobs [k_int H].
+    eexists (Vis e _).
+    eexists. split; first done. rewrite Hobs. constructor.
+    - intros a'. by destruct (H a') as [Hint _].
+    - destruct (H a) as [_ Hext]. by apply Hext.
+  Qed.
+
+  Lemma ctrace_extension_exists tr tid tp :
+    AnswerEqDecision E →
+    is_ctrace tr tid tp →
+    ∃ t_int, extends_ctrace tr tid tp t_int.
+  Proof.
+    intros Hanswer [t [Hidx Htr]].
+    remember (observe t) as ot.
+    revert t Hidx Heqot.
+    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid t' tp Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k Htr IH|tid t' tp Htr]; intros t Hidx Heqot.
+    - exists (Ret (inl r)). eexists. split; first done. destruct Heqot. constructor.
+    - apply exists_vis with (t := t) (k := k); eauto.
+      (* FIXME: Get rid of manual instantiation of [R]. *)
+      apply choice with (R := (λ a' k_inta', interleaves tid (<[tid:=k a']>tp) (k_inta') ∧ (a = a' → extends_ctrace_ tr' tid (observe (k a')) (<[tid:=k a']>tp) (observe (k_inta'))))).
+      intros a'. destruct (equal e a a') as [<-|Hneq].
+      * unshelve epose (IH (k a) _ _) as Hext; eauto.
+        (* FIXME: These two tactics are repeated a lot. Would make sense to automate. *)
+        { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
+        destruct Hext as [t_int Hext]. exists t_int. split.
+        { by apply extends_ctrace_is_interleaving with (tr := tr'). }
+        intros _. destruct Hext as [oka [Hidx' Hext]].
+        rewrite list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
+        by injection Hidx' as <-.
+      * exists (scheduler (k a') (delete tid tp)). split; last done.
+        replace (delete tid tp) with (delete tid (<[tid:=k a']> tp)); last apply list_delete_insert.
+        apply schedule_exists. rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1.
+    - exists (Vis e (λ a, match f a with end)). eexists. split; first done. destruct Heqot.
+      by constructor.
+    - unshelve epose (IH t' _ _) as Hext; eauto.
+      { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
+      destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
+      eexists. split; first done. destruct Heqot. constructor.
+      rewrite list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
+      by injection Hidx' as <-.
+    - destruct (IH t' Hidx' eq_refl) as [t_int [t'' [Hidx'' Hext]]]. exists (Tau t_int).
+      eexists. split; first done. destruct Heqot. by econstructor.
+    - destruct (IH t' Hidx' eq_refl) as [t_int [t'' [Hidx'' Hext]]]. exists (Tau t_int).
+      eexists. split; first done. destruct Heqot. by econstructor.
+    - exists (Ret (inr LastThreadKilled)). eexists. split; first done.  destruct Heqot. constructor.
+    - unshelve epose (IH (k CurrentThread) _ _) as Hext; eauto.
+      { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
+      destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
+      eexists. split; first done. destruct Heqot. constructor.
+      rewrite /= list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
+      by injection Hidx' as <-.
+    - exists (scheduler t (delete tid tp)).
+      eexists. split; first done. destruct Heqot. constructor.
+      rewrite -itree_eta_. by apply schedule_exists.
+  Qed.
+
+  Lemma extends_ctrace_is_trace tr tid tp t_int :
+    extends_ctrace tr tid tp t_int →
+    is_trace (sequencify tr) t_int.
+  Proof.
+    intros [t [Hidx Hext]].
+    remember (observe t) as ot.
+    remember (observe t_int) as ot_int.
+    revert t_int t Hidx Heqot Heqot_int.
+    induction Hext as [tid tp r|tr' tid tp A e a k k_int Hint Hext IH|tid tp A f e k k_int|tr' tid t' tp t'_int Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|k t'|tr' tid tp k t'_int Hext IH|tid t' tp t'_int Hint]; intros t_int t Hidx Heqot Heqot_int.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor. apply IH with (t := k a); eauto.
+      apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - simpl. rewrite /is_trace. destruct Heqot_int. by constructor.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor. apply IH with (t := t'); eauto.
+      apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor. apply IH with (t := t'); eauto.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor. apply IH with (t := t'); eauto.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
+      apply IH with (t := k CurrentThread); eauto.
+      apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
+  Qed.
+End extend_ctrace.
