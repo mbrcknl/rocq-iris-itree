@@ -3,7 +3,7 @@ From Paco Require Import paco.
 From Paco Require Import paco2.
 From stdpp Require Import list.
 From iris.itree.threadpool Require Import handler interleaving.
-From iris.itree Require Import axioms.
+From iris.itree Require Import axioms itree.
 Import Coq.Logic.ClassicalChoice.
 
 Section scheduler.
@@ -129,6 +129,13 @@ Arguments CTKillLastThread {_ _}.
 Arguments CTFork {_ _}.
 Arguments CTCut {_ _}.
 
+Lemma Forall2_singleton A R (x : A) (xs : list A) :
+  Forall2 R [x] xs →
+  ∃ x', xs !! 0 = Some x' ∧ R x x' ∧ xs = [x'].
+Proof.
+  intros Hforall. inversion Hforall. subst. inversion H3. subst. eexists. eauto.
+Qed.
+
 Section is_ctrace.
   Context {E : Type → Type} {R : Type}.
 
@@ -155,9 +162,10 @@ Section is_ctrace.
     is_ctrace_ (CTKillThread tid' tr') tid (VisF (inl1 EKillThread) k) tp
   | is_CTKillLastThread k t :
     is_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t]
-  | is_CTFork tr' tid tp k :
+  | is_CTFork tr' tid tp k k_current' :
+    k_current' ≈ k CurrentThread →
     is_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) →
-    is_ctrace_ (CTFork (k CurrentThread) tr') tid (VisF (inl1 EFork) k) tp
+    is_ctrace_ (CTFork k_current' tr') tid (VisF (inl1 EFork) k) tp
   | is_CTCut tid t tp :
     is_ctrace_ CTCut tid t tp
   | ctrace_skip_tau tr t' tid tp :
@@ -170,6 +178,161 @@ Section is_ctrace.
     → list (itree (threadpoolE +' E) R)
     → Prop :=
     λ tr tid tp, ∃ t, tp !! tid = Some t ∧ is_ctrace_ tr tid (observe t) tp.
+
+  Inductive similar
+    : ctrace E R
+    → ctrace E R
+    → Prop :=
+  | similar_CTRet r :
+    similar (CTRet r) (CTRet r)
+  | similar_CTVis A (e : E A) a tr1 tr2 :
+    similar tr1 tr2 →
+    similar (CTVis A e a tr1) (CTVis A e a tr2)
+  | similar_CTVisEmpty :
+    similar CTVisEmpty CTVisEmpty
+  | similar_CTYield tid' tr1 tr2 :
+    similar tr1 tr2 →
+    similar (CTYield tid' tr1) (CTYield tid' tr2)
+  | similar_CTKillThread tid' tr1 tr2 :
+    similar tr1 tr2 →
+    similar (CTKillThread tid' tr1) (CTKillThread tid' tr2)
+  | similar_CTKillLastThread :
+    similar CTKillLastThread CTKillLastThread
+  | similar_CTFork t1 t2 tr1 tr2 :
+    t1 ≈ t2 →
+    similar tr1 tr2 →
+    similar (CTFork t1 tr1) (CTFork t2 tr2)
+  | similar_CTCut :
+    similar CTCut CTCut.
+
+  Instance similar_sym :
+    Symmetric similar.
+  Proof.
+    intros tr1 tr2 Hsim. induction Hsim; constructor; eauto. by symmetry.
+  Qed.
+
+  Lemma is_ctrace__eutt tr1 tr2 tid t1 t2 tp1 tp2 :
+    is_ctrace_ tr1 tid (observe t1) tp1 →
+    tp1 !! tid = Some t1 →
+    tp2 !! tid = Some t2 →
+    similar tr1 tr2 →
+    Forall2 (eutt (=)) tp1 tp2 →
+    t1 ≈ t2 →
+    is_ctrace_ tr2 tid (observe t2) tp2.
+  Proof.
+    intros Htr.
+    remember (observe t1) as ot1.
+    remember (observe t2) as ot2.
+    revert tr2 tp2 t1 t2 ot2 Heqot1 Heqot2.
+    induction Htr as [tid tp1 r|tr' tid tp1 A e a k Htr IH|tid tp1 A f e k|tr' tid tp1 k t' tid' Hidx' Htr IH|tr' tid tp1 k t' tid' Hidx' Htr IH|k t'|tr' tid tp1 k k_current' Hsim' Htr IH|tid t' tp1 Htr|tr t' tid tp1 Htr IH]; intros tr2 tp2 t1 t2 ot2 Heqot1 Heqot2 Hidx1 Hidx2 Hsim Htp Heqit.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
+      revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH ]; try discriminate.
+      * intros. injection Heqot1 as ->. destruct REL. inversion Hsim. constructor.
+      * intros. constructor. apply IH with (t1 := t1) (t2 := t2'); eauto.
+        + transitivity tp2; first done.
+          replace tp2 with (<[tid := t2]>tp2); last rewrite list_insert_id //.
+          rewrite list_insert_insert. f_equiv. simplify_obs. by apply eqit_Tau_l.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
+      revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH' ]; try discriminate.
+      * pclearbot. intros. inversion Hsim. simplify_K. simplify_K. constructor. apply IH with (t1 := k1 a) (t2 := k2 a); try done.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+        + f_equiv; first apply REL. done.
+        + apply REL.
+      * intros. constructor. apply IH' with (t1 := t1) (t2 := t2'); eauto.
+        + transitivity tp2; first done.
+          replace tp2 with (<[tid := t2]>tp2); last rewrite list_insert_id //.
+          rewrite list_insert_insert. f_equiv. simplify_obs. by apply eqit_Tau_l.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
+      revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH' ]; try discriminate.
+      * pclearbot. intros. simplify_K. simplify_K. inversion Hsim. by constructor.
+      * intros. constructor. apply IH' with (t1 := t1) (t2 := t2'); eauto.
+        + transitivity tp2; first done.
+          replace tp2 with (<[tid := t2]>tp2); last rewrite list_insert_id //.
+          rewrite list_insert_insert. f_equiv. simplify_obs. by apply eqit_Tau_l.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
+      revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH' ]; try discriminate.
+      * pclearbot. intros. simplify_K. simplify_K.
+        assert (Forall2 (eutt eq) (<[tid:=k1 ()]>tp1) (<[tid:=k2 ()]>tp2)) as Htp'.
+        { f_equiv; last done. apply REL. }
+        apply Forall2_lookup_l with (i := tid') (x := t') in Htp' as [t'' [Hidx Heqit]].
+        inversion Hsim. econstructor.
+        + done.
+        + apply IH with (t1 := t') (t2 := t''); try done. f_equiv; last done. apply REL.
+        + done.
+      * intros. constructor. apply IH' with (t1 := t1) (t2 := t2'); eauto.
+        + transitivity tp2; first done.
+          replace tp2 with (<[tid := t2]>tp2); last rewrite list_insert_id //.
+          rewrite list_insert_insert. f_equiv. simplify_obs. by apply eqit_Tau_l.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
+      revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH' ]; try discriminate.
+      * pclearbot. intros. simplify_K. simplify_K.
+        assert (Forall2 (eutt eq) (delete tid tp1) (delete tid tp2)) as Htp'.
+        { by f_equiv. }
+        apply Forall2_lookup_l with (i := tid') (x := t') in Htp' as [t'' [Hidx Heqit]].
+        inversion Hsim. econstructor.
+        + done.
+        + apply IH with (t1 := t') (t2 := t''); try done. f_equiv; last done.
+        + done.
+      * intros. constructor. apply IH' with (t1 := t1) (t2 := t2'); eauto.
+        + transitivity tp2; first done.
+          replace tp2 with (<[tid := t2]>tp2); last rewrite list_insert_id //.
+          rewrite list_insert_insert. f_equiv. simplify_obs. by apply eqit_Tau_l.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
+      revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH ]; try discriminate.
+      * intros. apply Forall2_singleton in Htp as (t2'&Hidx&Heqit'&->).
+        inversion Hsim. simplify_K. simplify_K. constructor.
+      * intros. constructor. apply IH with (t1 := t1) (t2 := t2'); eauto.
+        + transitivity tp2; first done.
+          replace tp2 with (<[0 := t2]>tp2); last rewrite list_insert_id //.
+          rewrite list_insert_insert. f_equiv. simplify_obs. by apply eqit_Tau_l.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
+      revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH' ]; try discriminate.
+      * pclearbot. intros. inversion Hsim. simplify_K. simplify_K. apply is_CTFork.
+        { transitivity k_current'; first done.
+          transitivity (k1 CurrentThread); first done.
+          apply REL.
+        }
+        eapply IH; eauto.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+        + f_equiv; first apply REL. f_equiv; first apply REL. done.
+        + apply REL.
+      * intros. constructor. apply IH' with (t1 := t1) (t2 := t2'); eauto.
+        + transitivity tp2; first done.
+          replace tp2 with (<[tid := t2]>tp2); last by apply list_insert_id.
+          rewrite list_insert_insert. f_equiv. simplify_obs. by apply eqit_Tau_l.
+        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+    - inversion Hsim. constructor.
+    - apply IH with (t1 := t') (t2 := t2); eauto.
+      + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+      + replace tp2 with (<[tid := t2]>tp2); last by apply list_insert_id.
+        f_equiv; last done. transitivity t1; last done. simplify_obs. by apply eqit_Tau_r.
+      + transitivity t1; last done. simplify_obs. by apply eqit_Tau_r.
+  Qed.
+
+  Global Instance is_ctrace_eutt :
+    Proper (similar ==> (pointwise_relation nat (Forall2 (eutt (=)) ==> (↔))))
+           is_ctrace.
+  Proof.
+    intros tr1 tr2 Hsim tid tp1 tp2 Heutt. split.
+    - intros [t [Hidx Htr]].
+      assert (Hidx' := Hidx).
+      apply Forall2_lookup_l with (P := eutt (=)) (k := tp2) in Hidx as [t' [Hidx Heutt']]; last done.
+      eexists. split; first done. by eapply is_ctrace__eutt.
+    - intros [t [Hidx Htr]].
+      assert (Hidx' := Hidx).
+      symmetry in Heutt.
+      apply Forall2_lookup_l with (P := eutt (=)) (k := tp1) in Hidx as [t' [Hidx Heutt']]; last done.
+      eexists. split; first done. eapply is_ctrace__eutt; eauto.
+      by symmetry.
+  Qed.
 End is_ctrace.
 
 Inductive trace (E : Type → Type) (R : Type) :=
@@ -206,7 +369,7 @@ Section is_trace.
   Definition is_trace (tr : trace E R) (t : itree E R) : Prop :=
     is_trace_ tr (observe t).
 
-  Global Instance is_trace_eqit :
+  Local Instance is_trace_eutt_unilateral :
     Proper (pointwise_relation (trace E R) (eutt (=) ==> impl)) is_trace.
   Proof.
     intros tr t1 t2 Heqit Htr.
@@ -231,6 +394,11 @@ Section is_trace.
     - apply IH with (t1 := t') (t2 := t2); eauto.
       transitivity (Tau t'). { by apply eqit_inv_Tau_l. }
       pfold. rewrite /eqit_. simpl. rewrite Heqot1. punfold Heqit.
+  Qed.
+  Global Instance is_trace_eutt :
+    Proper (pointwise_relation (trace E R) (eutt (=) ==> (↔))) is_trace.
+  Proof.
+    intros tr t1 t2 Heqit. split; by apply is_trace_eutt_unilateral.
   Qed.
 End is_trace.
 
@@ -288,9 +456,10 @@ Section extend_ctrace.
     extends_ctrace_ (CTKillThread tid' tr') tid (VisF (inl1 EKillThread) k) tp (TauF t'_int)
   | extends_CTKillLastThread k t :
     extends_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t] (RetF (inr LastThreadKilled))
-  | extends_CTFork tr' tid tp k t_int :
+  | extends_CTFork tr' tid tp k t_int k_current' :
+    k_current' ≈ k CurrentThread →
     extends_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) (observe t_int) →
-    extends_ctrace_ (CTFork (k CurrentThread) tr') tid (VisF (inl1 EFork) k) tp (TauF t_int)
+    extends_ctrace_ (CTFork k_current' tr') tid (VisF (inl1 EFork) k) tp (TauF t_int)
   | extends_CTCut tid t tp t_int :
     interleaves tid tp (go t_int) →
     extends_ctrace_ CTCut tid t tp t_int.
@@ -312,7 +481,7 @@ Section extend_ctrace.
     remember (observe t) as ot.
     remember (observe t_int) as ot_int.
     revert t_int t Hidx Heqot Heqot_int.
-    induction Hext as [tid tp r|tr' tid tp A e a k k_int Hint Hext IH|tid tp A f e k k_int|tr' tid t' tp t'_int Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|k t'|tr' tid tp k t'_int Hext IH|tid t' tp t'_int Hint]; intros t_int t Hidx Heqot Heqot_int.
+    induction Hext as [tid tp r|tr' tid tp A e a k k_int Hint Hext IH|tid tp A f e k k_int|tr' tid t' tp t'_int Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|k t'|tr' tid tp k t'_int k_current' Hsim Hext IH|tid t' tp t'_int Hint]; intros t_int t Hidx Heqot Heqot_int.
     - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
       constructor.
     - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
@@ -356,7 +525,7 @@ Section extend_ctrace.
     intros Hanswer [t [Hidx Htr]].
     remember (observe t) as ot.
     revert t Hidx Heqot.
-    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k Htr IH|tid t' tp Htr|tr t' tid tp Htr IH]; intros t Hidx Heqot.
+    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k k_current' Hsim Htr IH|tid t' tp Htr|tr t' tid tp Htr IH]; intros t Hidx Heqot.
     - exists (Ret (inl r)). eexists. split; first done. destruct Heqot. constructor.
     - apply exists_vis with (t := t) (k := k); eauto.
       (* FIXME: Get rid of manual instantiation of [R]. *)
@@ -383,7 +552,7 @@ Section extend_ctrace.
     - unshelve epose (IH (k CurrentThread) _ _) as Hext; eauto.
       { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
       destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
-      eexists. split; first done. destruct Heqot. constructor.
+      eexists. split; first done. destruct Heqot. constructor; first done.
       rewrite /= list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
       by injection Hidx' as <-.
     - exists (scheduler t (delete tid tp)).
@@ -405,7 +574,7 @@ Section extend_ctrace.
     remember (observe t) as ot.
     remember (observe t_int) as ot_int.
     revert t_int t Hidx Heqot Heqot_int.
-    induction Hext as [tid tp r|tr' tid tp A e a k k_int Hint Hext IH|tid tp A f e k k_int|tr' tid t' tp t'_int Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|k t'|tr' tid tp k t'_int Hext IH|tid t' tp t'_int Hint]; intros t_int t Hidx Heqot Heqot_int.
+    induction Hext as [tid tp r|tr' tid tp A e a k k_int Hint Hext IH|tid tp A f e k k_int|tr' tid t' tp t'_int Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|tr' tid tp k t' tid' t'_int Hidx' Hext IH|k t'|tr' tid tp k t'_int k_current' Hsim Hext IH|tid t' tp t'_int Hint]; intros t_int t Hidx Heqot Heqot_int.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor. apply IH with (t := k a); eauto.
       apply list_lookup_insert. by apply lookup_lt_is_Some_1.
