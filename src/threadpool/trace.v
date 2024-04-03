@@ -113,7 +113,7 @@ End scheduler.
 Inductive ctrace (E : Type → Type) (R : Type) :=
   | CTRet (r : R)
   | CTVis (A : Type) (e : E A) (a : A) (tr' : ctrace E R)
-  | CTVisEmpty
+  | CTVisEmpty (A : Type) (e : E A)
   | CTYield (new_tid : nat) (tr' : ctrace E R)
   | CTKillThread (new_tid : nat) (tr' : ctrace E R)
   | CTKillLastThread
@@ -151,7 +151,7 @@ Section is_ctrace.
     is_ctrace_ tr' tid (observe (k a)) (<[tid:=k a]>tp) →
     is_ctrace_ (CTVis A e a tr') tid (VisF (inr1 e) k) tp
   | is_CTVisEmpty tid tp A (f : A → Empty_set) (e : E A) k :
-    is_ctrace_ CTVisEmpty tid (VisF (inr1 e) k) tp
+    is_ctrace_ (CTVisEmpty A e) tid (VisF (inr1 e) k) tp
   | is_CTYield tr' tid tp k t' tid' :
     <[tid := k ()]>tp !! tid' = Some t' →
     is_ctrace_ tr' tid' (observe t') (<[tid := k ()]>tp) →
@@ -188,8 +188,8 @@ Section is_ctrace.
   | similar_CTVis A (e : E A) a tr1 tr2 :
     similar tr1 tr2 →
     similar (CTVis A e a tr1) (CTVis A e a tr2)
-  | similar_CTVisEmpty :
-    similar CTVisEmpty CTVisEmpty
+  | similar_CTVisEmpty A e :
+    similar (CTVisEmpty A e) (CTVisEmpty A e)
   | similar_CTYield tid' tr1 tr2 :
     similar tr1 tr2 →
     similar (CTYield tid' tr1) (CTYield tid' tr2)
@@ -247,7 +247,7 @@ Section is_ctrace.
         + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
     - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
       revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH' ]; try discriminate.
-      * pclearbot. intros. simplify_K. simplify_K. inversion Hsim. by constructor.
+      * pclearbot. intros. simplify_K. simplify_K. inversion Hsim. simplify_K. by constructor.
       * intros. constructor. apply IH' with (t1 := t1) (t2 := t2'); eauto.
         + transitivity tp2; first done.
           replace tp2 with (<[tid := t2]>tp2); last rewrite list_insert_id //.
@@ -338,7 +338,7 @@ End is_ctrace.
 Inductive trace (E : Type → Type) (R : Type) :=
   | TRet (r : R)
   | TVis (A : Type) (e : E A) (a : A) (k : trace E R)
-  | TVisEmpty
+  | TVisEmpty (A : Type) (e : E A)
   | TCut.
 
 Arguments TRet {_ _}.
@@ -359,7 +359,7 @@ Section is_trace.
     is_trace_ tr' (observe (k a)) →
     is_trace_ (TVis A e a tr') (VisF e k)
   | is_TVisEmpty A (f : A → Empty_set) (e : E A) k :
-    is_trace_ TVisEmpty (VisF e k)
+    is_trace_ (TVisEmpty A e) (VisF e k)
   | is_TCut t :
     is_trace_ TCut t
   | trace_skip_tau tr t' :
@@ -417,7 +417,7 @@ Fixpoint sequencify {E R} (tr : ctrace E R) : trace E (R + last_thread_killed) :
   match tr with
   | CTRet r => TRet (inl r)
   | CTVis A e a tr' => TVis A e a (sequencify tr')
-  | CTVisEmpty => TVisEmpty
+  | CTVisEmpty A e => TVisEmpty A e
   | CTYield new_tid tr' => sequencify tr'
   | CTKillThread new_tid tr' => sequencify tr'
   | CTKillLastThread => TRet (inr LastThreadKilled)
@@ -442,7 +442,7 @@ Section extend_ctrace.
     extends_ctrace_ tr' tid (observe (k a)) (<[tid:=k a]>tp) (observe (k_int a)) →
     extends_ctrace_ (CTVis A e a tr') tid (VisF (inr1 e) k) tp (VisF e k_int)
   | extends_CTVisEmpty tid tp A (f : A → Empty_set) (e : E A) k k_int :
-    extends_ctrace_ CTVisEmpty tid (VisF (inr1 e) k) tp (VisF e k_int)
+    extends_ctrace_ (CTVisEmpty A e) tid (VisF (inr1 e) k) tp (VisF e k_int)
   | extends_Tau tr tid t' tp t'_int :
     extends_ctrace_ tr tid (observe t') (<[tid:=t']>tp) (observe t'_int) →
     extends_ctrace_ tr tid (TauF t') tp (TauF t'_int)
