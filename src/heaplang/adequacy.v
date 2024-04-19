@@ -25,21 +25,5 @@ Proof.
   inversion Hprim as [K e1' e2' He1 He2 Hbase]. subst. simpl in K, e1', e2'.
   clear Hstep'' Hstep' Hprim.
   rewrite map_app /=.
-  Set Typeclasses Debug.
-  rewrite compile_expr_bind.
-  induction K.
-  -
-
-Lemma adequacy_not_stuck e σ M Φ :
-  ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap) -∗
-  heap_inv -∗
-  WPi compile_expr e @ heaplangH; M {{ Φ }} -∗
-  |={M}=> ⌜not_stuck e σ⌝.
-Proof.
-  iIntros "Hauth #Hinv Hwp".
-  iInduction e as [] "IH" forall (σ) "Hauth".
-  - iModIntro. iPureIntro. by left.
-  - 
-    rewrite /compile_expr rec_as_interp /=.
-    setoid_rewrite interp_vis.
-    simpl.
+  setoid_rewrite compile_expr_bind.
+Admitted.
