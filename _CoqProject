@@ -10,4 +10,5 @@ src/threadpool/handler.v
 src/threadpool/interleaving.v
 src/threadpool/trace.v
 src/wpi.v
-src/heaplang.v
+src/heaplang/lang.v
+src/heaplang/adequacy.v

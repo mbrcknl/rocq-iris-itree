@@ -210,6 +210,11 @@ Section is_ctrace.
   Proof.
     intros tr1 tr2 Hsim. induction Hsim; constructor; eauto. by symmetry.
   Qed.
+  Instance similar_refl :
+    Reflexive similar.
+  Proof.
+    intros tr. induction tr; constructor; eauto. by symmetry.
+  Qed.
 
   Lemma is_ctrace__eutt tr1 tr2 tid t1 t2 tp1 tp2 :
     is_ctrace_ tr1 tid (observe t1) tp1 →
@@ -317,21 +322,29 @@ Section is_ctrace.
       + transitivity t1; last done. simplify_obs. by apply eqit_Tau_r.
   Qed.
 
-  Global Instance is_ctrace_eutt :
-    Proper (similar ==> (pointwise_relation nat (Forall2 (eutt (=)) ==> (↔))))
+  Lemma is_ctrace_eutt' :
+    Proper (similar ==> (pointwise_relation nat (Forall2 (eutt (=)) ==> (→))))
            is_ctrace.
   Proof.
-    intros tr1 tr2 Hsim tid tp1 tp2 Heutt. split.
-    - intros [t [Hidx Htr]].
-      assert (Hidx' := Hidx).
-      apply Forall2_lookup_l with (P := eutt (=)) (k := tp2) in Hidx as [t' [Hidx Heutt']]; last done.
-      eexists. split; first done. by eapply is_ctrace__eutt.
-    - intros [t [Hidx Htr]].
-      assert (Hidx' := Hidx).
-      symmetry in Heutt.
-      apply Forall2_lookup_l with (P := eutt (=)) (k := tp1) in Hidx as [t' [Hidx Heutt']]; last done.
-      eexists. split; first done. eapply is_ctrace__eutt; eauto.
-      by symmetry.
+    intros tr1 tr2 Hsim tid tp1 tp2 Heutt.
+    intros [t [Hidx Htr]].
+    assert (Hidx' := Hidx).
+    apply Forall2_lookup_l with (P := eutt (=)) (k := tp2) in Hidx as [t' [Hidx Heutt']]; last done.
+    eexists. split; first done. by eapply is_ctrace__eutt.
+  Qed.
+  Global Instance is_ctrace_eutt tr n :
+    Proper (Forall2 (eutt (=)) ==> (↔)) (is_ctrace tr n).
+  Proof.
+    intros tp1 tp2 Htp.
+    split.
+    - intros Hctr. eapply is_ctrace_eutt'.
+      * reflexivity.
+      * apply Htp.
+      * done.
+    - intros Hctr. eapply is_ctrace_eutt'.
+      * reflexivity.
+      * symmetry. apply Htp.
+      * done.
   Qed.
 End is_ctrace.
 
