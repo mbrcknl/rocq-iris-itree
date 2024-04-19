@@ -252,7 +252,7 @@ Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
   | _ => True
   end.
 
-Lemma compile_expr_bind (Ki : ectx_item) (e : expr) :
+Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
   supported_subset_ectx Ki →
   compile_expr (fill_item Ki e) ≈
     v ← compile_expr e;
@@ -268,6 +268,79 @@ Proof.
     intros _; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
   | contradiction
   ].
+Qed.
+
+Lemma split_last {A} (xs : list A) :
+  length xs > 0 →
+  ∃ x xs', xs = xs' ++ [x].
+Proof.
+  intros Hlen.
+  induction xs as [|y ys IH]. { simpl in Hlen. lia. }
+  destruct (length ys) as [|n] eqn:Hlen'.
+  - apply nil_length_inv in Hlen' as ->. by exists y, [].
+  - assert (S n > 0) as HS; first lia.
+    destruct (IH HS) as (x&xs'&->). by exists x, (y :: xs').
+Qed.
+
+Lemma list_singleton {A} (xs : list A) :
+  length xs = 1 →
+  ∃ x, xs = [x].
+Proof.
+  intros Hlen.
+  destruct xs as [|x xs']; first done.
+  exists x. simpl in Hlen. injection Hlen as Hlen.
+  by apply nil_length_inv in Hlen as ->.
+Qed.
+
+Lemma fill_item_not_val Ki e :
+  yield_if_not_val (fill_item Ki e) ≈ (trigger EYield : itree heaplangE ()).
+Proof.
+  rewrite /yield_if_not_val. by destruct Ki.
+Qed.
+Lemma fill_not_val K e :
+  length K > 0 →
+  yield_if_not_val (fill K e) ≈ (trigger EYield : itree heaplangE ()).
+Proof.
+  intros Hlen.
+  unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
+  rewrite fill_app /= fill_item_not_val //.
+Qed.
+
+Lemma compile_expr_bind_ind K e l :
+  Forall supported_subset_ectx K →
+  length K = l →
+  l > 0 →
+  compile_expr (fill K e) ≈
+    v ← compile_expr e;
+    yield_if_not_val e;;
+    compile_expr (fill K (Val v)).
+Proof.
+  revert K. induction l as [|n IH]; intros K Hsubset Hlen Hne.
+  { apply nil_length_inv in Hlen. lia. }
+  destruct n as [|n'].
+  { apply list_singleton in Hlen as [x ->]. simpl. rewrite compile_expr_bind_item //.
+    by rewrite Forall_singleton in Hsubset. }
+  unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
+  apply Forall_app in Hsubset as [HsubsetK' HsubsetKi].
+  rewrite Forall_singleton in HsubsetKi. rewrite app_length /= in Hlen.
+  rewrite fill_app /=. rewrite compile_expr_bind_item //; first rewrite IH //; try lia.
+  rewrite bind_bind. f_equiv. intros v. rewrite fill_app /=.
+  rewrite bind_bind. f_equiv. intros _.
+  rewrite compile_expr_bind_item //. f_equiv. intros v'. rewrite !fill_not_val //.
+  - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
+    rewrite Hlen. lia.
+  - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
+    rewrite Hlen. lia.
+Qed.
+Lemma compile_expr_bind K e :
+  Forall supported_subset_ectx K →
+  length K > 0 →
+  compile_expr (fill K e) ≈
+    v ← compile_expr e;
+    yield_if_not_val e;;
+    compile_expr (fill K (Val v)).
+Proof.
+  intros Hsubset Hne. by apply compile_expr_bind_ind with (l := length K).
 Qed.
 
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
@@ -306,14 +379,15 @@ Section heaplangH.
   Global Instance wp_heaplang_wp `{!invGS_gen hlc Σ} :
     Wp (iProp Σ) expr val () := λ _ M e Φ, wp_heaplang e M Φ.
  *)
-  Lemma wpi_bind_Ki (Ki : ectx_item) (e : expr) Φ :
-    supported_subset_ectx Ki →
+  Lemma wpi_bind_K K e Φ :
+    Forall supported_subset_ectx K →
+    length K > 0 →
     WPi compile_expr e @ heaplangH; ⊤ {{ v,
-      WPi compile_expr (fill_item Ki (Val v)) @ heaplangH; ⊤ {{ Φ }}
+      WPi compile_expr (fill K (Val v)) @ heaplangH; ⊤ {{ Φ }}
     }} -∗
-    WPi compile_expr (fill_item Ki e) @ heaplangH; ⊤ {{ Φ }}.
+    WPi compile_expr (fill K e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
-    iIntros (Hs) "Hwp". rewrite compile_expr_bind //. iApply wpi_bind.
+    iIntros (Hs Hlen) "Hwp". rewrite compile_expr_bind //. iApply wpi_bind.
     iApply wpi_wand; last done. iIntros (r) "Hwp".
     iApply wpi_bind. rewrite /yield_if_not_val. destruct e.
     1:by iApply wpi_ret.
@@ -341,7 +415,7 @@ Section heaplangH.
     iIntros "Hsep".
     iInduction n as [|n'] "IH" forall (m).
     - done.
-    - simpl. 
+    - simpl.
       iDestruct (big_sepM_union with "Hsep") as "[Hfirst Hsep]".
       { symmetry. apply heap_array_map_disjoint. intros i Hnz Hlt. rewrite lookup_singleton_None.
         rewrite Loc.eq_spec. simpl. lia. }
