@@ -162,10 +162,10 @@ Section is_ctrace.
     is_ctrace_ (CTKillThread tid' tr') tid (VisF (inl1 EKillThread) k) tp
   | is_CTKillLastThread k t :
     is_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t]
-  | is_CTFork tr' tid tp k k_current' :
-    k_current' ≈ k CurrentThread →
+  | is_CTFork tr' tid tp k k_new' :
+    k_new' ≈ k NewThread →
     is_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) →
-    is_ctrace_ (CTFork k_current' tr') tid (VisF (inl1 EFork) k) tp
+    is_ctrace_ (CTFork k_new' tr') tid (VisF (inl1 EFork) k) tp
   | is_CTCut tid t tp :
     is_ctrace_ CTCut tid t tp
   | ctrace_skip_tau tr t' tid tp :
@@ -229,7 +229,7 @@ Section is_ctrace.
     remember (observe t1) as ot1.
     remember (observe t2) as ot2.
     revert tr2 tp2 t1 t2 ot2 Heqot1 Heqot2.
-    induction Htr as [tid tp1 r|tr' tid tp1 A e a k Htr IH|tid tp1 A f e k|tr' tid tp1 k t' tid' Hidx' Htr IH|tr' tid tp1 k t' tid' Hidx' Htr IH|k t'|tr' tid tp1 k k_current' Hsim' Htr IH|tid t' tp1 Htr|tr t' tid tp1 Htr IH]; intros tr2 tp2 t1 t2 ot2 Heqot1 Heqot2 Hidx1 Hidx2 Hsim Htp Heqit.
+    induction Htr as [tid tp1 r|tr' tid tp1 A e a k Htr IH|tid tp1 A f e k|tr' tid tp1 k t' tid' Hidx' Htr IH|tr' tid tp1 k t' tid' Hidx' Htr IH|k t'|tr' tid tp1 k k_new' Hsim' Htr IH|tid t' tp1 Htr|tr t' tid tp1 Htr IH]; intros tr2 tp2 t1 t2 ot2 Heqot1 Heqot2 Hidx1 Hidx2 Hsim Htp Heqit.
     - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
       revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH ]; try discriminate.
       * intros. injection Heqot1 as ->. destruct REL. inversion Hsim. constructor.
@@ -300,8 +300,8 @@ Section is_ctrace.
     - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
       revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH' ]; try discriminate.
       * pclearbot. intros. inversion Hsim. simplify_K. simplify_K. apply is_CTFork.
-        { transitivity k_current'; first done.
-          transitivity (k1 CurrentThread); first done.
+        { transitivity k_new'; first done.
+          transitivity (k1 NewThread); first done.
           apply REL.
         }
         eapply IH; eauto.
@@ -346,6 +346,23 @@ Section is_ctrace.
       * symmetry. apply Htp.
       * done.
   Qed.
+
+  Lemma is_ctrace_insert tr tp n t t' :
+    tp !! n = Some t →
+    t ≈ t' →
+    is_ctrace tr n tp ↔ is_ctrace tr n (<[n := t']>tp).
+  Admitted.
+
+  Lemma ctrace_yield tid tid' (tp : list (itree (threadpoolE +' E) R)) tr t :
+    tp !! tid = Some (ITree.bind (trigger EYield) (λ _, t))%itree →
+    is_ctrace tr tid' (<[tid := t]>tp) →
+    is_ctrace (CTYield tid' tr) tid tp.
+  Proof.
+    intros Htp Htr.
+    rewrite is_ctrace_insert. 2:done. 2:rewrite bind_trigger //.
+    eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
+    econstructor.
+  Admitted.
 End is_ctrace.
 
 Inductive trace (E : Type → Type) (R : Type) :=
@@ -469,10 +486,10 @@ Section extend_ctrace.
     extends_ctrace_ (CTKillThread tid' tr') tid (VisF (inl1 EKillThread) k) tp (TauF t'_int)
   | extends_CTKillLastThread k t :
     extends_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t] (RetF (inr LastThreadKilled))
-  | extends_CTFork tr' tid tp k t_int k_current' :
-    k_current' ≈ k CurrentThread →
+  | extends_CTFork tr' tid tp k t_int k_new' :
+    k_new' ≈ k NewThread →
     extends_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) (observe t_int) →
-    extends_ctrace_ (CTFork k_current' tr') tid (VisF (inl1 EFork) k) tp (TauF t_int)
+    extends_ctrace_ (CTFork k_new' tr') tid (VisF (inl1 EFork) k) tp (TauF t_int)
   | extends_CTCut tid t tp t_int :
     interleaves tid tp (go t_int) →
     extends_ctrace_ CTCut tid t tp t_int.
@@ -538,7 +555,7 @@ Section extend_ctrace.
     intros Hanswer [t [Hidx Htr]].
     remember (observe t) as ot.
     revert t Hidx Heqot.
-    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k k_current' Hsim Htr IH|tid t' tp Htr|tr t' tid tp Htr IH]; intros t Hidx Heqot.
+    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k k_new' Hsim Htr IH|tid t' tp Htr|tr t' tid tp Htr IH]; intros t Hidx Heqot.
     - exists (Ret (inl r)). eexists. split; first done. destruct Heqot. constructor.
     - apply exists_vis with (t := t) (k := k); eauto.
       (* FIXME: Get rid of manual instantiation of [R]. *)
