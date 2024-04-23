@@ -73,7 +73,7 @@ Section interleaving.
   executing the current thread. The interleaved [itree] takes a silent step in
   place of the [EFork]. *)
   | Fork current_tid tp k interleaving' :
-    interleaves (S current_tid) (k NewThread :: <[current_tid := k CurrentThread]>tp) interleaving' →
+    interleaves current_tid (<[current_tid := k CurrentThread]>tp ++ [k NewThread]) interleaving' →
     interleavesF interleaves current_tid (VisF (inl1 EFork) k) tp (TauF interleaving').
   (* TODO: Somehow deal with the case where the main thread emits
   [EKillThread]. (This case is never exhibited for typical [itree]s, because
@@ -171,7 +171,7 @@ Section interleaving.
   Lemma interleaves_inversion_Vis_EFork tid tp k interleaving :
     tp !! tid = Some (Vis (inl1 EFork) k) →
     interleaves tid tp interleaving →
-    ∃ interleaving', interleaves (S tid) (k NewThread :: <[tid:=k CurrentThread]>tp) interleaving' ∧ interleaving ≅ Tau interleaving'.
+    ∃ interleaving', interleaves tid (<[tid:=k CurrentThread]>tp ++ [k NewThread ]) interleaving' ∧ interleaving ≅ Tau interleaving'.
   Proof.
     intros Hidx Hinter. punfold Hinter. destruct Hinter as [t' [Hidx' Hinter]].
     rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
@@ -260,7 +260,7 @@ Section wptp.
             )
           | EFork => λ (k : thread → _),
             (** Newly forked threads are just prepended to the threadpool. *)
-            wptp (Some (S tid)) (k NewThread :: <[tid:=k CurrentThread]>tp) Φ
+            wptp (Some tid) (<[tid:=k CurrentThread]>tp ++ [k NewThread]) Φ
           end : (A → _) → _) k
         (** Non-threadpool events are handled using the handler [H]. *)
         | VisF (inr1 e) k => H _ e
@@ -400,7 +400,7 @@ Section wptp_induction.
     ( (∃ r, ⌜tp !! tid = Some (Ret r)⌝ ∧ (|={∅,⊤}=> Φ r))
     ∨ (∃ t', ⌜tp !! tid = Some (Tau t')⌝ ∧ |={∅}=> G (Some tid) (<[tid:=t']>tp) Φ)
     ∨ (∃ k, ⌜tp !! tid = Some (Vis (inl1 EFork) k)⌝ ∧
-      |={∅}=> G (Some (S tid)) (cons (k NewThread) (<[tid:=k CurrentThread]>tp)) Φ
+      |={∅}=> G (Some tid) (<[tid:=k CurrentThread]>tp ++ [k NewThread]) Φ
       )
     ∨ (∃ k, ⌜tp !! tid = Some (Vis (inl1 EYield) k)⌝ ∧ (
       (|={∅, ⊤}=> G None (<[tid:=k ()]>tp) Φ)
@@ -667,6 +667,12 @@ Section list.
     rewrite /enumerate_from fst_zip // seq_length //.
   Qed.
 
+  Lemma enumerate_from_snd {A} (n : nat) (xs : list A) :
+    snd <$> enumerate_from n xs = xs.
+  Proof.
+    rewrite /enumerate_from snd_zip // seq_length //.
+  Qed.
+
   Lemma enumerate_lookup_fst {A} (xs : list A) (idx: nat) :
     idx < length xs →
     fst <$> enumerate xs !! idx = Some idx.
@@ -711,6 +717,19 @@ Section list.
     rewrite /enumerate/enumerate_from -zip_with_app.
     - f_equiv. rewrite app_length. apply seq_app.
     - rewrite seq_length //.
+  Qed.
+
+  Lemma enumerate_from_fmap_offset A (xs : list A) n m :
+    (λ i : nat * A, let (n, x) := i in (m + n, x)) <$> enumerate_from n xs
+    =
+    enumerate_from (m + n) xs.
+  Proof.
+    revert n.
+    induction xs as [|x xs' IH]; first done.
+    intros n.
+    rewrite !enumerate_from_cons fmap_cons. f_equiv.
+    replace (S (m + n)) with (m + S n) by lia.
+    by rewrite IH.
   Qed.
 End list.
 
@@ -952,23 +971,57 @@ Section pointed_permutations.
     - done.
   Qed.
 
+  Lemma permutes_app_r {A} idx (xs ys : list A) idx' (xs' : list A) :
+    permutes idx xs idx' xs' →
+    permutes idx (xs ++ ys) idx' (xs' ++ ys).
+  Proof.
+    intros [enumerated_xs' [Hperm [Hsnd Hfst]]].
+    exists (enumerated_xs' ++ enumerate_from (length xs) ys).
+    split; last split.
+    - rewrite enumerate_app. rewrite /enumerate_from. by f_equiv.
+    - rewrite -Hsnd fmap_app snd_zip // seq_length //.
+    - destruct idx, idx'; eauto.
+      rewrite -list_lookup_fmap fmap_app. rewrite -list_lookup_fmap in Hfst.
+      by apply lookup_app_l_Some.
+  Qed.
+
+  Lemma permutes_app_l {A} idx sidx (xs ys : list A) idx' sidx' (xs' : list A) :
+    sidx = length ys + idx →
+    sidx' = length ys + idx' →
+    permutes (Some idx) xs (Some idx') xs' →
+    permutes (Some sidx) (ys ++ xs) (Some sidx') (ys ++ xs').
+  Proof.
+    intros -> -> [enumerated_xs' [Hperm [Hsnd Hfst]]].
+    exists (enumerate ys ++ ((λ (i : nat * A), let (n, x) := i in (length ys + n, x)) <$> enumerated_xs')).
+    split; last split.
+    - rewrite enumerate_app. f_equiv. rewrite -Hperm. rewrite /enumerate.
+      rewrite enumerate_from_fmap_offset. by replace (length ys + 0) with (length ys) by lia.
+    - rewrite fmap_app -list_fmap_compose /= -Hsnd /enumerate enumerate_from_snd. f_equiv. apply Forall_fmap_ext_1.
+      apply List.Forall_forall. by intros [a b] ?.
+    - rewrite lookup_app_r; last first. { rewrite enumerate_length. lia. }
+      rewrite list_lookup_fmap.
+      replace (length ys + idx' - length (enumerate ys)) with idx'; last first.
+      { rewrite enumerate_length. lia. }
+      destruct (enumerated_xs' !! idx') as [[a b]|]; last done. simpl. by injection Hfst as ->.
+  Qed.
+
   Lemma permutes_cons {A} (idx sidx : nat) (xs : list A) (idx' sidx' : nat) (xs' : list A) (x : A) :
     sidx = S idx →
     sidx' = S idx' →
     permutes (Some idx) xs (Some idx') xs' →
     permutes (Some sidx) (x::xs) (Some sidx') (x::xs').
   Proof.
-    intros -> -> [enumerated_xs' [Hperm [Hfst Hsnd]]].
+    intros -> -> [enumerated_xs' [Hperm [Hsnd Hfst]]].
     exists ((0, x) :: ((λ (i : nat * A), let (n, x) := i in (S n, x)) <$> enumerated_xs')).
     split; last split.
     - rewrite /enumerate enumerate_from_cons. simpl. f_equiv. rewrite -Hperm. rewrite /enumerate.
       remember 0 as n. generalize n. clear. induction xs as [|x xs' IH].
       * done.
       * intros n'. rewrite enumerate_from_cons. simpl. f_equiv. apply IH.
-    - rewrite fmap_cons -list_fmap_compose /= -Hfst. f_equiv. apply Forall_fmap_ext_1.
+    - rewrite fmap_cons -list_fmap_compose /= -Hsnd. f_equiv. apply Forall_fmap_ext_1.
       apply List.Forall_forall. by intros [a b] ?.
     - simpl. rewrite list_lookup_fmap -option_fmap_compose.
-      destruct (enumerated_xs' !! idx') as [[a b]|]; last done. simpl. by injection Hsnd as ->.
+      destruct (enumerated_xs' !! idx') as [[a b]|]; last done. simpl. by injection Hfst as ->.
   Qed.
 
   Lemma permutes_to_front {A} (xs : list A) (idx: nat) (xs' : list A) (x : A) :
@@ -999,6 +1052,21 @@ Section pointed_permutations.
           ++ rewrite enumerate_length. replace (S idx) with ((S (length xs)) + (idx - length xs)) by lia.
              apply lookup_seq_lt. lia.
           ++ rewrite seq_length //.
+  Qed.
+
+  Lemma permutes_to_middle {A} (xs : list A) (idx: nat) (xs' : list A) (x : A) :
+    idx < length xs →
+    permutes (Some idx) (xs ++ [x] ++ xs') (Some idx) (xs ++ xs' ++ [x]).
+  Proof.
+    intros Hlt.
+    exists (enumerate xs ++ enumerate_from (length xs + 1) xs' ++ [(length xs, x)]).
+    split; last split.
+    - rewrite app_assoc !enumerate_app -app_assoc. f_equiv. simpl.
+      rewrite /enumerate_from Permutation_cons_append app_length //.
+    - rewrite !fmap_app /enumerate !enumerate_from_snd //.
+    - rewrite -list_lookup_fmap fmap_app lookup_app_l.
+      * rewrite /enumerate !enumerate_from_fst lookup_seq_lt //.
+      * rewrite fmap_length enumerate_length //.
   Qed.
 End pointed_permutations.
 
@@ -1092,7 +1160,7 @@ Section threadpool_adequacy.
         by apply permutes_insert.
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iMod "Hwptp'". iModIntro. iApply "Hwptp'". iPureIntro.
-        eapply permutes_cons; eauto. by apply permutes_insert.
+        eapply permutes_app_r; eauto. by apply permutes_insert.
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iModIntro. iSplit.
         + iDestruct "Hwptp'" as "[>Hwptp' _]". iApply "Hwptp'".
@@ -1132,13 +1200,12 @@ Section threadpool_adequacy.
   Qed.
 
   Lemma wptp_reorder' tp tp' t tid Φ :
-    wptp (R:=R) H (Some (S (length tp + tid))) (tp ++ t :: tp') Φ -∗
-    wptp (R:=R) H (Some (S (length tp + tid))) (t :: tp ++ tp') Φ.
+    tid < length tp →
+    wptp (R:=R) H (Some tid) ((tp ++ [t]) ++ tp') Φ -∗
+    wptp (R:=R) H (Some tid) ((tp ++ tp') ++ [t]) Φ.
   Proof.
-    iIntros "Hwptp". iDestruct (wptp_bound with "Hwptp") as "%Hbound".
-    iApply wptp_reorder; last done. apply permutes_to_front.
-    - lia.
-    - rewrite app_length in Hbound. simpl in Hbound. lia.
+    iIntros (Hlt) "Hwptp". iDestruct (wptp_bound with "Hwptp") as "%Hbound".
+    iApply wptp_reorder; last done. rewrite -!app_assoc. by apply permutes_to_middle.
   Qed.
 
   (** Merge lemmata. *)
@@ -1219,8 +1286,7 @@ Section threadpool_adequacy.
         rewrite insert_app_r. by iApply "Hwptp''".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
         simpl. rewrite insert_app_r.
-        (* Here we use the reordering lemma to get the goal to a shape where
-        [Hwptp''] can be used: *) iApply wptp_reorder'.
+        rewrite -app_assoc.
         iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']".
         iApply "Hwptp''". { iPureIntro. lia. } done.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_r_Some. }
@@ -1267,7 +1333,9 @@ Section threadpool_adequacy.
         iDestruct "Hwptp'" as "[$ _]".
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
-        iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']". iApply "Hwptp''".
+        iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']". iApply wptp_reorder'.
+        { rewrite insert_length. by apply lookup_lt_is_Some_1. }
+        iApply "Hwptp''".
         iEval (rewrite wptp_unfold /=).
         clear. iModIntro. iIntros (tid' t' Hidx'). iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
         iModIntro. iDestruct "Hwptp'" as "[$ _]".
@@ -1356,11 +1424,11 @@ Section threadpool_adequacy.
   Qed.
 
   Lemma wptp_2_threads t t' Φ :
-    wptp H None [t] Φ -∗
-    wptp H (Some 0) [t'] Φ -∗
-    wptp (R:=R) H (Some 1) [t; t'] Φ.
+    wptp H (Some 0) [t] Φ -∗
+    wptp H None [t'] Φ -∗
+    wptp (R:=R) H (Some 0) [t; t'] Φ.
   Proof.
-    iIntros "Hwptp Hwptp'". iDestruct (wptp_merge_r with "Hwptp Hwptp'") as "$".
+    iIntros "Hwptp Hwptp'". iDestruct (wptp_merge_l with "Hwptp Hwptp'") as "$".
   Qed.
 
   (** Passage from [WPi] to [wptp]. *)
@@ -1397,11 +1465,11 @@ Section threadpool_adequacy.
              is a [wptp] for two threads (the current one and the newly forked
              one). We use a "merge lemma" to split this goal into two pieces, a
              [wptp] for each of the two threads: *)
-             iApply (wptp_2_threads with "[Hnew]").
-             +++ iApply wptp_None. iIntros (tid' t' Hidx). iMod "Hnew".
+             iApply (wptp_2_threads with "[Hcurrent Hwand]").
+             +++ by iApply "Hcurrent".
+             +++ iApply wptp_None. iIntros "!>" (tid' t' Hidx). iMod "Hnew".
                  apply list_lookup_singleton_Some in Hidx as [-> _].
                  iApply "Hnew". iModIntro. by iIntros (r) "?".
-             +++ by iApply "Hcurrent".
           ++ iModIntro. iSplit.
              +++ do 2 iMod "Hwp". iModIntro. iApply wptp_None. iIntros (tid' t' Hidx).
                  apply list_lookup_singleton_Some in Hidx as [-> _].

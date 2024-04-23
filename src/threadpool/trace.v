@@ -14,7 +14,7 @@ Section scheduler.
         | TauF t' => Tau (_scheduler t' tp)
         | @VisF _ _ _ A (inl1 e) k =>
           (match e with
-          | EFork => λ k, Tau (_scheduler (k CurrentThread) (k NewThread :: tp))
+          | EFork => λ k, Tau (_scheduler (k CurrentThread) (tp ++ [k NewThread]))
           | EYield => λ k, Tau (_scheduler (k ()) tp)
           | EKillThread => λ k,
               match tp with
@@ -30,7 +30,7 @@ Section scheduler.
       | TauF t' => Tau (scheduler t' tp)
       | @VisF _ _ _ A (inl1 e) k =>
         (match e with
-        | EFork => λ k, Tau (scheduler (k CurrentThread) (k NewThread :: tp))
+        | EFork => λ k, Tau (scheduler (k CurrentThread) (tp ++ [k NewThread]))
         | EYield => λ k, Tau (scheduler (k ()) tp)
         | EKillThread => λ k,
             match tp with
@@ -90,8 +90,10 @@ Section scheduler.
     - destruct e as [e|e]; first destruct e.
       * constructor. right. apply (CIH (k CurrentThread)).
         + simpl. apply lookup_lt_Some in Hidx.
+          rewrite lookup_app_l; last rewrite insert_length //.
           rewrite list_lookup_insert; eauto.
-        + rewrite /= list_delete_insert //.
+        + rewrite delete_app_l; last rewrite insert_length // -lookup_lt_is_Some //.
+          rewrite list_delete_insert //.
       * apply Yield with (new_current_tid := tid). right.
         apply (CIH (k ())).
         + simpl. apply lookup_lt_Some in Hidx.
@@ -164,7 +166,7 @@ Section is_ctrace.
     is_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t]
   | is_CTFork tr' tid tp k k_new' :
     k_new' ≈ k NewThread →
-    is_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) →
+    is_ctrace_ tr' tid (observe (k CurrentThread)) (<[tid := k CurrentThread]>tp ++ [k NewThread]) →
     is_ctrace_ (CTFork k_new' tr') tid (VisF (inl1 EFork) k) tp
   | is_CTCut tid t tp :
     is_ctrace_ CTCut tid t tp
@@ -305,9 +307,13 @@ Section is_ctrace.
           apply REL.
         }
         eapply IH; eauto.
-        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
-        + apply list_lookup_insert. by apply lookup_lt_is_Some_1.
-        + f_equiv; first apply REL. f_equiv; first apply REL. done.
+        + rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+          apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+        + rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+          apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+        + f_equiv.
+          ++ f_equiv; first apply REL. done.
+          ++ constructor; eauto. apply REL.
         + apply REL.
       * intros. constructor. apply IH' with (t1 := t1) (t2 := t2'); eauto.
         + transitivity tp2; first done.
@@ -363,6 +369,25 @@ Section is_ctrace.
     eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
     econstructor.
   Admitted.
+
+  Inductive is_postfix
+    : ctrace E R
+    → ctrace E R
+    → Prop :=
+  | is_postfix_same tr :
+    is_postfix tr tr
+  | is_postfix_CTVis tr tr' A e a :
+    is_postfix tr tr' →
+    is_postfix tr (CTVis A e a tr')
+  | is_postfix_CTYield tr tr' new_tid :
+    is_postfix tr tr' →
+    is_postfix tr (CTYield new_tid tr')
+  | is_postfix_CTKillThread tr tr' new_tid :
+    is_postfix tr tr' →
+    is_postfix tr (CTKillThread new_tid tr')
+  | is_postfix_CTFork tr tr' t :
+    is_postfix tr tr' →
+    is_postfix tr (CTFork t tr').
 End is_ctrace.
 
 Inductive trace (E : Type → Type) (R : Type) :=
@@ -488,7 +513,7 @@ Section extend_ctrace.
     extends_ctrace_ CTKillLastThread 0 (VisF (inl1 EKillThread) k) [t] (RetF (inr LastThreadKilled))
   | extends_CTFork tr' tid tp k t_int k_new' :
     k_new' ≈ k NewThread →
-    extends_ctrace_ tr' (S tid) (observe (k CurrentThread)) (k NewThread :: <[tid := k CurrentThread]>tp) (observe t_int) →
+    extends_ctrace_ tr' tid (observe (k CurrentThread)) (<[tid := k CurrentThread]>tp ++ [k NewThread]) (observe t_int) →
     extends_ctrace_ (CTFork k_new' tr') tid (VisF (inl1 EFork) k) tp (TauF t_int)
   | extends_CTCut tid t tp t_int :
     interleaves tid tp (go t_int) →
@@ -529,7 +554,8 @@ Section extend_ctrace.
       constructor.
     - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
       constructor. left. apply IH with (t := k CurrentThread); eauto.
-      simpl. apply list_lookup_insert. by apply lookup_lt_is_Some_1.
+      simpl. rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+      apply list_lookup_insert. by apply lookup_lt_is_Some_1.
     - pfold. punfold Hint. rewrite /interleaves_. rewrite /interleaves_ in Hint. simpl in Hint.
       rewrite -Heqot_int //.
   Qed.
@@ -580,9 +606,11 @@ Section extend_ctrace.
       eexists. split; first done. destruct Heqot. by econstructor.
     - exists (Ret (inr LastThreadKilled)). eexists. split; first done.  destruct Heqot. constructor.
     - unshelve epose (IH (k CurrentThread) _ _) as Hext; eauto.
-      { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
+      { rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+        apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
       destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
       eexists. split; first done. destruct Heqot. constructor; first done.
+      rewrite lookup_app_l in Hidx'; last rewrite insert_length -lookup_lt_is_Some //.
       rewrite /= list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
       by injection Hidx' as <-.
     - exists (scheduler t (delete tid tp)).
@@ -616,6 +644,7 @@ Section extend_ctrace.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
       apply IH with (t := k CurrentThread); eauto.
+      rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
       apply list_lookup_insert. by apply lookup_lt_is_Some_1.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
   Qed.

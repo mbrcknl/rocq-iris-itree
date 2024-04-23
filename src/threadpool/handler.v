@@ -21,6 +21,10 @@ Variant threadpoolE : Type → Type :=
   (** (Safely) kill the current thread and yield. *)
   | EKillThread : threadpoolE Empty_set.
 
+(** End the thread safely. *)
+Definition kill_thread {R : Type} `{threadpoolE -< E} : itree E R :=
+  vis EKillThread (λ (a : Empty_set), match a with end).
+
 (** [iHandler] for [threadpoolE]. *)
 Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoolE :=
   IHandler (λ A e,
