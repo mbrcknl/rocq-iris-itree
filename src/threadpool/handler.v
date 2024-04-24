@@ -3,7 +3,7 @@ From iris.itree Require Import wpi.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic.lib Require Export fancy_updates.
-From ITree Require Import ITree.
+From ITree Require Import ITree Eqit.
 
 (** Thread continuation. *)
 Variant thread :=
@@ -24,6 +24,12 @@ Variant threadpoolE : Type → Type :=
 (** End the thread safely. *)
 Definition kill_thread {R : Type} `{threadpoolE -< E} : itree E R :=
   vis EKillThread (λ (a : Empty_set), match a with end).
+
+Lemma kill_thread_bind {A B : Type} `{threadpoolE -< E} (k : A → itree E B) :
+  ITree.bind kill_thread k ≈ kill_thread.
+Proof.
+  rewrite /kill_thread. rewrite bind_vis. do 2 f_equiv. intros [].
+Qed.
 
 (** [iHandler] for [threadpoolE]. *)
 Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoolE :=

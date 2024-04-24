@@ -338,10 +338,12 @@ Section is_ctrace.
     apply Forall2_lookup_l with (P := eutt (=)) (k := tp2) in Hidx as [t' [Hidx Heutt']]; last done.
     eexists. split; first done. by eapply is_ctrace__eutt.
   Qed.
-  Global Instance is_ctrace_eutt tr n :
-    Proper (Forall2 (eutt (=)) ==> (↔)) (is_ctrace tr n).
+  Global Instance is_ctrace_eutt b1 b2 tr n :
+    Proper (Forall2 (eqit (=) b1 b2) ==> (↔)) (is_ctrace tr n).
   Proof.
     intros tp1 tp2 Htp.
+    apply Forall2_impl with (Q := eqit (=) true true) in Htp; last first.
+    { intros t1 t2 Heqit. admit. }
     split.
     - intros Hctr. eapply is_ctrace_eutt'.
       * reflexivity.
@@ -351,12 +353,13 @@ Section is_ctrace.
       * reflexivity.
       * symmetry. apply Htp.
       * done.
-  Qed.
+  Admitted.
 
   Lemma is_ctrace_insert tr tp n t t' :
     tp !! n = Some t →
     t ≈ t' →
-    is_ctrace tr n tp ↔ is_ctrace tr n (<[n := t']>tp).
+    is_ctrace tr n (<[n := t']>tp) →
+    is_ctrace tr n tp.
   Admitted.
 
   Lemma ctrace_yield tid tid' (tp : list (itree (threadpoolE +' E) R)) tr t :
@@ -365,7 +368,7 @@ Section is_ctrace.
     is_ctrace (CTYield tid' tr) tid tp.
   Proof.
     intros Htp Htr.
-    rewrite is_ctrace_insert. 2:done. 2:rewrite bind_trigger //.
+    eapply is_ctrace_insert; first done; first rewrite bind_trigger //.
     eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
     econstructor.
   Admitted.

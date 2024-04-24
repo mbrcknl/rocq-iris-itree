@@ -22,11 +22,26 @@ Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
 
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' ubE.
 
-Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
+Definition is_value (e : expr) : bool :=
   match e with
-  | Val v => Ret ()
-  | _ => trigger EYield
+  | Val _ => true
+  | _ => false
   end.
+Arguments is_value !_.
+
+Lemma is_value_val (e : expr) :
+  is_value e = true →
+  ∃ v, e = Val v.
+Proof.
+  intros Hval. destruct e; try discriminate. by eexists.
+Qed.
+
+Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
+  if is_value e then
+    Ret ()
+  else
+    trigger EYield.
+Arguments yield_if_not_val !_ / _.
 
 Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   match e with
@@ -38,7 +53,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       f ← compile_expr' e1;
       yield_if_not_val e1;;
       match f with
-      | RecV f_ x_ e => let body := (subst' f_ f (subst' x_ x e)) in
+      | RecV f_ x_ e => let body := subst' x_ x  (subst' f_ f e) in
           yield_if_not_val body;;
           call body
       | _ => ub
@@ -51,9 +66,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | None => ub
       end
   | BinOp op e1 e2 =>
-      v1 ← compile_expr' e2;
+      v2 ← compile_expr' e2;
       yield_if_not_val e2;;
-      v2 ← compile_expr' e1;
+      v1 ← compile_expr' e1;
       yield_if_not_val e1;;
       match bin_op_eval op v1 v2 with
       | Some v => Ret v
@@ -118,12 +133,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | CurrentThread => Ret (LitV LitUnit)
       | NewThread =>
           v ← compile_expr' e;
-          match v with
-          | LitV LitUnit =>
-              x ← trigger EKillThread : itree _ Empty_set;
-              match x with end
-          | _ => ub
-          end
+          kill_thread
       end
   | AllocN ne e =>
       v ← compile_expr' e;
@@ -243,6 +253,10 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   end%itree.
 
 Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
+
+Lemma compile_expr_val (v : val) :
+  compile_expr (Val v) ≈ Ret v.
+Admitted.
 
 Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
   match Ki with
@@ -404,8 +418,8 @@ Section heaplangH.
     rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.
     - rewrite interp_bind. iApply wpi_bind.
-      iApply wpi_wand; last done. iIntros (r ->). rewrite interp_bind. iApply wpi_bind.
-      setoid_rewrite interp_trigger. simpl. iApply @wpi_kill. done.
+      iApply wpi_wand; last done. iIntros (r ->). rewrite interp_vis.
+      iApply wpi_bind. by iApply @wpi_kill.
   Qed.
 
   Lemma big_sep_map_list_heap_array l n m v :
