@@ -128,13 +128,15 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       | _ => ub
       end
   | Fork e =>
-      thread ← trigger EFork;
-      match thread with
-      | CurrentThread => Ret (LitV LitUnit)
-      | NewThread =>
-          v ← compile_expr' e;
-          kill_thread
-      end
+      if negb (is_value e) then
+        thread ← trigger EFork;
+        match thread with
+        | CurrentThread => Ret (LitV LitUnit)
+        | NewThread =>
+            v ← compile_expr' e;
+            kill_thread
+        end
+      else Ret (LitV LitUnit)
   | AllocN ne e =>
       v ← compile_expr' e;
       yield_if_not_val e;;
@@ -414,6 +416,7 @@ Section heaplangH.
     WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
     iIntros "HΦ Hwp". rewrite /compile_expr !rec_as_interp /=.
+    destruct (is_value _) eqn:Hval. { simpl. rewrite interp_ret. by iApply wpi_ret. }
     rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
     rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.

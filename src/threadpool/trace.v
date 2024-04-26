@@ -181,6 +181,11 @@ Section is_ctrace.
     → Prop :=
     λ tr tid tp, ∃ t, tp !! tid = Some t ∧ is_ctrace_ tr tid (observe t) tp.
 
+  Lemma is_ctrace_CTCut tid tp :
+    tid < length tp →
+    is_ctrace CTCut tid tp.
+  Admitted.
+
   Inductive similar
     : ctrace E R
     → ctrace E R
@@ -362,7 +367,7 @@ Section is_ctrace.
     is_ctrace tr n tp.
   Admitted.
 
-  Lemma ctrace_yield tid tid' (tp : list (itree (threadpoolE +' E) R)) tr t :
+  Lemma is_ctrace_yield tid tid' (tp : list (itree (threadpoolE +' E) R)) tr t :
     tp !! tid = Some (ITree.bind (trigger EYield) (λ _, t))%itree →
     is_ctrace tr tid' (<[tid := t]>tp) →
     is_ctrace (CTYield tid' tr) tid tp.
