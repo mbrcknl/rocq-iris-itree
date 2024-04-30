@@ -116,4 +116,4 @@ Ltac simplify_obs :=
   end.
 
 Ltac simpl_itree :=
-  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || simpl).
+  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).

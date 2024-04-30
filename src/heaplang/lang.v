@@ -141,15 +141,13 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
           call (App e2 (Val v))
       end
   | Fork e =>
-      if negb (is_value e) then
-        thread ← trigger EFork;
-        match thread with
-        | CurrentThread => Ret (LitV LitUnit)
-        | NewThread =>
-            v ← compile_expr' e;
-            kill_thread
-        end
-      else Ret (LitV LitUnit)
+      thread ← trigger EFork;
+      match thread with
+      | CurrentThread => Ret (LitV LitUnit)
+      | NewThread =>
+          v ← compile_expr_yield e;
+          kill_thread
+      end
   | AllocN ne e =>
       v ← compile_expr_yield e;
       n' ← compile_expr_yield ne;
@@ -379,12 +377,14 @@ Section heaplangH.
     WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
     iIntros "HΦ Hwp". rewrite /compile_expr. simpl_itree.
-    destruct (is_value _) eqn:Hval. { simpl. rewrite interp_ret. by iApply wpi_ret. }
-    simpl_itree. rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
-    - rewrite interp_ret. by iApply wpi_ret.
-    - rewrite interp_bind. iApply wpi_bind.
-      iApply wpi_wand; last done. iIntros (r ->). rewrite interp_vis.
-      iApply wpi_bind. by iApply @wpi_kill.
+    rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
+    - simpl_itree. by iApply wpi_ret.
+    - simpl_itree. iApply wpi_bind.
+      iApply wpi_wand; last done. iIntros (r ->).
+      rewrite /yield_if_not_val. destruct (is_value _) eqn:Hval.
+      * rewrite /kill_thread. simpl_itree. rewrite bind_trigger. by iApply @wpi_kill.
+      * rewrite /kill_thread. simpl_itree. iApply wpi_bind. iApply @wpi_yield.
+        iApply wpi_bind. by iApply @wpi_kill.
   Qed.
 
   Lemma big_sep_map_list_heap_array l n m v :
