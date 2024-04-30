@@ -630,15 +630,6 @@ Section wp_itree_mask.
     iApply (wpi_wand with "[HP]"); last exact.
     eauto with iFrame.
   Qed.
-
-  Lemma wpi_interp_bind {R A E'} (e : E' A) (f : E' ~> itree E) (k : A → itree E' R) M Φ :
-    WPi f A e @ H; M {{ a, WPi interp f (k a) @ H; M {{ Φ }} }} -∗
-    WPi interp f (ITree.bind (ITree.trigger e) k) @ H; M {{ Φ }}.
-  Proof.
-    iIntros "Hwp".
-    setoid_rewrite interp_bind. iApply wpi_bind. setoid_rewrite interp_trigger.
-    done.
-  Qed.
 End wp_itree_mask.
 
 Section translation.

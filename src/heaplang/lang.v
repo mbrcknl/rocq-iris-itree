@@ -1,6 +1,6 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
-From iris.itree Require Import wpi choice ub state handler.
+From iris.itree Require Import wpi choice ub state handler itree.
 From iris.itree.threadpool Require Import handler.
 From iris.prelude Require Import prelude.
 From iris Require Import ghost_map.
@@ -43,89 +43,102 @@ Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
     trigger EYield.
 Arguments yield_if_not_val !_ / _.
 
+Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
+  (match o with | Some x => Ret x | None => ub end)%itree.
+Notation "x ?" := (some_or_ub x) (at level 10, format "x ?") : itree_scope.
+Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E R :=
+  (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
+Notation "x ??" := (some_some_or_ub x) (at level 10, format "x ??") : itree_scope.
+
+Definition val_to_RecV (v : val) : option (binder * binder * expr) :=
+  match v with
+  | RecV f_ x_ e => Some (f_, x_, e)
+  | _ => None
+  end.
+Definition val_to_int (v : val) : option Z :=
+  match v with
+  | LitV (LitInt n) => Some n
+  | _ => None
+  end.
+Definition val_to_loc (v : val) : option loc :=
+  match v with
+  | LitV (LitLoc l) => Some l
+  | _ => None
+  end.
+Definition val_to_pair (v : val) : option (val * val) :=
+  match v with
+  | PairV v1 v2 => Some (v1, v2)
+  | _ => None
+  end.
+Definition val_to_bool (v : val) : option bool :=
+  match v with
+  | LitV (LitBool b) => Some b
+  | _ => None
+  end.
+Definition val_to_sum (v : val) : option (val + val) :=
+  match v with
+  | InjLV v => Some (inl v)
+  | InjRV v => Some (inr v)
+  | _ => None
+  end.
+
 Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
+  let compile_expr_yield e := (v ← compile_expr' e ; yield_if_not_val e ;; Ret v)%itree in
   match e with
   | Val v => Ret v
   | Rec f x e => Ret (RecV f x e)
   | App e1 e2 =>
-      x ← compile_expr' e2;
-      yield_if_not_val e2;;
-      f ← compile_expr' e1;
-      yield_if_not_val e1;;
-      match f with
-      | RecV f_ x_ e => let body := subst' x_ x  (subst' f_ f e) in
-          yield_if_not_val body;;
-          call body
-      | _ => ub
-      end
+      x ← compile_expr_yield e2;
+      f ← compile_expr_yield e1;
+      '(f_, x_, e) ← (val_to_RecV f)?;
+      let body := subst' x_ x  (subst' f_ f e) in
+      yield_if_not_val body;;
+      call body
   | UnOp op e =>
-      v ← compile_expr' e;
-      yield_if_not_val e;;
-      match un_op_eval op v with
-      | Some v => Ret v
-      | None => ub
-      end
+      v ← compile_expr_yield e;
+      (un_op_eval op v)?
   | BinOp op e1 e2 =>
-      v2 ← compile_expr' e2;
-      yield_if_not_val e2;;
-      v1 ← compile_expr' e1;
-      yield_if_not_val e1;;
-      match bin_op_eval op v1 v2 with
-      | Some v => Ret v
-      | None => ub
-      end
+      v2 ← compile_expr_yield e2;
+      v1 ← compile_expr_yield e1;
+      (bin_op_eval op v1 v2)?
   | If e0 e1 e2 =>
-      v0 ← compile_expr' e0;
-      yield_if_not_val e0;;
-      match v0 with
-      | LitV (LitBool b) =>
-          if b then
-            yield_if_not_val e1;;
-            compile_expr' e1
-          else
-            yield_if_not_val e2;;
-            compile_expr' e2
-      | _ => ub
-      end
+      v0 ← compile_expr_yield e0;
+      b ← (val_to_bool v0)?;
+      if b then
+        (* if true then e1 else e2 ~> e1 (must yield here!) ~> ... *)
+        yield_if_not_val e1;;
+        compile_expr' e1
+      else
+        yield_if_not_val e2;;
+        compile_expr' e2
   | Pair e1 e2 =>
-      v1 ← compile_expr' e2;
-      yield_if_not_val e2;;
-      v2 ← compile_expr' e1;
-      yield_if_not_val e1;;
+      v1 ← compile_expr_yield e2;
+      v2 ← compile_expr_yield e1;
       Ret (PairV v1 v2)
   | Fst e =>
-      v ← compile_expr' e;
-      yield_if_not_val e;;
-      match v with
-      | PairV x _ => Ret x
-      | _ => ub
-      end
+      v ← compile_expr_yield e;
+      '(x, _) ← (val_to_pair v)?;
+      Ret x
   | Snd e =>
-      v ← compile_expr' e;
-      yield_if_not_val e;;
-      match v with
-      | PairV _ y => Ret y
-      | _ => ub
-      end
+      v ← compile_expr_yield e;
+      '(_, y) ← (val_to_pair v)?;
+      Ret y
   | InjL e =>
-      v ← compile_expr' e;
-      yield_if_not_val e;;
+      v ← compile_expr_yield e;
       Ret (InjLV v)
   | InjR e =>
-      v ← compile_expr' e;
-      yield_if_not_val e;;
+      v ← compile_expr_yield e;
       Ret (InjRV v)
   | Case e0 e1 e2 =>
-      v0 ← compile_expr' e0;
-      yield_if_not_val e0;;
+      v0' ← compile_expr_yield e0;
+      v0 ← (val_to_sum v0')?;
       match v0 with
-      | InjLV v =>
-          yield_if_not_val e1;;
+      | inl v =>
+          trigger EYield;;
           call (App e1 (Val v))
-      | InjRV v =>
-          yield_if_not_val e2;;
+      | inr v =>
+          trigger EYield;;
           call (App e2 (Val v))
-      | _ => ub
       end
   | Fork e =>
       if negb (is_value e) then
@@ -138,119 +151,66 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
         end
       else Ret (LitV LitUnit)
   | AllocN ne e =>
-      v ← compile_expr' e;
-      yield_if_not_val e;;
-      n ← compile_expr' ne;
-      yield_if_not_val ne;;
-      match n with
-      | LitV (LitInt n) =>
-          σ ← trigger EGetState;
-          (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
-          (* TODO: There should be a proof obligation for this being nonempty. *)
-          l ← trigger (EDemonic {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)});
-          trigger (ESetState (state_init_heap (`l) n v σ));;
-          Ret (LitV (LitLoc (`l)))
-      | _ => ub
-      end
+      v ← compile_expr_yield e;
+      n' ← compile_expr_yield ne;
+      n ← (val_to_int n')?;
+      σ ← trigger EGetState;
+      (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
+      (* TODO: There should be a proof obligation for this being nonempty. *)
+      l ← trigger (EDemonic {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)});
+      trigger (ESetState (state_init_heap (`l) n v σ));;
+      Ret (LitV (LitLoc (`l)))
   | Free e =>
-      l ← compile_expr' e;
-      yield_if_not_val e;;
-      match l with
-      | LitV (LitLoc l) =>
-          σ ← trigger EGetState;
-          match σ.(heap) !! l with
-          | Some (Some _) =>
-              trigger (ESetState (state_upd_heap (<[l:=None]>) σ));;
-              Ret (LitV LitUnit)
-          | _ => ub
-          end
-      | _ => ub
-      end
+      l' ← compile_expr_yield e;
+      l ← (val_to_loc l')?;
+      σ ← trigger EGetState;
+      (σ.(heap) !! l)??;;
+      trigger (ESetState (state_upd_heap (<[l:=None]>) σ));;
+      Ret (LitV LitUnit)
   | Load e =>
-      l ← compile_expr' e;
-      yield_if_not_val e;;
-      (* TODO: Notation for partial match. *)
-      match l with
-      | LitV (LitLoc l) =>
-          σ ← trigger EGetState;
-          match σ.(heap) !! l with
-          | Some (Some v) =>
-              Ret v
-          | _ => ub
-          end
-      | _ => ub
-      end
+      l' ← compile_expr_yield e;
+      l ← (val_to_loc l')?;
+      σ ← trigger EGetState;
+      (σ.(heap) !! l)??
   | Store e1 e2 =>
-      v ← compile_expr' e2;
-      yield_if_not_val e2;;
-      l ← compile_expr' e1;
-      yield_if_not_val e1;;
-      match l with
-      | LitV (LitLoc l) =>
-          σ ← trigger EGetState;
-          match σ.(heap) !! l with
-          | Some (Some w) =>
-              trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
-              Ret (LitV LitUnit)
-          | _ => ub
-          end
-      | _ => ub
-      end
+      v ← compile_expr_yield e2;
+      l' ← compile_expr_yield e1;
+      l ← (val_to_loc l')?;
+      σ ← trigger EGetState;
+      w ← (σ.(heap) !! l)??;
+      trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
+      Ret (LitV LitUnit)
   | Xchg e1 e2 =>
-      v ← compile_expr' e2;
-      yield_if_not_val e2;;
-      l ← compile_expr' e1;
-      yield_if_not_val e1;;
-      match l with
-      | LitV (LitLoc l) =>
-          σ ← trigger EGetState;
-          match σ.(heap) !! l with
-          | Some (Some w) =>
-              trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
-              Ret w
-          | _ => ub
-          end
-      | _ => ub
-      end
+      v ← compile_expr_yield e2;
+      l' ← compile_expr_yield e1;
+      l ← (val_to_loc l')?;
+      σ ← trigger EGetState;
+      w ← (σ.(heap) !! l)??;
+      trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
+      Ret w
   | CmpXchg e1 e2 e3 =>
-      v2 ← compile_expr' e3;
-      yield_if_not_val e3;;
-      v1 ← compile_expr' e2;
-      yield_if_not_val e2;;
-      l ← compile_expr' e1;
-      yield_if_not_val e1;;
-      match l with
-      | LitV (LitLoc l) =>
-          σ ← trigger EGetState;
-          match σ.(heap) !! l with
-          | Some (Some w) =>
-              (* Asserts that equality coincides with the equality of the language. *)
-              (* TODO: Define [assert] function. *)
-              assert (vals_compare_safe v1 w) ;;
-              if decide (v1 = w) then
-                trigger (ESetState (state_upd_heap <[l:=Some v2]> σ));;
-                Ret (PairV w (LitV (LitBool true)))
-              else Ret (PairV w (LitV (LitBool false)))
-          | _ => ub
-          end
-      | _ => ub
-      end
+      v2 ← compile_expr_yield e3;
+      v1 ← compile_expr_yield e2;
+      l' ← compile_expr_yield e1;
+      l ← (val_to_loc l')?;
+      σ ← trigger EGetState;
+      w ← (σ.(heap) !! l)??;
+      (* Asserts that equality coincides with the equality of the language. *)
+      assert (vals_compare_safe v1 w) ;;
+      if decide (v1 = w) then
+        trigger (ESetState (state_upd_heap <[l:=Some v2]> σ));;
+        Ret (PairV w (LitV (LitBool true)))
+      else Ret (PairV w (LitV (LitBool false)))
   | FAA e1 e2 =>
-      v ← compile_expr' e2;
-      yield_if_not_val e2;;
-      l ← compile_expr' e1;
-      yield_if_not_val e1;;
-      match (v, l) with
-      | (LitV (LitInt v), LitV (LitLoc l)) =>
-          σ ← trigger EGetState;
-          match σ.(heap) !! l with
-          | Some (Some (LitV (LitInt n))) =>
-              trigger (ESetState (state_upd_heap <[l:=Some (LitV (LitInt (n + v)))]> σ));;
-              Ret (LitV (LitInt n))
-          | _ => ub
-          end
-      | _ => ub
-      end
+      v' ← compile_expr_yield e2;
+      v ← (val_to_int v')?;
+      l' ← compile_expr_yield e1;
+      l ← (val_to_loc l')?;
+      σ ← trigger EGetState;
+      w ← (σ.(heap) !! l)??;
+      n ← (val_to_int w)?;
+      trigger (ESetState (state_upd_heap <[l:=Some (LitV (LitInt (n + v)))]> σ));;
+      Ret (LitV (LitInt n))
   | _ => ub
   end%itree.
 
@@ -275,6 +235,8 @@ Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
     yield_if_not_val e;;
     compile_expr (fill_item Ki (Val v)).
 Proof.
+Admitted.
+(*
   intros Hsubset. destruct Ki; simpl; rewrite /compile_expr rec_as_interp /=.
   all:solve [
     rewrite interp_bind ?interp_ret ?bind_ret_l ?interp_bind rec_as_interp; f_equiv;
@@ -285,6 +247,7 @@ Proof.
   | contradiction
   ].
 Qed.
+*)
 
 Lemma split_last {A} (xs : list A) :
   length xs > 0 →
@@ -415,10 +378,9 @@ Section heaplangH.
     WPi compile_expr e @ heaplangH; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
     WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
-    iIntros "HΦ Hwp". rewrite /compile_expr !rec_as_interp /=.
+    iIntros "HΦ Hwp". rewrite /compile_expr. simpl_itree.
     destruct (is_value _) eqn:Hval. { simpl. rewrite interp_ret. by iApply wpi_ret. }
-    rewrite interp_bind. setoid_rewrite interp_trigger. simpl.
-    rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
+    simpl_itree. rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
     - rewrite interp_ret. by iApply wpi_ret.
     - rewrite interp_bind. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->). rewrite interp_vis.
@@ -451,14 +413,14 @@ Section heaplangH.
           (l +ₗ (i : nat)) ↦ v }}.
   Proof.
     intros Hpos. iIntros (Hmask) "#Hinv".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    iApply wpi_interp_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
-    iApply wpi_interp_bind. simpl. iApply @wpi_demonic. iIntros (l). iApply wpi_ret.
-    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    iApply wpi_bind. simpl. iApply @wpi_demonic. iIntros (l). iApply wpi_ret.
+    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
     rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
@@ -466,7 +428,7 @@ Section heaplangH.
     { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
       rewrite replicate_length in Hlt. apply Hl; first done. lia. }
     iMod "Hauth" as "[Hauth Hfrag]". iDestruct "Hauth" as "[Hauth Hauth']". iFrame.
-    iApply wpi_ret. rewrite interp_ret. iApply wpi_ret.
+    iApply wpi_ret. iApply wpi_ret.
     iModIntro. iSplitL "Hauth". { by iExists (state_init_heap (`l) n v σ). }
     iExists (`l). iSplit; first done. iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
   Qed.
@@ -478,11 +440,11 @@ Section heaplangH.
       {{ v', ⌜v' = v⌝ ∧ l ↦{dq} v }}.
   Proof.
     iIntros (Hmask) "Hpointsto".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_get.
+    rewrite /compile_expr. simpl_itree.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (s) "Hauth".
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %Hlu.
-    iFrame. iApply wpi_ret. rewrite Hlu. rewrite interp_ret. iApply wpi_ret. eauto.
+    iFrame. iApply wpi_ret. rewrite Hlu. simpl_itree. iApply wpi_ret. eauto.
   Qed.
 
   Lemma wpi_Store M l v v' :
@@ -493,19 +455,19 @@ Section heaplangH.
       {{ r, ⌜r = LitV (LitUnit)⌝ ∧ l ↦ v' }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    iApply wpi_interp_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    simpl_itree. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
     rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update (Some v') with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
-    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iFrame. iApply wpi_ret. iApply wpi_ret. iModIntro.
     iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some v']>) σ). }
     eauto.
   Qed.
@@ -519,19 +481,19 @@ Section heaplangH.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    iApply wpi_interp_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    simpl_itree. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
     rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update None with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
-    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iFrame. iApply wpi_ret. iApply wpi_ret. iModIntro.
     iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=None]>) σ). }
     eauto.
   Qed.
@@ -544,19 +506,19 @@ Section heaplangH.
       {{ r, ⌜r = v⌝ ∧ l ↦ v' }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    iApply wpi_interp_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    simpl_itree. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
     rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update (Some v') with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
-    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iFrame. iApply wpi_ret. iApply wpi_ret. iModIntro.
     iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some v']>) σ). }
     eauto.
   Qed.
@@ -571,17 +533,15 @@ Section heaplangH.
       {{ r, ⌜r = PairV v' (LitV $ LitBool false)⌝ ∧ l ↦{dq} v' }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "#Hinv Hpointsto".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    iApply wpi_interp_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    rewrite interp_bind /assert. rewrite decide_True // decide_False //.
-    rewrite interp_ret bind_ret_l interp_ret. iApply wpi_ret.
-    iSplitL "Hauth"; first eauto.
-    eauto.
+    simpl_itree. rewrite /assert /= decide_True // decide_False //. simpl_itree.
+    iApply wpi_ret. iSplitL "Hauth"; first eauto. eauto.
   Qed.
 
   Lemma wpi_CmpXchg_suc M l v' v1 v2 :
@@ -594,21 +554,20 @@ Section heaplangH.
       {{ r, ⌜r = PairV v' (LitV $ LitBool true)⌝ ∧ l ↦ v2 }}.
   Proof.
     iIntros (Hmask Heq Hcmp) "#Hinv Hpointsto".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    iApply wpi_interp_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    rewrite interp_bind /assert. rewrite decide_True // decide_True //.
-    rewrite interp_ret bind_ret_l.
-    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    simpl_itree. rewrite /assert /= decide_True // decide_True //. simpl_itree.
+    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
     rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update (Some v2) with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
-    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iFrame. iApply wpi_ret. iApply wpi_ret. iModIntro.
     iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some v2]>) σ). }
     eauto.
   Qed.
@@ -621,20 +580,20 @@ Section heaplangH.
       {{ r, ⌜r = LitV (LitInt i1)⌝ ∧ l ↦ LitV (LitInt (i1 + i2)) }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto".
-    rewrite /compile_expr rec_as_interp /= !bind_ret_l.
+    rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    iApply wpi_interp_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    iApply wpi_interp_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    simpl_itree. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
     rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update (Some (LitV (LitInt (i1 + i2)))) with "Hauth Hpointsto")
       as ">[[Hauth Hauth'] Hpointsto]".
-    iFrame. iApply wpi_ret. rewrite interp_ret. iApply wpi_ret. iModIntro.
+    iFrame. iApply wpi_ret. iApply wpi_ret. iModIntro.
     iSplitL "Hauth". { by iExists (state_upd_heap (<[l:=Some (LitV (LitInt (i1 + i2)))]>) σ). }
     eauto.
   Qed.

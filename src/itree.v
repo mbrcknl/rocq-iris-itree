@@ -1,7 +1,7 @@
 From iris.itree Require Export axioms.
 From ITree Require Import ITree.
 From ITree Require Import Eqit.
-From ITree Require Import TranslateFacts.
+From ITree Require Import TranslateFacts InterpFacts RecursionFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
@@ -114,3 +114,6 @@ Ltac simplify_obs :=
   | H : VisF _ _ = observe _ |- _ =>
     apply vis_observe_eqit in H as <-
   end.
+
+Ltac simpl_itree :=
+  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || simpl).
