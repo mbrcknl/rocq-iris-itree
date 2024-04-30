@@ -17,7 +17,19 @@ Variant threadpoolE : Type → Type :=
   emitted. *)
   | EFork : threadpoolE thread
   (** Yield control to another (demonically chosen) thread in the thread-pool. *)
-  | EYield : threadpoolE unit.
+  | EYield : threadpoolE unit
+  (** (Safely) kill the current thread and yield. *)
+  | EKillThread : threadpoolE Empty_set.
+
+(** End the thread safely. *)
+Definition kill_thread {R : Type} `{threadpoolE -< E} : itree E R :=
+  vis EKillThread (λ (a : Empty_set), match a with end).
+
+Lemma kill_thread_bind {A B : Type} `{threadpoolE -< E} (k : A → itree E B) :
+  ITree.bind kill_thread k ≈ kill_thread.
+Proof.
+  rewrite /kill_thread. rewrite bind_vis. do 2 f_equiv. intros [].
+Qed.
 
 (** [iHandler] for [threadpoolE]. *)
 Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoolE :=
@@ -32,6 +44,7 @@ Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoo
     | EFork      => λ Φ s, Φ CurrentThread ∗ s NewThread
     (** To prove that one can [EYield], one must restablish all the invariants. *)
     | EYield     => λ Φ _, |={∅, ⊤}=> |={⊤, ∅}=> Φ tt
+    | EKillThread => λ _ _, |={∅, ⊤}=> True
     end
   )%I _.
 Next Obligation.
@@ -40,6 +53,7 @@ Next Obligation.
     * by iApply "HΦwand".
     * by iApply "Hswand".
   - iIntros "HΦ". by iApply "HΦwand".
+  - by iIntros "?".
 Qed.
 
 (** Stepping lemmata for the threadpool [WPi]. *)
@@ -71,5 +85,12 @@ Section wp_threadpool.
     iApply fupd_mask_intro_subseteq; first done.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
     iApply wpi_ret. by iMod "Hfupd".
+  Qed.
+
+  Lemma wpi_kill {R} (k : Empty_set → itree E R) (Φ : R → iProp Σ) :
+    ⊢ WPi (vis EKillThread k) @ H; ⊤ {{ Φ }}.
+  Proof.
+    iApply wpi_vis. iApply is_inH. simpl.
+    by iApply fupd_mask_intro_subseteq; first done.
   Qed.
 End wp_threadpool.
