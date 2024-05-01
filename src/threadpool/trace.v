@@ -114,8 +114,8 @@ End scheduler.
 
 Inductive ctrace (E : Type → Type) (R : Type) :=
   | CTRet (r : R)
-  | CTVis (A : Type) (e : E A) (a : A) (tr' : ctrace E R)
-  | CTVisEmpty (A : Type) (e : E A)
+  | CTVis {A : Type} (e : E A) (a : A) (tr' : ctrace E R)
+  | CTVisEmpty {A : Type} (e : E A)
   | CTYield (new_tid : nat) (tr' : ctrace E R)
   | CTKillThread (new_tid : nat) (tr' : ctrace E R)
   | CTKillLastThread
@@ -396,6 +396,10 @@ Section is_ctrace.
   | is_postfix_CTFork tr tr' t :
     is_postfix tr tr' →
     is_postfix tr (CTFork t tr').
+
+  Global Instance is_postfix_trans :
+    Transitive is_postfix.
+  Admitted.
 End is_ctrace.
 
 Inductive trace (E : Type → Type) (R : Type) :=
