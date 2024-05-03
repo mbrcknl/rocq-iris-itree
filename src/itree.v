@@ -105,6 +105,15 @@ Proof.
   rewrite /ITree.map bind_vis //.
 Qed.
 
+Lemma unobserve {E R} (to : itree' E R) :
+  ∃ t, to = observe t.
+Proof.
+  destruct to.
+  - by exists (Ret r).
+  - by exists (Tau t).
+  - by exists (Vis e k).
+Qed.
+
 Ltac simplify_obs :=
   repeat match goal with
   | H : RetF _ = observe _ |- _ =>

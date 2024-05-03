@@ -6,8 +6,35 @@ From iris.itree.threadpool Require Import handler interleaving.
 From iris.itree Require Import axioms itree trace.
 Import Coq.Logic.ClassicalChoice.
 
+Lemma list_delete_insert {A} idx x (xs : list A) :
+  delete idx (<[idx := x]> xs) = delete idx xs.
+Proof.
+  induction idx as [|idx IH] in xs |- *.
+  - destruct xs as [|x' xs']; done.
+  - destruct xs as [|x' xs'].
+    * done.
+    * simpl. f_equiv. apply IH.
+Qed.
+
+Lemma list_delete_empty {A} idx (xs : list A) :
+  delete idx xs = [] →
+  length xs <= 1.
+Proof.
+  intros Hemp.
+  destruct (decide (idx < length xs)).
+  - replace (length xs) with (length (delete idx xs) + 1).
+    * rewrite Hemp //.
+    * rewrite length_delete. { lia. }
+      by apply lookup_lt_is_Some_2.
+  - rewrite delete_take_drop take_ge in Hemp.
+    * apply app_nil in Hemp as [-> _]. simpl. lia.
+    * lia.
+Qed.
+
 Section scheduler.
-  Definition scheduler {E R} : itree (threadpoolE +' E) R → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
+  Context {E : Type → Type} {R : Type}.
+
+  Definition scheduler : itree (threadpoolE +' E) R → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
     cofix _scheduler t tp :=
         match observe t with
         | RetF r  => Ret (inl r)
@@ -41,38 +68,13 @@ Section scheduler.
       | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
       end.
 
-  Lemma unfold_scheduler {E R} (t : itree (threadpoolE +' E) R) tp :
+  Lemma unfold_scheduler (t : itree (threadpoolE +' E) R) tp :
     scheduler t tp = scheduler_ t tp.
   Proof.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
-  Lemma list_delete_insert {A} idx x (xs : list A) :
-    delete idx (<[idx := x]> xs) = delete idx xs.
-  Proof.
-    induction idx as [|idx IH] in xs |- *.
-    - destruct xs as [|x' xs']; done.
-    - destruct xs as [|x' xs'].
-      * done.
-      * simpl. f_equiv. apply IH.
-  Qed.
-
-  Lemma list_delete_empty {A} idx (xs : list A) :
-    delete idx xs = [] →
-    length xs <= 1.
-  Proof.
-    intros Hemp.
-    destruct (decide (idx < length xs)).
-    - replace (length xs) with (length (delete idx xs) + 1).
-      * rewrite Hemp //.
-      * rewrite length_delete. { lia. }
-        by apply lookup_lt_is_Some_2.
-    - rewrite delete_take_drop take_ge in Hemp.
-      * apply app_nil in Hemp as [-> _]. simpl. lia.
-      * lia.
-  Qed.
-
-  Lemma schedule_exists {E R} (t : itree (threadpoolE +' E) R) tid tp :
+  Lemma schedule_exists (t : itree (threadpoolE +' E) R) tid tp :
     tp !! tid = Some t →
     interleaves tid tp (scheduler t (delete tid tp)).
   Proof.
