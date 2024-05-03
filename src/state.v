@@ -5,6 +5,7 @@ From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
+From iris.itree Require Import trace.
 From ITree Require Import ITree.
 From Paco Require Import paco.
 From Paco Require Import paco3.
@@ -232,3 +233,21 @@ Section stateH_adequacy.
     by iApply (wpi_state' with "Hstate").
   Qed.
 End stateH_adequacy.
+
+Section state_trace.
+  Fixpoint interp_tr_state {R S E} (s : S) (tr : trace (stateE S +' E) R) : option (trace E (S * R)) :=
+    match tr with
+    | TRet r => Some (TRet (s, r))
+    | TVis A (inl1 e) _ k => interp_tr_state s k
+    | TVis A (inr1 e) a k => fmap (TVis A e a) (interp_tr_state s k)
+    | TVisEmpty A (inl1 e) =>  (* Placeholder: *) Some TCut
+    | TVisEmpty A (inr1 e) => Some (TVisEmpty A e)
+    | TCut => Some TCut
+    end.
+
+  Theorem interleaving_extending_trace {S E R} (tr : trace (stateE S +' E) R) tr' t s :
+    is_trace tr t →
+    interp_tr_state s tr = Some tr' →
+    ∃ t',  eval s t t' ∧ is_trace tr' t'.
+  Admitted.
+End state_trace.

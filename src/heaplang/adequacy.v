@@ -78,68 +78,42 @@ Admitted.
 Inductive Basic : expr → Prop :=
   | BasicRec f x e :
     Basic (Rec f x e)
-  | BasicApp e1 e2 :
-    is_value e1 = true →
-    is_value e2 = true →
-    Basic (App e1 e2)
-  | BasicUnOp op e :
-    is_value e = true →
-    Basic (UnOp op e)
-  | BasicBinOp op e1 e2 :
-    is_value e1 = true →
-    is_value e2 = true →
-    Basic (BinOp op e1 e2)
-  | BasicIf e0 e1 e2 :
-    is_value e0 = true →
-    Basic (If e0 e1 e2)
-  | BasicPair e1 e2 :
-    is_value e1 = true →
-    is_value e2 = true →
-    Basic (Pair e1 e2)
-  | BasicFst e :
-    is_value e = true →
-    Basic (Fst e)
-  | BasicSnd e :
-    is_value e = true →
-    Basic (Snd e)
-  | BasicInjL e :
-    is_value e = true →
-    Basic (InjL e)
-  | BasicInjR e :
-    is_value e = true →
-    Basic (InjR e)
-  | BasicCase e0 e1 e2 :
-    is_value e0 = true →
-    Basic (Case e0 e1 e2)
+  | BasicApp v1 v2 :
+    Basic (App (Val v1) (Val v2))
+  | BasicUnOp op v :
+    Basic (UnOp op (Val v))
+  | BasicBinOp op v1 v2 :
+    Basic (BinOp op (Val v1) (Val v2))
+  | BasicIf v0 e1 e2 :
+    Basic (If (Val v0) e1 e2)
+  | BasicPair v1 v2 :
+    Basic (Pair (Val v1) (Val v2))
+  | BasicFst v :
+    Basic (Fst (Val v))
+  | BasicSnd v :
+    Basic (Snd (Val v))
+  | BasicInjL v :
+    Basic (InjL (Val v))
+  | BasicInjR v :
+    Basic (InjR (Val v))
+  | BasicCase v0 e1 e2 :
+    Basic (Case (Val v0) e1 e2)
   | BasicFork e :
     Basic (Fork e)
-  | BasicAllocN ne e :
-    is_value ne = true →
-    is_value e = true →
-    Basic (AllocN ne e)
-  | BasicFree e :
-    is_value e = true →
-    Basic (Free e)
-  | BasicLoad e :
-    is_value e = true →
-    Basic (Load e)
-  | BasicStore e1 e2 :
-    is_value e1 = true →
-    is_value e2 = true →
-    Basic (Store e1 e2)
-  | BasicXchg e1 e2 :
-    is_value e1 = true →
-    is_value e2 = true →
-    Basic (Xchg e1 e2)
-  | BasicCmpXchg e1 e2 e3 :
-    is_value e1 = true →
-    is_value e2 = true →
-    is_value e3 = true →
-    Basic (CmpXchg e1 e2 e3)
-  | BasicFAA e1 e2 :
-    is_value e1 = true →
-    is_value e2 = true →
-    Basic (FAA e1 e2).
+  | BasicAllocN nv v :
+    Basic (AllocN (Val nv) (Val v))
+  | BasicFree v :
+    Basic (Free (Val v))
+  | BasicLoad v :
+    Basic (Load (Val v))
+  | BasicStore v1 v2 :
+    Basic (Store (Val v1) (Val v2))
+  | BasicXchg v1 v2 :
+    Basic (Xchg (Val v1) (Val v2))
+  | BasicCmpXchg v1 v2 v3 :
+    Basic (CmpXchg (Val v1) (Val v2) (Val v3))
+  | BasicFAA v1 v2 :
+    Basic (FAA (Val v1) (Val v2)).
 
 Definition stuck e σ : Prop :=
   is_value e = false ∧ ~(∃ e' κ σ' efs, prim_step e σ κ e' σ' efs).
@@ -163,15 +137,13 @@ Lemma stuck_ub tp tid e σ :
   ∃ tr, is_postfix (CTVisEmpty void (subevent _ EUb)) tr ∧ is_ctrace tr tid (compile_tp tp).
 Proof.
   intros Htp (K&e'&->&Hbasic&Hstuck)%stuck_basic.
-  destruct Hbasic as [f x e0|e1 e2 Hval1 Hval2 | | | | | | | | | | | | | | | | | ].
+  destruct Hbasic as [f x e0|v1 v2 | | | | | | | | | | | | | | | | | ].
   - rewrite /stuck in Hstuck. destruct Hstuck as [_ Hstuck].
     admit.
   - exists (CTVisEmpty void (subevent _ EUb)). split; first constructor.
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap Htp //. }
     { rewrite compile_expr_bind; first done. admit. admit. (* TODO: length K = 0 case missing *) }
-    apply is_value_val in Hval1 as [v1 ->].
-    apply is_value_val in Hval2 as [v2 ->].
     destruct v1.
     * rewrite /compile_expr. simpl_itree.
       eapply is_ctrace_ub.
@@ -268,7 +240,6 @@ Admitted.
 
 (* TODO: The idea is to add that if [tp'] has nowhere to step then [tr] ends in
 *        UB, and if [tp'] returns a value, then so does [tr]. *)
-  Search nsteps.
 Lemma has_trace n tp σ tp' σ' κ :
   language.nsteps n (tp, σ) κ (tp', σ') →
   length (compile_tp tp) > 0 →
