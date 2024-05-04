@@ -6,6 +6,7 @@ From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
+From iris.itree Require Import trace.
 From iris.bi Require Import fixpoint.
 From iris.bi Require Import derived_laws.
 From iris.base_logic.lib Require Export fancy_updates.
@@ -19,6 +20,10 @@ From ITree Require Import Eqit.
 Variant ubE : Type → Type :=
   (** Event for exhibiting Undefined Behavior (crash unsafely). *)
   | EUb : ubE void.
+
+Global Instance AnswerEqDecision_ubE :
+  AnswerEqDecision ubE.
+Admitted.
 
 (** Exhibit Undefined Behavior (crash unsafely). *)
 Definition ub {R : Type} `{ubE -< E} : itree E R :=

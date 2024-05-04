@@ -1,10 +1,10 @@
-From iris.itree Require Import wpi ub itree.
-From iris.itree.threadpool Require Import trace.
+From iris.itree Require Import wpi ub itree choice state.
+From iris.itree.threadpool Require Import ctrace.
 From iris Require Import invariants ghost_map.
 From iris.proofmode Require Import proofmode.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.program_logic Require Import language.
-From iris.itree.threadpool Require Import handler.
+From iris.itree.threadpool Require Import handler interleaving.
 From iris.itree.heaplang Require Import lang.
 Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
@@ -131,16 +131,26 @@ Lemma is_ctrace_ub tp tid (k : void → itree heaplangE ()) :
   is_ctrace (CTVisEmpty void (subevent _ EUb)) tid tp.
 Admitted.
 
+Definition thread_stuck (tp : list expr) σ :=
+  ∃ tid e, tp !! tid = Some e ∧ stuck e σ.
+Global Instance thread_stuck_dec tp σ : Decision (thread_stuck tp σ).
+Admitted.
+
+Definition trace_invariant σ tp' σ' (tr : ctrace (demonicE +' stateE state +' ubE) ()) :=
+  (thread_stuck tp' σ' → is_postfix_ctrace (CTVisEmpty void (subevent _ EUb)) tr) ∧
+  is_Some (interp_tr_state σ (interp_tr (sequencify tr))).
+
 Lemma stuck_ub tp tid e σ :
   tp !! tid = Some e →
   stuck e σ →
-  ∃ tr, is_postfix (CTVisEmpty void (subevent _ EUb)) tr ∧ is_ctrace tr tid (compile_tp tp).
+  ∃ tr, trace_invariant σ tp σ tr ∧ is_ctrace tr tid (compile_tp tp).
 Proof.
   intros Htp (K&e'&->&Hbasic&Hstuck)%stuck_basic.
   destruct Hbasic as [f x e0|v1 v2 | | | | | | | | | | | | | | | | | ].
   - rewrite /stuck in Hstuck. destruct Hstuck as [_ Hstuck].
     admit.
-  - exists (CTVisEmpty void (subevent _ EUb)). split; first constructor.
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap Htp //. }
     { rewrite compile_expr_bind; first done. admit. admit. (* TODO: length K = 0 case missing *) }
@@ -152,21 +162,23 @@ Proof.
     * (* Same as first case ... *)
 Admitted.
 
-Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) :
+Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) tp' σ' :
   base_step e1 σ1 κs e2 σ2 efs →
   is_ctrace tr tid' (<[tid:=(v ← compile_expr e2 ; yield_if_not_val e2 ;; k v)%itree]>tp
                     ++ compile_tp efs) →
+  trace_invariant σ2 tp' σ' tr →
   tp !! tid = Some (v ← compile_expr e1 ; yield_if_not_val e1 ;; k v)%itree →
-  ∃ tr', is_postfix tr tr' ∧ is_ctrace tr' tid tp.
+  ∃ tr', trace_invariant σ1 tp' σ' tr' ∧ is_ctrace tr' tid tp.
 Proof.
-  intros Hbase Htr Htp.
+  intros Hbase Htr [Hub Hstinv] Htp.
   inversion Hbase; subst; simpl in Htr; rewrite ?app_nil_r in Htr.
   - admit.
   - admit.
   - admit.
   - admit.
   - pose (e' := subst' x v2 (subst' f (RecV f x e0) e0)).
-    exists (CTYield tid' tr). split; first repeat constructor.
+    exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
     destruct (is_value e') eqn:Hval.
     * eapply is_ctrace_insert; first done.
       { simpl. rewrite base_Beta. simpl.
@@ -189,7 +201,8 @@ Proof.
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       by rewrite list_insert_insert.
   - admit.
-  - exists (CTYield tid' tr). split; first repeat constructor.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
     rewrite compile_expr_val !bind_ret_l in Htr.
     eapply is_ctrace_insert with (t' := (trigger EYield ;; k v')%itree); first done.
     { rewrite base_BinOp // bind_ret_l  //. }
@@ -209,7 +222,8 @@ Proof.
   - admit.
   - admit.
   - exists (CTFork (compile_expr e ;; yield_if_not_val e ;; kill_thread) (CTYield tid' tr)).
-    split; first repeat constructor.
+    split; first split; eauto.
+    { intros Hstuck. repeat constructor. by apply Hub. }
     rewrite compile_expr_val !bind_ret_l in Htr.
     eapply trace_base_Fork; first apply Htp.
     eapply is_ctrace_yield.
@@ -233,27 +247,24 @@ Lemma fill_is_not_value K e :
   is_value (ectx_language.fill K e) = false.
 Admitted.
 
-Definition thread_stuck (tp : list expr) σ :=
-  ∃ tid e, tp !! tid = Some e ∧ stuck e σ.
-Global Instance thread_stuck_dec tp σ : Decision (thread_stuck tp σ).
-Admitted.
-
 (* TODO: The idea is to add that if [tp'] has nowhere to step then [tr] ends in
 *        UB, and if [tp'] returns a value, then so does [tr]. *)
 Lemma has_trace n tp σ tp' σ' κ :
   language.nsteps n (tp, σ) κ (tp', σ') →
   length (compile_tp tp) > 0 →
   ∃ tr tid,
-    (is_ctrace (R := ()) tr tid (compile_tp tp)
-    ∧ (thread_stuck tp' σ' → is_postfix (CTVisEmpty void (subevent _ EUb)) tr)).
+    trace_invariant σ tp' σ' tr ∧
+    is_ctrace (R := ()) tr tid (compile_tp tp).
 Proof.
   revert tp σ tp' σ' κ. induction n as [|n IH]; intros tp σ tp' σ' κ Hstep Hne.
   { destruct (decide (thread_stuck tp σ)) as [(tid&e&Htp&Hstuck)|].
-    * apply stuck_ub with (tp := tp) (tid := tid) in Hstuck as (tr&Hpost&Htr); last done.
-      exists tr, tid.  split; first done. eauto.
+    * apply stuck_ub with (tp := tp) (tid := tid) in Hstuck as (tr&Hinv&Htr); last done.
+      exists tr, tid. split; last done. inversion Hstep; subst. done.
     * inversion Hstep; subst.
-      exists CTCut, 0. split; last by intros Hstuck. apply is_ctrace_CTCut. rewrite map_length.
-      rewrite /compile_tp map_length in Hne. lia.
+      exists CTCut, 0. split; first split.
+      + by intros Hstuck.
+      + done.
+      + apply is_ctrace_CTCut. rewrite map_length. rewrite /compile_tp map_length in Hne. lia.
   }
   inversion Hstep as [|m [tp1 σ1] [tp2 σ2] [tp3 σ3] ? ? Hstep'' Hstep']. subst.
   inversion Hstep'' as [e1' σ1 e2' σ2' efs tpa tpb Htp' Htp2' Hprim].
@@ -263,29 +274,29 @@ Proof.
   clear Hstep'' Hprim.
   destruct (decide (length K = 0)) as [HK|HK].
   - apply nil_length_inv in HK as ->. simpl. simpl in *.
-    apply IH in Hstep' as [tr [tid [Htr Hub]]]; last first.
+    apply IH in Hstep' as [tr [tid [Hinv Htr]]]; last first.
     { rewrite /compile_tp map_length app_length /= app_length.
       rewrite /compile_tp map_length app_length /= in Hne.
       lia.
     }
-    apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; kill_thread)%itree :: compile_tp tpb)) (tid := length (compile_tp tpa)) (tid' := tid) (k := λ v, kill_thread) (tr := tr) in Hbase as [tr' [Hpost Htr']].
-    * exists tr'. exists (length (compile_tp tpa)). rewrite compile_tp_app. split; first done.
-      intros Hstuck. apply Hub in Hstuck. by etransitivity.
+    apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; kill_thread)%itree :: compile_tp tpb)) (tid := length (compile_tp tpa)) (tid' := tid) (k := λ v, kill_thread) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
+    * exists tr'. exists (length (compile_tp tpa)). rewrite compile_tp_app. eauto.
     * replace (length (compile_tp tpa)) with (length (compile_tp tpa) + 0) by lia.
       rewrite compile_tp_app in Htr.
       rewrite insert_app_r /= -app_assoc /=.
       by rewrite /= compile_tp_app in Htr.
-    * rewrite lookup_app_r // Nat.sub_diag //.
-  - apply IH in Hstep' as [tr [tid [Htr Hub]]]; last first.
+    * done.
+    * by apply list_lookup_middle.
+  - apply IH in Hstep' as [tr [tid [Hinv Htr]]]; last first.
     { rewrite -lt_gt -Nat.neq_0_lt_0. intros Hemp%nil_length_inv.
       rewrite !compile_tp_app /= in Hemp.
       apply app_eq_nil in Hemp as [_ [=]].
     }
     rewrite compile_tp_app /= compile_tp_app in Htr.
     rewrite compile_tp_app /=.
-    apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree :: compile_tp tpb)) (tid := length (compile_tp tpa)) (tid' := tid) (k := λ v, (compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree) (tr := tr) in Hbase as [tr' [Hpost Htr']].
+    apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree :: compile_tp tpb)) (tid := length (compile_tp tpa)) (tid' := tid) (k := λ v, (compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
     * exists tr'. exists (length (compile_tp tpa)).
-      split; last first. { intros Hstuck. apply Hub in Hstuck. by etransitivity. }
+      split; first done.
       rewrite /= compile_expr_bind.
       + setoid_rewrite fill_not_val; last first. { rewrite -lt_gt -Nat.neq_0_lt_0 //. }
         rewrite bind_bind. by setoid_rewrite bind_bind.
@@ -298,5 +309,91 @@ Proof.
         by repeat setoid_rewrite bind_bind in Htr.
       + admit.
       + rewrite -lt_gt -Nat.neq_0_lt_0 //.
-    * rewrite lookup_app_r // Nat.sub_diag //.
+    * done.
 Admitted.
+
+Instance state_EqDecision :
+  EqDecision state.
+Admitted.
+
+Definition trace_ends_in_ub {E R} `{ubE -< E} (tr : trace E R) :=
+  is_postfix (TVisEmpty void (subevent _ EUb)) tr.
+
+Lemma interp_tr_state_ub {E R S} `{ubE -< E} σ (tr : trace (stateE S +' E) R) tr' :
+  trace_ends_in_ub tr →
+  interp_tr_state σ tr = Some tr' →
+  trace_ends_in_ub tr'.
+Admitted.
+
+Lemma interp_tr_ub {E E' R} `{ubE -< E'} (tr : trace (E +' E') R) :
+  trace_ends_in_ub tr →
+  trace_ends_in_ub (interp_tr tr).
+Proof.
+  intros Hub.
+  rewrite /trace_ends_in_ub.
+  replace (TVisEmpty void (subevent void EUb))
+    with (interp_tr (R := R) (TVisEmpty void (subevent void EUb : (E +' E') void)))
+    by done.
+  by apply interp_tr_is_postfix.
+Qed.
+
+Lemma sequencify_ub {E E' R} `{ubE -< E'} (tr : ctrace (E +' E') R) :
+  is_postfix_ctrace (CTVisEmpty void (subevent _ EUb)) tr →
+  trace_ends_in_ub (sequencify tr).
+Proof.
+  intros Hub.
+  rewrite /trace_ends_in_ub.
+  replace (TVisEmpty void (subevent void EUb))
+    with (sequencify (R := R) (CTVisEmpty void (subevent void EUb : (E +' E') void)))
+    by done.
+  by apply sequencify_is_postfix.
+Qed.
+
+Lemma is_trace_ub {R} (t : itree ubE R) tr :
+  trace_ends_in_ub tr →
+  is_trace tr t →
+  t ≈ ub.
+Admitted.
+
+Lemma ub_execution n e σ tp' σ' κ :
+  language.nsteps n ([e], σ) κ (tp', σ') →
+  thread_stuck tp' σ' →
+  ∃ t1 t2 t3,
+    interleaves (R := ()) 0 [compile_expr e ;; yield_if_not_val e ;; kill_thread]%itree t1 ∧
+    demonic_instantiates t1 t2 ∧
+    eval σ t2 t3 ∧
+    t3 ≈ ub.
+Proof.
+  intros Hsteps Hstuck.
+  apply has_trace in Hsteps as (tr&tid&[Hub [tr' Hst]]&Htr); last eauto.
+  apply Hub in Hstuck as Hub'.
+  apply interleaving_extending_trace in Htr as (t1&Hint&Htr).
+  exists t1.
+  eapply instantiation_extending_trace in Htr as (t2&Hinst&Htr).
+  exists t2.
+  eapply eval_trace with (s := σ) in Htr as (t3&Heval&Htr); last done.
+  exists t3.
+  split.
+  { destruct (interleaves_lookup _ _ _ Hint) as [t Hidx].
+    by destruct tid.
+  }
+  split; first done.
+  split; first done.
+  eapply is_trace_ub; last done.
+  eapply interp_tr_state_ub; last done. apply interp_tr_ub. by apply sequencify_ub.
+Qed.
+
+Lemma ub_execution_wpi `{!invGS_gen hlc Σ} n e σ tp' σ' κ :
+  language.nsteps n ([e], σ) κ (tp', σ') →
+  thread_stuck tp' σ' →
+  state_interp σ -∗
+  WPi (compile_expr e;; yield_if_not_val e;; kill_thread : itree heaplangE ()) @ heaplangH ; ⊤ {{ _, True }} -∗
+  |={⊤}=> False : iProp Σ.
+Proof.
+  iIntros (Hstep Hstuck) "Hstate Hwp".
+  apply ub_execution in Hstep as (t1&t2&t3&Hint&Hinst&Heval&Hub); last done.
+  iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
+  iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
+  iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
+  rewrite Hub /ub -wpi_vis' /=. by iMod "Hwp".
+Qed.

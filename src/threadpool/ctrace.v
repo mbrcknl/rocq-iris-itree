@@ -3,7 +3,8 @@ From Paco Require Import paco.
 From Paco Require Import paco2.
 From stdpp Require Import list.
 From iris.itree.threadpool Require Import handler interleaving.
-From iris.itree Require Import axioms itree trace.
+From iris.itree Require Import axioms itree.
+From iris.itree Require Export trace.
 Import Coq.Logic.ClassicalChoice.
 
 Lemma list_delete_insert {A} idx x (xs : list A) :
@@ -379,29 +380,6 @@ Section is_ctrace.
     eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
     econstructor.
   Admitted.
-
-  Inductive is_postfix
-    : ctrace E R
-    → ctrace E R
-    → Prop :=
-  | is_postfix_same tr :
-    is_postfix tr tr
-  | is_postfix_CTVis tr tr' A e a :
-    is_postfix tr tr' →
-    is_postfix tr (CTVis A e a tr')
-  | is_postfix_CTYield tr tr' new_tid :
-    is_postfix tr tr' →
-    is_postfix tr (CTYield new_tid tr')
-  | is_postfix_CTKillThread tr tr' new_tid :
-    is_postfix tr tr' →
-    is_postfix tr (CTKillThread new_tid tr')
-  | is_postfix_CTFork tr tr' t :
-    is_postfix tr tr' →
-    is_postfix tr (CTFork t tr').
-
-  Global Instance is_postfix_trans :
-    Transitive is_postfix.
-  Admitted.
 End is_ctrace.
 
 Fixpoint sequencify {E R} (tr : ctrace E R) : trace E (R + last_thread_killed) :=
@@ -415,6 +393,34 @@ Fixpoint sequencify {E R} (tr : ctrace E R) : trace E (R + last_thread_killed) :
   | CTFork t tr' => sequencify tr'
   | CTCut => TCut
   end.
+
+Inductive is_postfix_ctrace {E R}
+  : ctrace E R
+  → ctrace E R
+  → Prop :=
+| is_postfix_ctrace_same tr :
+  is_postfix_ctrace tr tr
+| is_postfix_ctrace_CTVis tr tr' A e a :
+  is_postfix_ctrace tr tr' →
+  is_postfix_ctrace tr (CTVis A e a tr')
+| is_postfix_ctrace_CTYield tr tr' new_tid :
+  is_postfix_ctrace tr tr' →
+  is_postfix_ctrace tr (CTYield new_tid tr')
+| is_postfix_ctrace_CTKillThread tr tr' new_tid :
+  is_postfix_ctrace tr tr' →
+  is_postfix_ctrace tr (CTKillThread new_tid tr')
+| is_postfix_ctrace_CTFork tr tr' t :
+  is_postfix_ctrace tr tr' →
+  is_postfix_ctrace tr (CTFork t tr').
+
+Global Instance is_postfix_ctrace_trans {E R} :
+  Transitive (is_postfix_ctrace (E:=E) (R:=R)).
+Admitted.
+
+Lemma sequencify_is_postfix {E R} (tr tr' : ctrace E R) :
+  is_postfix_ctrace tr tr' →
+  is_postfix (sequencify tr) (sequencify tr').
+Admitted.
 
 Section extend_ctrace.
   Context {E : Type → Type} {R : Type}.
@@ -585,12 +591,11 @@ Section extend_ctrace.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
   Qed.
 
-  Theorem interleaving_extending_trace (tr : ctrace E R) tid tp :
-    AnswerEqDecision E →
+  Theorem interleaving_extending_trace `{AnswerEqDecision E} (tr : ctrace E R) tid tp :
     is_ctrace tr tid tp →
     ∃ t_int, interleaves tid tp t_int ∧ is_trace (sequencify tr) t_int.
   Proof.
-    intros Hanswer Htr. apply ctrace_extension_exists in Htr as [t_int Hext]; last done.
+    intros Htr. apply ctrace_extension_exists in Htr as [t_int Hext]; last done.
     exists t_int. split.
     - by apply extends_ctrace_is_interleaving with (tr := tr).
     - by apply extends_ctrace_is_trace with (tid := tid) (tp := tp).

@@ -20,6 +20,10 @@ Inductive stateE (S : Type) : Type → Type :=
 Arguments EGetState {_}.
 Arguments ESetState {_} _.
 
+Global Instance AnswerEqDecision_stateE {S} `{EqDecision S} :
+  AnswerEqDecision (stateE S).
+Admitted.
+
 (** State interpretation predicate which is enforced at every [EGet]
 and [ESet]. *)
 Class stateInterp (Σ : gFunctors) (S : Type) := state_interp : S → iProp Σ.
@@ -245,7 +249,7 @@ Section state_trace.
     | TCut => Some TCut
     end.
 
-  Theorem interleaving_extending_trace {S E R} (tr : trace (stateE S +' E) R) tr' t s :
+  Theorem eval_trace {S E R} (tr : trace (stateE S +' E) R) tr' t s :
     is_trace tr t →
     interp_tr_state s tr = Some tr' →
     ∃ t',  eval s t t' ∧ is_trace tr' t'.

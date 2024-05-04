@@ -232,12 +232,11 @@ Section demonic_instance.
     - done.
   Qed.
 
-  Lemma instantiation_extending_trace tr (t : itree (demonicE +' E) R) :
-    AnswerEqDecision E →
+  Lemma instantiation_extending_trace `{AnswerEqDecision E} tr (t : itree (demonicE +' E) R) :
     is_trace tr t →
     ∃ t', demonic_instantiates t t' ∧ is_trace (interp_tr tr) t'.
   Proof.
-    intros Hanswer Htr. apply unfold_demonic_instantiates_under. induction Htr as [r|tr' A e a k Htr [t' [Hinst Htr']]| |ot' | tr' t'' Htr [t' [Hinst Htr']]].
+    intros Htr. apply unfold_demonic_instantiates_under. induction Htr as [r|tr' A e a k Htr [t' [Hinst Htr']]| |ot' | tr' t'' Htr [t' [Hinst Htr']]].
     - exists (Ret r). split; constructor.
     - destruct e as [e|e]; first destruct e.
       * exists (Tau t'). split.

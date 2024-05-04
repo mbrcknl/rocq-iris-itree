@@ -82,6 +82,16 @@ Definition val_to_sum (v : val) : option (val + val) :=
   | _ => None
   end.
 
+Definition free_locations n σ : Set :=
+  {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)}.
+Instance free_locations_Inhabited n σ :
+  Inhabited (free_locations n σ).
+Admitted.
+Instance free_locations_EqDecision n σ :
+  EqDecision (free_locations n σ).
+Admitted. (* May require axioms, but this can surely be avoided by defining
+  [free_locations] in another way or allowing a condition in [EDemonic]. *)
+
 Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   let compile_expr_yield e := (v ← compile_expr' e ; yield_if_not_val e ;; Ret v)%itree in
   match e with
@@ -155,7 +165,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       σ ← trigger EGetState;
       (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
       (* TODO: There should be a proof obligation for this being nonempty. *)
-      l ← trigger (EDemonic {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)});
+      l ← trigger (EDemonic (free_locations n σ));
       trigger (ESetState (state_init_heap (`l) n v σ));;
       Ret (LitV (LitLoc (`l)))
   | Free e =>
@@ -337,7 +347,7 @@ Global Notation "l ↦{ dq } v" := (pointsto l v dq)
 Section heaplangH.
   Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
-  Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
+  Global Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
     ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap).
 
   Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
