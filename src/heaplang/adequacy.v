@@ -6,6 +6,8 @@ From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.program_logic Require Import language.
 From iris.itree.threadpool Require Import handler interleaving.
 From iris.itree.heaplang Require Import lang.
+From Paco Require Import paco.
+From Paco Require Import paco2.
 Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
 Lemma compile_Fork_value {R} e (k : val → itree heaplangE R) :
@@ -75,6 +77,20 @@ Lemma compile_tp_app (tp tp' : list expr) :
   compile_tp (tp ++ tp') = compile_tp tp ++ compile_tp tp'.
 Admitted.
 
+Definition stuck e σ : Prop :=
+  is_value e = false ∧ ~(∃ e' κ σ' efs, prim_step e σ κ e' σ' efs).
+
+Lemma stuck_false e σ κ e' σ' efs :
+  stuck e σ →
+  prim_step e σ κ e' σ' efs →
+  False.
+Proof.
+  intros [_ Hstuck] Hstep. apply Hstuck. by exists e', κ, σ', efs.
+Qed.
+
+Global Instance stuck_dec e σ : Decision (stuck e σ).
+Admitted.
+
 Inductive Basic : expr → Prop :=
   | BasicRec f x e :
     Basic (Rec f x e)
@@ -115,12 +131,6 @@ Inductive Basic : expr → Prop :=
   | BasicFAA v1 v2 :
     Basic (FAA (Val v1) (Val v2)).
 
-Definition stuck e σ : Prop :=
-  is_value e = false ∧ ~(∃ e' κ σ' efs, prim_step e σ κ e' σ' efs).
-
-Global Instance stuck_dec e σ : Decision (stuck e σ).
-Admitted.
-
 Lemma stuck_basic e σ :
   stuck e σ →
   ∃ K e', e = fill K e' ∧ Basic e' ∧ stuck e' σ.
@@ -147,19 +157,24 @@ Lemma stuck_ub tp tid e σ :
 Proof.
   intros Htp (K&e'&->&Hbasic&Hstuck)%stuck_basic.
   destruct Hbasic as [f x e0|v1 v2 | | | | | | | | | | | | | | | | | ].
-  - rewrite /stuck in Hstuck. destruct Hstuck as [_ Hstuck].
-    admit.
+  - eapply stuck_false in Hstuck as [].
+    eapply Ectx_step with (K := []); eauto.
+    by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto. { intros _. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap Htp //. }
     { rewrite compile_expr_bind; first done. admit. admit. (* TODO: length K = 0 case missing *) }
-    destruct v1.
-    * rewrite /compile_expr. simpl_itree.
+    destruct (val_to_RecV v1) as [[[f x] e]|] eqn:Heq.
+    destruct v1; try discriminate.
+    * eapply stuck_false in Hstuck as [].
+      eapply Ectx_step with (K := []); eauto.
+      by constructor.
+    * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // /compile_tp map_length -lookup_lt_is_Some //.
-    * admit.
-    * (* Same as first case ... *)
+      rewrite list_lookup_insert //.
+      rewrite /compile_tp map_length -lookup_lt_is_Some //.
+  -
 Admitted.
 
 Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) tp' σ' :
@@ -236,19 +251,23 @@ Admitted.
 Lemma base_step_not_value e1 σ1 κs e2 σ2 tfs :
   base_step e1 σ1 κs e2 σ2 tfs →
   is_value e1 = false.
-Admitted.
+Proof. intros Hbase. by destruct Hbase. Qed.
 
 Lemma lt_gt n m :
   n < m ↔ m > n.
-Admitted.
+Proof. lia. Qed.
 
 Lemma fill_is_not_value K e :
   length K > 0 →
   is_value (ectx_language.fill K e) = false.
-Admitted.
+Proof.
+  induction (length K) as [|n IH] eqn:Heq. { lia. }
+  intros _.
+  unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
+  rewrite /= fill_app /=.
+  by destruct Ki.
+Qed.
 
-(* TODO: The idea is to add that if [tp'] has nowhere to step then [tr] ends in
-*        UB, and if [tp'] returns a value, then so does [tr]. *)
 Lemma has_trace n tp σ tp' σ' κ :
   language.nsteps n (tp, σ) κ (tp', σ') →
   length (compile_tp tp) > 0 →
@@ -314,7 +333,14 @@ Admitted.
 
 Instance state_EqDecision :
   EqDecision state.
-Admitted.
+Proof.
+  intros [σ1 p1] [σ2 p2].
+  destruct (decide (σ1 = σ2)) as [Heq|Hneq].
+  - destruct (decide (p1 = p2)) as [Heq'|Hneq'].
+    * left. by f_equiv.
+    * right. intros Heq'. by injection Heq' as -> ->.
+  - right. intros Heq. by injection Heq as -> ->.
+Qed.
 
 Definition trace_ends_in_ub {E R} `{ubE -< E} (tr : trace E R) :=
   is_postfix (TVisEmpty void (subevent _ EUb)) tr.
@@ -323,7 +349,19 @@ Lemma interp_tr_state_ub {E R S} `{ubE -< E} σ (tr : trace (stateE S +' E) R) t
   trace_ends_in_ub tr →
   interp_tr_state σ tr = Some tr' →
   trace_ends_in_ub tr'.
-Admitted.
+Proof.
+  revert σ tr'. induction tr; intros σ tr' Hub Hst.
+  - inversion Hub.
+  - destruct e.
+    * simpl in Hst. apply IHtr with (σ := σ); last done. by inversion Hub.
+    * simpl in Hst. destruct (interp_tr_state σ tr) as [tr''|] eqn:Heq.
+      + injection Hst as <-. constructor.
+        by apply IHtr with (σ := σ); first by inversion Hub.
+      + discriminate.
+  - inversion Hub; simplify_K; simplify_K; subst.
+    injection Hst as <-. simplify_K. constructor.
+  - inversion Hub.
+Qed.
 
 Lemma interp_tr_ub {E E' R} `{ubE -< E'} (tr : trace (E +' E') R) :
   trace_ends_in_ub tr →
@@ -353,7 +391,14 @@ Lemma is_trace_ub {R} (t : itree ubE R) tr :
   trace_ends_in_ub tr →
   is_trace tr t →
   t ≈ ub.
-Admitted.
+Proof.
+  intros Hub Htr. pfold. rewrite /eqit_. induction Htr.
+  - inversion Hub.
+  - by destruct e.
+  - inversion Hub. destruct e. constructor. by intros.
+  - inversion Hub.
+  - constructor; first done. by apply IHHtr.
+Qed.
 
 Lemma ub_execution n e σ tp' σ' κ :
   language.nsteps n ([e], σ) κ (tp', σ') →
@@ -388,10 +433,11 @@ Lemma ub_execution_wpi `{!invGS_gen hlc Σ} n e σ tp' σ' κ :
   thread_stuck tp' σ' →
   state_interp σ -∗
   WPi (compile_expr e;; yield_if_not_val e;; kill_thread : itree heaplangE ()) @ heaplangH ; ⊤ {{ _, True }} -∗
-  |={⊤}=> False : iProp Σ.
+  |={⊤}=> False.
 Proof.
   iIntros (Hstep Hstuck) "Hstate Hwp".
   apply ub_execution in Hstep as (t1&t2&t3&Hint&Hinst&Heval&Hub); last done.
+  (* TODO: Name these adequacy theorems consistently. *)
   iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
   iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
   iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
