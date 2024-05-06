@@ -100,6 +100,10 @@ Proof.
   intros [_ Hstuck] Hstep. apply Hstuck. by exists e', κ, σ', efs.
 Qed.
 
+(* TODO: [stuck] already exists in Iris [language.v]. Also,
+[subredexes_are_values] may be the same as [Basic]. [is_value] is also captured
+essentially by [to_val]. *)
+
 Inductive Basic : expr → Prop :=
   | BasicVar x :
     Basic (Var x)
@@ -332,6 +336,7 @@ Proof.
   by destruct Ki.
 Qed.
 
+(* TODO: Idea: make κ = [] *)
 Lemma has_trace n tp σ tp' σ' κ :
   language.nsteps n (tp, σ) κ (tp', σ') →
   length (compile_tp tp) > 0 →
@@ -468,9 +473,12 @@ Lemma ub_execution n e σ tp' σ' κ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   thread_stuck tp' σ' →
   ∃ t1 t2 t3,
+    (* TODO: consisting naming for interpreation relations *)
+    (* TODO: abstraction for this composite relation *)
     interleaves (R := ()) 0 [compile_expr e ;; yield_if_not_val e ;; kill_thread]%itree t1 ∧
     demonic_instantiates t1 t2 ∧
     eval σ t2 t3 ∧
+    (* TODO: use UB adequacy *)
     t3 ≈ ub.
 Proof.
   intros Hsteps Hstuck.
@@ -496,6 +504,7 @@ Lemma ub_execution_wpi `{!invGS_gen hlc Σ} n e σ tp' σ' κ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   thread_stuck tp' σ' →
   state_interp σ -∗
+  (* TODO: Clean up *)
   WPi (compile_expr e;; yield_if_not_val e;; kill_thread : itree heaplangE ()) @ heaplangH ; ⊤ {{ _, True }} -∗
   |={⊤}=> False.
 Proof.

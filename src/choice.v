@@ -242,7 +242,14 @@ Section demonic_instance.
       * exists (Tau t'). split.
         + apply DInstantiate with (a := a). left. by pfold.
         + simpl. constructor. done.
-      * admit. (* Might require choice. See [ctrace.v]. *)
+      * specialize (H A e).
+        exists (Vis e (λ a', if decide (a = a') then t' else demonic_instance (k a'))).
+        split.
+        + constructor. intros a'. left.
+          destruct (decide _).
+          ++ subst. by pfold.
+          ++ apply instantiation_exists.
+        + apply is_trace_Vis. destruct (decide _); first done. contradiction.
     - destruct e as [e|e]. { destruct e as [A Heq Hinh]. destruct Hinh. contradiction. }
       exists (Vis e (λ a, match f a with end)).
       split.
@@ -258,5 +265,5 @@ Section demonic_instance.
       * split.
         + constructor. left. by pfold.
         + by constructor.
-  Admitted.
+  Qed.
 End demonic_instance.

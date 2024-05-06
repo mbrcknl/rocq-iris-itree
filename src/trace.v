@@ -72,6 +72,13 @@ Section is_trace.
     - done.
     - by symmetry.
   Qed.
+
+  Lemma is_trace_Vis A e a tr' k :
+    is_trace tr' (k a) →
+    is_trace (TVis A e a tr') (Vis e k).
+  Proof.
+    intros Htr. by constructor.
+  Qed.
 End is_trace.
 
 Class AnswerEqDecision (E : Type → Type) :=
