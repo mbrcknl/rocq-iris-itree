@@ -330,6 +330,23 @@ Proof.
   intros Hsubset Hne. by apply compile_expr_bind_ind with (l := length K).
 Qed.
 
+Lemma compile_expr_bind' K e :
+  Forall supported_subset_ectx K →
+  compile_expr (fill K e) ≈
+    v ← compile_expr e;
+    if (decide (length K = 0)) then
+      Ret v
+    else
+      yield_if_not_val e;;
+      compile_expr (fill K (Val v)).
+Proof.
+  intros Hsubset.
+  destruct (decide _) as [Heq|Hneq].
+  - apply nil_length_inv in Heq as ->.
+    by simpl_itree.
+  - apply compile_expr_bind; first done. lia.
+Qed.
+
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
   heaplangH_ghost_varG :> ghost_mapG Σ loc (option val);
   heaplangH_heap_name : gname;

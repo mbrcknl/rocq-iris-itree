@@ -252,6 +252,9 @@ Section state_trace.
   Theorem eval_trace {S E R} (tr : trace (stateE S +' E) R) tr' t s :
     is_trace tr t →
     interp_tr_state s tr = Some tr' →
-    ∃ t',  eval s t t' ∧ is_trace tr' t'.
+    ∃ t', eval s t t' ∧ is_trace tr' t'.
+  Proof.
+    intros Htr. revert s. induction Htr; intros s Hst; simpl in Hst.
+    - 
   Admitted.
 End state_trace.

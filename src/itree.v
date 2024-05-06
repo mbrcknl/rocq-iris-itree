@@ -99,6 +99,18 @@ Proof.
   intros Heqit. apply eqit_flip. eapply eqit_mon; last apply Heqit; eauto. by intros.
 Qed.
 
+Lemma eutt_weak {E R} b1 b2 (t1 t2 : itree E R) :
+  eqit (=) b1 b2 t1 t2 →
+  t1 ≈ t2.
+Proof.
+  intros Heqit. 
+  destruct b1, b2.
+  - done.
+  - by apply euttge_sub_eutt.
+  - apply eqit_flip' in Heqit. symmetry. by apply euttge_sub_eutt.
+  - by apply eq_sub_eutt.
+Qed.
+
 Lemma map_vis {E A B T} (f : A → B) (e : E T) (k : T → itree E A) :
   @ITree.map E _ _ f (Vis e k) ≅ Vis e (λ a, ITree.map f (k a)).
 Proof.
@@ -125,4 +137,4 @@ Ltac simplify_obs :=
   end.
 
 Ltac simpl_itree :=
-  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).
+  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_ret_r || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).

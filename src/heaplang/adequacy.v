@@ -10,11 +10,6 @@ From Paco Require Import paco.
 From Paco Require Import paco2.
 Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
-Lemma compile_Fork_value {R} e (k : val → itree heaplangE R) :
-  is_value e = true →
-  (v ← compile_expr (Fork e) ; k v)%itree ≈ k (LitV LitUnit).
-Admitted.
-
 Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
   (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
     match thread with
@@ -75,10 +70,27 @@ Definition compile_tp (tp : list expr) : list (itree heaplangE ()) :=
 
 Lemma compile_tp_app (tp tp' : list expr) :
   compile_tp (tp ++ tp') = compile_tp tp ++ compile_tp tp'.
-Admitted.
+Proof. rewrite /compile_tp map_app //. Qed.
 
+Lemma compile_tp_len tp :
+  length (compile_tp tp) = length tp.
+Proof. rewrite /compile_tp map_length //. Qed.
+
+Definition can_step (e : expr) σ : Prop :=
+  ∃ e' κ σ' efs, prim_step e σ κ e' σ' efs.
 Definition stuck e σ : Prop :=
-  is_value e = false ∧ ~(∃ e' κ σ' efs, prim_step e σ κ e' σ' efs).
+  is_value e = false ∧ ~ can_step e σ.
+
+Global Instance can_step_dec e σ : Decision (can_step e σ).
+Admitted.
+Global Instance stuck_dec e σ : Decision (stuck e σ).
+Proof.
+  destruct (decide (is_value e = false)).
+  - destruct (decide (can_step e σ)).
+    * right. by intros [_ Hstep].
+    * left. by split.
+  - right. by intros [Hval _].
+Qed.
 
 Lemma stuck_false e σ κ e' σ' efs :
   stuck e σ →
@@ -88,10 +100,9 @@ Proof.
   intros [_ Hstuck] Hstep. apply Hstuck. by exists e', κ, σ', efs.
 Qed.
 
-Global Instance stuck_dec e σ : Decision (stuck e σ).
-Admitted.
-
 Inductive Basic : expr → Prop :=
+  | BasicVar x :
+    Basic (Var x)
   | BasicRec f x e :
     Basic (Rec f x e)
   | BasicApp v1 v2 :
@@ -131,15 +142,61 @@ Inductive Basic : expr → Prop :=
   | BasicFAA v1 v2 :
     Basic (FAA (Val v1) (Val v2)).
 
+Lemma can_step_fill K e σ :
+  can_step e σ →
+  can_step (fill K e) σ.
+Proof.
+  intros (?&?&?&?&?). do 4 eexists. by apply fill_prim_step.
+Qed.
+
+Lemma stuck_fill K e σ :
+  stuck (fill K e) σ →
+  is_value e = false →
+  stuck e σ.
+Proof.
+  intros [_ Hstep] Hval.
+  split; first done. intros Hstep'.
+  apply Hstep. by apply can_step_fill.
+Qed.
+
 Lemma stuck_basic e σ :
   stuck e σ →
   ∃ K e', e = fill K e' ∧ Basic e' ∧ stuck e' σ.
+Proof.
+  intros Hstuck.
+  induction e.
+  - destruct Hstuck as [Hval _]. discriminate.
+  - exists [], (Var x). split; first done. by split; first constructor.
+  - eapply stuck_false in Hstuck as [].
+    eapply Ectx_step with (K := []); eauto.
+    by constructor.
+  - destruct (is_value e2) eqn:Hval2; first destruct (is_value e1) eqn:Hval1.
+    * apply is_value_val in Hval2 as [v2 ->].
+      apply is_value_val in Hval1 as [v1 ->].
+      exists [], (App (Val v1) (Val v2)).
+      split; first done. split; first constructor. done.
+    * apply is_value_val in Hval2 as [v2 ->].
+      apply stuck_fill with (K := [AppLCtx v2]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [AppLCtx v2]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill with (K := [AppRCtx e1]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [AppRCtx e1]), e'.
+      rewrite fill_app. subst. eauto.
 Admitted.
 
 Lemma is_ctrace_ub tp tid (k : void → itree heaplangE ()) :
   tp !! tid = Some (x ← trigger EUb ; k x)%itree →
   is_ctrace (CTVisEmpty void (subevent _ EUb)) tid tp.
-Admitted.
+Proof.
+  intros Htp.
+  eapply is_ctrace_insert; first done.
+  { rewrite bind_vis //. }
+  eexists. split.
+  - rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1.
+  - by constructor.
+Qed.
 
 Definition thread_stuck (tp : list expr) σ :=
   ∃ tid e, tp !! tid = Some e ∧ stuck e σ.
@@ -156,7 +213,15 @@ Lemma stuck_ub tp tid e σ :
   ∃ tr, trace_invariant σ tp σ tr ∧ is_ctrace tr tid (compile_tp tp).
 Proof.
   intros Htp (K&e'&->&Hbasic&Hstuck)%stuck_basic.
-  destruct Hbasic as [f x e0|v1 v2 | | | | | | | | | | | | | | | | | ].
+  destruct Hbasic as [x|f x e0|v1 v2 | | | | | | | | | | | | | | | | | ].
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    rewrite /compile_expr. simpl_itree.
+    eapply is_ctrace_ub.
+    rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - eapply stuck_false in Hstuck as [].
     eapply Ectx_step with (K := []); eauto.
     by constructor.
@@ -164,7 +229,7 @@ Proof.
     split; first split; eauto. { intros _. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap Htp //. }
-    { rewrite compile_expr_bind; first done. admit. admit. (* TODO: length K = 0 case missing *) }
+    { rewrite compile_expr_bind'; first done. admit. }
     destruct (val_to_RecV v1) as [[[f x] e]|] eqn:Heq.
     destruct v1; try discriminate.
     * eapply stuck_false in Hstuck as [].
@@ -172,8 +237,7 @@ Proof.
       by constructor.
     * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert //.
-      rewrite /compile_tp map_length -lookup_lt_is_Some //.
+      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   -
 Admitted.
 
@@ -283,7 +347,7 @@ Proof.
       exists CTCut, 0. split; first split.
       + by intros Hstuck.
       + done.
-      + apply is_ctrace_CTCut. rewrite map_length. rewrite /compile_tp map_length in Hne. lia.
+      + apply is_ctrace_CTCut. rewrite map_length. rewrite compile_tp_len in Hne. lia.
   }
   inversion Hstep as [|m [tp1 σ1] [tp2 σ2] [tp3 σ3] ? ? Hstep'' Hstep']. subst.
   inversion Hstep'' as [e1' σ1 e2' σ2' efs tpa tpb Htp' Htp2' Hprim].
@@ -294,8 +358,8 @@ Proof.
   destruct (decide (length K = 0)) as [HK|HK].
   - apply nil_length_inv in HK as ->. simpl. simpl in *.
     apply IH in Hstep' as [tr [tid [Hinv Htr]]]; last first.
-    { rewrite /compile_tp map_length app_length /= app_length.
-      rewrite /compile_tp map_length app_length /= in Hne.
+    { rewrite compile_tp_len app_length /= app_length.
+      rewrite compile_tp_len app_length /= in Hne.
       lia.
     }
     apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; kill_thread)%itree :: compile_tp tpb)) (tid := length (compile_tp tpa)) (tid' := tid) (k := λ v, kill_thread) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].

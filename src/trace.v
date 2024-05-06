@@ -81,7 +81,7 @@ Global Instance AnswerEqDecisionSum E E' :
   AnswerEqDecision E →
   AnswerEqDecision E' →
   AnswerEqDecision (E +' E').
-Admitted.
+Proof. by intros HE HE' A [e%HE|e%HE']. Qed.
 
 Program Definition equal `{AnswerEqDecision E} {A : Type} (e : E A) (a a' : A) : {a = a'} + {a ≠ a'} :=
   @decide (a = a') _.
@@ -109,11 +109,11 @@ Inductive is_postfix {E R}
   is_postfix tr tr' →
   is_postfix tr (TVis A e a tr').
 
-Global Instance is_postfix_trans {E R} :
-  Transitive (is_postfix (E:=E) (R:=R)).
-Admitted.
-
 Lemma interp_tr_is_postfix {E E' R} (tr tr' : trace (E +' E') R) :
   is_postfix tr tr' →
   is_postfix (interp_tr tr) (interp_tr tr').
-Admitted.
+Proof.
+  induction 1; first constructor. destruct e.
+  - done.
+  - simpl. by constructor.
+Qed.

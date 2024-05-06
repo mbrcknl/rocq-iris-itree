@@ -187,7 +187,11 @@ Section is_ctrace.
   Lemma is_ctrace_CTCut tid tp :
     tid < length tp →
     is_ctrace CTCut tid tp.
-  Admitted.
+  Proof.
+    intros [t Htp]%lookup_lt_is_Some_2.
+    exists t. split; first done.
+    constructor.
+  Qed.
 
   Inductive similar
     : ctrace E R
@@ -351,7 +355,7 @@ Section is_ctrace.
   Proof.
     intros tp1 tp2 Htp.
     apply Forall2_impl with (Q := eqit (=) true true) in Htp; last first.
-    { intros t1 t2 Heqit. admit. }
+    { intros t1 t2 Heqit. by apply eutt_weak in Heqit. }
     split.
     - intros Hctr. eapply is_ctrace_eutt'.
       * reflexivity.
@@ -361,25 +365,29 @@ Section is_ctrace.
       * reflexivity.
       * symmetry. apply Htp.
       * done.
-  Admitted.
+  Qed.
 
   Lemma is_ctrace_insert tr tp n t t' :
     tp !! n = Some t →
     t ≈ t' →
     is_ctrace tr n (<[n := t']>tp) →
     is_ctrace tr n tp.
-  Admitted.
+  Proof.
+    intros Htp <- Htr.
+    replace tp with (<[n:=t]> tp); first done.
+    rewrite list_insert_id //.
+  Qed.
 
   Lemma is_ctrace_yield tid tid' (tp : list (itree (threadpoolE +' E) R)) tr t :
     tp !! tid = Some (ITree.bind (trigger EYield) (λ _, t))%itree →
     is_ctrace tr tid' (<[tid := t]>tp) →
     is_ctrace (CTYield tid' tr) tid tp.
   Proof.
-    intros Htp Htr.
+    intros Htp (t'&Htp'&Htr).
     eapply is_ctrace_insert; first done; first rewrite bind_trigger //.
     eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
-    econstructor.
-  Admitted.
+    econstructor; rewrite list_insert_insert //.
+  Qed.
 End is_ctrace.
 
 Fixpoint sequencify {E R} (tr : ctrace E R) : trace E (R + last_thread_killed) :=
@@ -413,14 +421,17 @@ Inductive is_postfix_ctrace {E R}
   is_postfix_ctrace tr tr' →
   is_postfix_ctrace tr (CTFork t tr').
 
-Global Instance is_postfix_ctrace_trans {E R} :
-  Transitive (is_postfix_ctrace (E:=E) (R:=R)).
-Admitted.
-
 Lemma sequencify_is_postfix {E R} (tr tr' : ctrace E R) :
   is_postfix_ctrace tr tr' →
   is_postfix (sequencify tr) (sequencify tr').
-Admitted.
+Proof.
+  induction 1.
+  - constructor.
+  - simpl. by constructor.
+  - done.
+  - done.
+  - done.
+Qed.
 
 Section extend_ctrace.
   Context {E : Type → Type} {R : Type}.
