@@ -8,6 +8,8 @@ depends: [
   "coq-iris" { (= "dev.2024-02-16.1.06f499e0") | (= "dev") }
   "coq-itree" { (= "5.1.2") }
   "coq-elpi" { (= "2.0.1") }
+  "coq-stdpp-unstable"
+  "coq-record-update"
 ]
 
 build: [make "-j%{jobs}%"]

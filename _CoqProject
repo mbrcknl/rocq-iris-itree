@@ -1,4 +1,11 @@
+# Cannot use non-canonical projections as it causes massive unification failures
+# (https://github.com/coq/coq/issues/6294).
+-arg -w -arg -redundant-canonical-projection
+
 -Q src iris.itree
+-Q islaris isla
+
+INSTALLDEFAULTROOT = iris
 
 src/axioms.v
 src/choice.v
@@ -15,3 +22,11 @@ src/threadpool/ctrace.v
 src/wpi.v
 src/heaplang/lang.v
 src/heaplang/adequacy.v
+
+islaris/base.v
+islaris/adequacy.v
+islaris/ghost_state.v
+islaris/lifting.v
+islaris/opsem.v
+islaris/spec.v
+islaris/isla_lang.v
