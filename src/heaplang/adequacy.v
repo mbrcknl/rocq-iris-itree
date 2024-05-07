@@ -10,6 +10,17 @@ From Paco Require Import paco.
 From Paco Require Import paco2.
 Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
+Instance state_EqDecision :
+  EqDecision state.
+Proof.
+  intros [σ1 p1] [σ2 p2].
+  destruct (decide (σ1 = σ2)) as [Heq|Hneq].
+  - destruct (decide (p1 = p2)) as [Heq'|Hneq'].
+    * left. by f_equiv.
+    * right. intros Heq'. by injection Heq' as -> ->.
+  - right. intros Heq. by injection Heq as -> ->.
+Qed.
+
 Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
   (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
     match thread with
@@ -400,31 +411,22 @@ Proof.
     * done.
 Admitted.
 
-Instance state_EqDecision :
-  EqDecision state.
-Proof.
-  intros [σ1 p1] [σ2 p2].
-  destruct (decide (σ1 = σ2)) as [Heq|Hneq].
-  - destruct (decide (p1 = p2)) as [Heq'|Hneq'].
-    * left. by f_equiv.
-    * right. intros Heq'. by injection Heq' as -> ->.
-  - right. intros Heq. by injection Heq as -> ->.
-Qed.
-
 Definition trace_ends_in_ub {E R} `{ubE -< E} (tr : trace E R) :=
   is_postfix (TVisEmpty void (subevent _ EUb)) tr.
 
-Lemma interp_tr_state_ub {E R S} `{ubE -< E} σ (tr : trace (stateE S +' E) R) tr' :
+Lemma interp_tr_state_ub {E R S} `{EqDecision S} `{ubE -< E} σ (tr : trace (stateE S +' E) R) tr' :
   trace_ends_in_ub tr →
   interp_tr_state σ tr = Some tr' →
   trace_ends_in_ub tr'.
 Proof.
   revert σ tr'. induction tr; intros σ tr' Hub Hst.
   - inversion Hub.
-  - destruct e.
-    * simpl in Hst. apply IHtr with (σ := σ); last done. by inversion Hub.
+  - destruct e as [e|e]; first destruct e as [|σ'].
+    * simpl in Hst. destruct (decide (a = σ)) as [->|]; last discriminate.
+      apply IHtr with (σ := σ); last done. by inversion Hub.
+    * inversion Hub; simplify_K; simplify_K; subst. by eapply IHtr.
     * simpl in Hst. destruct (interp_tr_state σ tr) as [tr''|] eqn:Heq.
-      + injection Hst as <-. constructor.
+      + simpl in Heq. injection Hst as <-. constructor.
         by apply IHtr with (σ := σ); first by inversion Hub.
       + discriminate.
   - inversion Hub; simplify_K; simplify_K; subst.

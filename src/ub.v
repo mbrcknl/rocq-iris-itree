@@ -23,7 +23,7 @@ Variant ubE : Type → Type :=
 
 Global Instance AnswerEqDecision_ubE :
   AnswerEqDecision ubE.
-Admitted.
+Proof. intros A [] []. Qed.
 
 (** Exhibit Undefined Behavior (crash unsafely). *)
 Definition ub {R : Type} `{ubE -< E} : itree E R :=

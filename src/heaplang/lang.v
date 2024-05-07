@@ -226,7 +226,7 @@ Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
 
 Lemma compile_expr_val (v : val) :
   compile_expr (Val v) ≈ Ret v.
-Admitted.
+Proof. rewrite /compile_expr. by simpl_itree. Qed.
 
 Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
   match Ki with

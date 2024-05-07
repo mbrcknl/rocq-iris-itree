@@ -22,7 +22,7 @@ Arguments ESetState {_} _.
 
 Global Instance AnswerEqDecision_stateE {S} `{EqDecision S} :
   AnswerEqDecision (stateE S).
-Admitted.
+Proof. intros A [|x]; apply _. Qed.
 
 (** State interpretation predicate which is enforced at every [EGet]
 and [ESet]. *)
@@ -238,23 +238,104 @@ Section stateH_adequacy.
   Qed.
 End stateH_adequacy.
 
+Section eval_function.
+  Context {S R : Type} {E : Type → Type}.
+
+  Definition eval_fn : S → itree (stateE S +' E) R → itree E (S * R) :=
+    cofix _eval_fn s t :=
+        match observe t with
+        | RetF r  => Ret (s, r)
+        | TauF t' => Tau (_eval_fn s t')
+        | @VisF _ _ _ A (inl1 e) k =>
+          (match e with
+          | EGetState => λ k, Tau (_eval_fn s (k s))
+          | ESetState s' => λ k, Tau (_eval_fn s' (k ()))
+          end : (A → _) → _) k
+        | VisF (inr1 e) k => Vis e (λ a, _eval_fn s (k a))
+        end.
+  Notation eval_fn_ s t :=
+      match observe t with
+      | RetF r  => Ret (s, r)
+      | TauF t' => Tau (eval_fn s t')
+      | @VisF _ _ _ A (inl1 e) k =>
+        (match e with
+        | EGetState => λ k, Tau (eval_fn s (k s))
+        | ESetState s' => λ k, Tau (eval_fn s' (k ()))
+        end : (A → _) → _) k
+      | VisF (inr1 e) k => Vis e (λ a, eval_fn s (k a))
+      end.
+
+  Lemma unfold_eval_fn s t :
+    eval_fn s t = eval_fn_ s t.
+  Proof.
+    apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
+  Qed.
+
+  Lemma eval_fn_rel s t :
+    eval s t (eval_fn s t).
+  Proof.
+    remember (eval_fn s t) as t'.
+    revert s t t' Heqt'. pcofix CIH. pfold. intros s t t' ->.
+    rewrite unfold_eval_fn /eval_.
+    destruct (observe t) as [r'|t'|A e k].
+    - constructor.
+    - constructor. right. by apply (CIH s t').
+    - destruct e as [e|e]; first destruct e as [|s'];
+      constructor; right; by apply CIH.
+  Qed.
+End eval_function.
+
 Section state_trace.
-  Fixpoint interp_tr_state {R S E} (s : S) (tr : trace (stateE S +' E) R) : option (trace E (S * R)) :=
+  Context {S R : Type} `{EqDecision S} {E : Type → Type}.
+
+  Fixpoint interp_tr_state (s : S) (tr : trace (stateE S +' E) R) : option (trace E (S * R)) :=
     match tr with
     | TRet r => Some (TRet (s, r))
-    | TVis A (inl1 e) _ k => interp_tr_state s k
+    | TVis A (inl1 e) a k =>
+        (match e : stateE S A with
+          | EGetState => λ a, if decide (a = s) then interp_tr_state s k else None
+          | ESetState s' => λ a, interp_tr_state s' k
+        end : A → _) a
     | TVis A (inr1 e) a k => fmap (TVis A e a) (interp_tr_state s k)
-    | TVisEmpty A (inl1 e) =>  (* Placeholder: *) Some TCut
+    | TVisEmpty A (inl1 e) => None
     | TVisEmpty A (inr1 e) => Some (TVisEmpty A e)
     | TCut => Some TCut
     end.
 
-  Theorem eval_trace {S E R} (tr : trace (stateE S +' E) R) tr' t s :
+  Lemma eval_trace' (tr : trace (stateE S +' E) R) tr' t s :
+    is_trace tr t →
+    interp_tr_state s tr = Some tr' →
+    is_trace tr' (eval_fn s t).
+  Proof.
+    intros Htr. revert s tr'. setoid_rewrite unfold_eval_fn. induction Htr.
+    - intros s tr' [=<-]. constructor.
+    - intros s tr'' Hst. setoid_rewrite <- unfold_eval_fn in IHHtr.
+      destruct e as [e|e]; first destruct e as [|s'].
+      * simpl in Hst.
+        destruct (decide (a = s)) as [->|]; last discriminate.
+        constructor.
+        by apply IHHtr.
+      * simpl in Hst.
+        constructor.
+        destruct a. by apply IHHtr.
+      * simpl in Hst. destruct (interp_tr_state s tr') as [tr'''|] eqn:Heq'; last done.
+        injection Hst as Heq. rewrite -Heq.
+        constructor. by apply IHHtr.
+    - intros s tr' Hst. destruct e as [e|e].
+      * discriminate.
+      * injection Hst as <-. by constructor.
+    - intros s tr' Hst. injection Hst as <-. constructor.
+    - intros s tr' Hst. constructor.
+      setoid_rewrite <- unfold_eval_fn in IHHtr. by apply IHHtr.
+  Qed.
+
+  Theorem eval_trace (tr : trace (stateE S +' E) R) tr' t s :
     is_trace tr t →
     interp_tr_state s tr = Some tr' →
     ∃ t', eval s t t' ∧ is_trace tr' t'.
   Proof.
-    intros Htr. revert s. induction Htr; intros s Hst; simpl in Hst.
-    - 
-  Admitted.
+    intros Htr Hst. exists (eval_fn s t).
+    split; first apply eval_fn_rel.
+    by eapply eval_trace'.
+  Qed.
 End state_trace.
