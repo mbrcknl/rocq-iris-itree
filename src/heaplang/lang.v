@@ -82,15 +82,55 @@ Definition val_to_sum (v : val) : option (val + val) :=
   | _ => None
   end.
 
+Lemma Decision_range' P n :
+  (∀ i, Decision (P i)) →
+  Decision (∀ i, (0 ≤ i)%Z → (i < Z.of_nat n)%Z → P i).
+Proof.
+  intros HPdec.
+  induction n.
+  - left. intros i Hlower Hupper. lia.
+  - destruct (decide (P n)) as [Heq|Hneq].
+    * destruct (decide (∀ i : Z, (0 ≤ i)%Z → (i < n)%Z → P i)) as [HP|HP].
+      + left. intros i Hlower Hupper.
+        destruct (decide (i = n)) as [->|Hi]; first done.
+        apply HP; lia.
+      + right. intros HP'.
+        apply HP. intros i Hlower Hupper.
+        destruct (decide (i = n)) as [->|Hi]; first done.
+        apply HP'; lia.
+    * right. intros HP. apply Hneq. apply HP; lia.
+Qed.
+Lemma Decision_range P n :
+  (∀ i, Decision (P i)) →
+  Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → P i).
+Proof.
+  intros HP.
+  destruct (decide (n < 0)%Z) as [Hleq|Hleq].
+  * left. intros i Hlower Hupper. lia.
+  * replace n with (Z.of_nat (Z.to_nat n)); first by apply Decision_range'.
+    lia.
+Qed.
+Instance free_locations_dec n l σ :
+  Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)).
+Proof. apply Decision_range. apply _. Qed.
 Definition free_locations n σ : Set :=
-  {l : loc | ∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)}.
+  {l : loc | bool_decide (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None))}.
 Instance free_locations_Inhabited n σ :
   Inhabited (free_locations n σ).
-Admitted.
+Proof.
+  constructor. apply exist with (x := Loc.fresh (dom σ.(heap))).
+  apply bool_decide_pack.
+  intros i Hlower Hupper.
+  apply not_elem_of_dom. by apply Loc.fresh_fresh.
+Qed.
 Instance free_locations_EqDecision n σ :
   EqDecision (free_locations n σ).
-Admitted. (* May require axioms, but this can surely be avoided by defining
-  [free_locations] in another way or allowing a condition in [EDemonic]. *)
+Proof.
+  intros l1 l2.
+  destruct (decide (`l1 = `l2)) as [Heq|Hneq].
+  - apply dsig_eq in Heq. by left.
+  - right. intros Heq. apply Hneq. by apply dsig_eq.
+Qed.
 
 Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   let compile_expr_yield e := (v ← compile_expr' e ; yield_if_not_val e ;; Ret v)%itree in
