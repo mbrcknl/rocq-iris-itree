@@ -393,6 +393,28 @@ Definition trace_invariant σ tp' σ' (tr : ctrace (demonicE +' stateE state +' 
   (thread_stuck tp' σ' → is_postfix_ctrace (CTVisEmpty void (subevent _ EUb)) tr) ∧
   is_Some (interp_tr_state σ (interp_tr (sequencify tr))).
 
+Lemma UnOp_stuck op v σ :
+  stuck (UnOp op (Val v)) σ →
+  un_op_eval op v = None.
+Proof.
+  intros [_ Hstuck].
+  destruct (un_op_eval op v) as [w|] eqn:Heq; last done.
+  apply except. eapply Hstuck.
+  eapply Ectx_step with (K := []); eauto.
+  by constructor.
+Qed.
+
+Lemma BinOp_stuck op v1 v2 σ :
+  stuck (BinOp op (Val v1) (Val v2)) σ →
+  bin_op_eval op v1 v2 = None.
+Proof.
+  intros [_ Hstuck].
+  destruct (bin_op_eval op v1 v2) as [w|] eqn:Heq; last done.
+  apply except. eapply Hstuck.
+  eapply Ectx_step with (K := []); eauto.
+  by constructor.
+Qed.
+
 Lemma stuck_ub tp tid e σ :
   tp !! tid = Some e →
   stuck e σ →
@@ -417,14 +439,116 @@ Proof.
     { rewrite /compile_tp list_lookup_fmap Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
     destruct (val_to_RecV v1) as [[[f x] e]|] eqn:Heq.
-    destruct v1; try discriminate.
-    * eapply stuck_false in Hstuck as [].
+    * destruct v1; try discriminate.
+      eapply stuck_false in Hstuck as [].
       eapply Ectx_step with (K := []); eauto.
       by constructor.
     * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
       eapply is_ctrace_ub.
       rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
-  -
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    rewrite /compile_expr. simpl_itree.
+    apply UnOp_stuck in Hstuck as ->.
+    simpl_itree. eapply is_ctrace_ub.
+    rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    rewrite /compile_expr. simpl_itree.
+    apply BinOp_stuck in Hstuck as ->.
+    simpl_itree. eapply is_ctrace_ub.
+    rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    destruct (val_to_bool v0) as [|] eqn:Heq.
+    * destruct v0; try discriminate. destruct l; try discriminate.
+      destruct b0;
+      eapply stuck_false in Hstuck as [];
+      eapply Ectx_step with (K := []); eauto;
+      constructor.
+    * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+      eapply is_ctrace_ub.
+      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+  - eapply stuck_false in Hstuck as [].
+    eapply Ectx_step with (K := []); eauto.
+    by constructor.
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    destruct (val_to_pair v) as [[x y]|] eqn:Heq.
+    * destruct v; try discriminate.
+      eapply stuck_false in Hstuck as [].
+      eapply Ectx_step with (K := []); eauto.
+      by constructor.
+    * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+      eapply is_ctrace_ub.
+      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    destruct (val_to_pair v) as [[x y]|] eqn:Heq.
+    * destruct v; try discriminate.
+      eapply stuck_false in Hstuck as [].
+      eapply Ectx_step with (K := []); eauto.
+      by constructor.
+    * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+      eapply is_ctrace_ub.
+      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+  - eapply stuck_false in Hstuck as [].
+    eapply Ectx_step with (K := []); eauto.
+    by constructor.
+  - eapply stuck_false in Hstuck as [].
+    eapply Ectx_step with (K := []); eauto.
+    by constructor.
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. repeat constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    destruct (val_to_sum v0) as [[x|y]|] eqn:Heq.
+    * destruct v0; try discriminate.
+      eapply stuck_false in Hstuck as [].
+      eapply Ectx_step with (K := []); eauto.
+      by constructor.
+    * destruct v0; try discriminate.
+      eapply stuck_false in Hstuck as [].
+      eapply Ectx_step with (K := []); eauto.
+      by constructor.
+    * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+      eapply is_ctrace_ub.
+      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+  - eapply stuck_false in Hstuck as [].
+    eapply Ectx_step with (K := []); eauto.
+    by constructor.
+  - exists (CTVisEmpty void (subevent _ EUb)).
+    split; first split; eauto. { intros _. constructor. }
+    eapply is_ctrace_insert.
+    { rewrite /compile_tp list_lookup_fmap Htp //. }
+    { rewrite compile_expr_bind'; first done. admit. }
+    destruct (val_to_int nv) as [n|] eqn:Heq.
+    * destruct nv; try discriminate. destruct l; try discriminate.
+      injection Heq as ->.
+      eapply stuck_false in Hstuck as [].
+      eapply Ectx_step with (K := []); eauto.
+      constructor.
+(*
+    * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+      eapply is_ctrace_ub.
+      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+ - *)
 Admitted.
 
 Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) tp' σ' :
