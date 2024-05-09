@@ -159,7 +159,9 @@ Inductive Basic : expr → Prop :=
   | BasicCmpXchg v1 v2 v3 :
     Basic (CmpXchg (Val v1) (Val v2) (Val v3))
   | BasicFAA v1 v2 :
-    Basic (FAA (Val v1) (Val v2)).
+    Basic (FAA (Val v1) (Val v2))
+  | BasicResolve e1 e2 e3 :
+    Basic (Resolve e1 e2 e3).
 
 Lemma stuck_basic e σ :
   stuck e σ →
@@ -186,7 +188,189 @@ Proof.
       apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
       exists (K ++ [AppRCtx e1]), e'.
       rewrite fill_app. subst. eauto.
-Admitted.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (UnOp op (Val v)).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [UnOpCtx op]) (e := e) in Hstuck; last done.
+      apply IHe in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [UnOpCtx op]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
+      exists [], (BinOp op (Val v1) (Val v2)).
+      split; first done. split; first constructor. done.
+    * apply of_to_val in Hval2 as <-.
+      apply stuck_fill' with (K := [BinOpLCtx op v2]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [BinOpLCtx op v2]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill' with (K := [BinOpRCtx op e1]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [BinOpRCtx op e1]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e1) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (If (Val v) e2 e3).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [IfCtx e2 e3]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [IfCtx e2 e3]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
+      exists [], (Pair (Val v1) (Val v2)).
+      split; first done. split; first constructor. done.
+    * apply of_to_val in Hval2 as <-.
+      apply stuck_fill' with (K := [PairLCtx v2]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [PairLCtx v2]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill' with (K := [PairRCtx e1]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [PairRCtx e1]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (Fst (Val v)).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [FstCtx]) (e := e) in Hstuck; last done.
+      apply IHe in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [FstCtx]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (Snd (Val v)).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [SndCtx]) (e := e) in Hstuck; last done.
+      apply IHe in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [SndCtx]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (InjL (Val v)).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [InjLCtx]) (e := e) in Hstuck; last done.
+      apply IHe in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [InjLCtx]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (InjR (Val v)).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [InjRCtx]) (e := e) in Hstuck; last done.
+      apply IHe in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [InjRCtx]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e1) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (Case (Val v) e2 e3).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [CaseCtx e2 e3]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [CaseCtx e2 e3]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
+      exists [], (AllocN (Val v1) (Val v2)).
+      split; first done. split; first constructor. done.
+    * apply of_to_val in Hval2 as <-.
+      apply stuck_fill' with (K := [AllocNLCtx v2]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [AllocNLCtx v2]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill' with (K := [AllocNRCtx e1]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [AllocNRCtx e1]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (Free (Val v)).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [FreeCtx]) (e := e) in Hstuck; last done.
+      apply IHe in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [FreeCtx]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      exists [], (Load (Val v)).
+      split; first done. split; first constructor. done.
+    * apply stuck_fill' with (K := [LoadCtx]) (e := e) in Hstuck; last done.
+      apply IHe in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [LoadCtx]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
+      exists [], (Store (Val v1) (Val v2)).
+      split; first done. split; first constructor. done.
+    * apply of_to_val in Hval2 as <-.
+      apply stuck_fill' with (K := [StoreLCtx v2]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [StoreLCtx v2]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill' with (K := [StoreRCtx e1]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [StoreRCtx e1]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e3) as [v3|] eqn:Hval3; first destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval3 as <-.
+      apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
+      exists [], (CmpXchg (Val v1) (Val v2) (Val v3)).
+      split; first done. split; first constructor. done.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval3 as <-.
+      apply stuck_fill' with (K := [CmpXchgLCtx v2 v3]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [CmpXchgLCtx v2 v3]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply of_to_val in Hval3 as <-.
+      apply stuck_fill' with (K := [CmpXchgMCtx e1 v3]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [CmpXchgMCtx e1 v3]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill' with (K := [CmpXchgRCtx e1 e2]) (e := e3) in Hstuck; last done.
+      apply IHe3 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [CmpXchgRCtx e1 e2]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
+      exists [], (Xchg (Val v1) (Val v2)).
+      split; first done. split; first constructor. done.
+    * apply of_to_val in Hval2 as <-.
+      apply stuck_fill' with (K := [XchgLCtx v2]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [XchgLCtx v2]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill' with (K := [XchgRCtx e1]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [XchgRCtx e1]), e'.
+      rewrite fill_app. subst. eauto.
+  - destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
+      exists [], (FAA (Val v1) (Val v2)).
+      split; first done. split; first constructor. done.
+    * apply of_to_val in Hval2 as <-.
+      apply stuck_fill' with (K := [FaaLCtx v2]) (e := e1) in Hstuck; last done.
+      apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [FaaLCtx v2]), e'.
+      rewrite fill_app. subst. eauto.
+    * apply stuck_fill' with (K := [FaaRCtx e1]) (e := e2) in Hstuck; last done.
+      apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
+      exists (K ++ [FaaRCtx e1]), e'.
+      rewrite fill_app. subst. eauto.
+  - exists [], (Fork e). split; first done. by split; first constructor.
+  - eapply stuck_false in Hstuck as [].
+    eapply Ectx_step with (K := []); eauto.
+    apply NewProphS with (p := fresh (σ.(used_proph_id))). apply is_fresh.
+  - exists [], (Resolve e1 e2 e3). split; first done. by split; first constructor.
+Qed.
 
 Lemma is_ctrace_ub tp tid (k : void → itree heaplangE ()) :
   tp !! tid = Some (x ← trigger EUb ; k x)%itree →
@@ -215,7 +399,7 @@ Lemma stuck_ub tp tid e σ :
   ∃ tr, trace_invariant σ tp σ tr ∧ is_ctrace tr tid (compile_tp tp).
 Proof.
   intros Htp (K&e'&->&Hbasic&Hstuck)%stuck_basic.
-  destruct Hbasic as [x|f x e0|v1 v2 | | | | | | | | | | | | | | | | | ].
+  destruct Hbasic as [x|f x e0|v1 v2 | | | | | | | | | | | | | | | | | | ].
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto. { intros _. constructor. }
     eapply is_ctrace_insert.
