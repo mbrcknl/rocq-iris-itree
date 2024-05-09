@@ -22,25 +22,11 @@ Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
 
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' ubE.
 
-Definition is_value (e : expr) : bool :=
-  match e with
-  | Val _ => true
-  | _ => false
-  end.
-Arguments is_value !_.
-
-Lemma is_value_val (e : expr) :
-  is_value e = true →
-  ∃ v, e = Val v.
-Proof.
-  intros Hval. destruct e; try discriminate. by eexists.
-Qed.
-
 Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
-  if is_value e then
-    Ret ()
-  else
-    trigger EYield.
+  match to_val e with
+  | Some _ => Ret ()
+  | None => trigger EYield
+  end.
 Arguments yield_if_not_val !_ / _.
 
 Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
@@ -251,8 +237,8 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       else Ret (PairV w (LitV (LitBool false)))
   | FAA e1 e2 =>
       v' ← compile_expr_yield e2;
-      v ← (val_to_int v')?;
       l' ← compile_expr_yield e1;
+      v ← (val_to_int v')?;
       l ← (val_to_loc l')?;
       σ ← trigger EGetState;
       w ← (σ.(heap) !! l)??;
@@ -276,26 +262,23 @@ Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
   | _ => True
   end.
 
+Lemma interp_yield e :
+  interp (recursive compile_expr') (yield_if_not_val e) ≈ yield_if_not_val e.
+Proof.
+  rewrite /yield_if_not_val. destruct (to_val e); by simpl_itree.
+Qed.
+
 Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
   supported_subset_ectx Ki →
   compile_expr (fill_item Ki e) ≈
     v ← compile_expr e;
     yield_if_not_val e;;
     compile_expr (fill_item Ki (Val v)).
-Proof.
-Admitted.
-(*
-  intros Hsubset. destruct Ki; simpl; rewrite /compile_expr rec_as_interp /=.
-  all:solve [
-    rewrite interp_bind ?interp_ret ?bind_ret_l ?interp_bind rec_as_interp; f_equiv;
-    intros v; rewrite interp_bind; f_equiv;
-    [ rewrite /yield_if_not_val;
-      destruct e; first rewrite interp_ret //; setoid_rewrite interp_trigger; done | ];
-    intros _; rewrite rec_as_interp /=; f_equiv; rewrite !bind_ret_l //
-  | contradiction
-  ].
-Qed.
-*)
+Admitted. (* Admitted for performance reasons: *)
+(* Proof.
+  intros Hsubset. destruct Ki; simpl; rewrite /compile_expr; try contradiction;
+  simpl_itree; f_equiv; intros v; f_equiv; apply interp_yield.
+Qed. *)
 
 Lemma split_last {A} (xs : list A) :
   length xs > 0 →
@@ -412,6 +395,15 @@ Section heaplangH.
   Definition heap_inv : iProp Σ :=
     inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)).
 
+  Lemma wpi_yield_if_not_val e Φ :
+    Φ () -∗
+    WPi (yield_if_not_val e) @ heaplangH; ⊤ {{ Φ }}.
+  Proof.
+    rewrite /yield_if_not_val. destruct (to_val e).
+    * iApply wpi_ret.
+    * iIntros "HΦ". by iApply @wpi_yield.
+  Qed.
+
   (*
   (* TODO: Create abstraction for WPi for heaplang. This should handle the invariant. *)
 
@@ -448,7 +440,7 @@ Section heaplangH.
     - simpl_itree. by iApply wpi_ret.
     - simpl_itree. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->).
-      rewrite /yield_if_not_val. destruct (is_value _) eqn:Hval.
+      rewrite /yield_if_not_val. destruct (to_val _) eqn:Hval.
       * rewrite /kill_thread. simpl_itree. rewrite bind_trigger. by iApply @wpi_kill.
       * rewrite /kill_thread. simpl_itree. iApply wpi_bind. iApply @wpi_yield.
         iApply wpi_bind. by iApply @wpi_kill.
@@ -493,7 +485,9 @@ Section heaplangH.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_insert_big (heap_array (`l) (replicate (Z.to_nat n) v)) with "Hauth") as "Hauth".
     { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
-      rewrite replicate_length in Hlt. apply Hl; first done. lia. }
+      rewrite replicate_length in Hlt.
+      pose (bool_decide_unpack _ Hl) as Hl'. apply Hl'; first done. lia.
+    }
     iMod "Hauth" as "[Hauth Hfrag]". iDestruct "Hauth" as "[Hauth Hauth']". iFrame.
     iApply wpi_ret. iApply wpi_ret.
     iModIntro. iSplitL "Hauth". { by iExists (state_init_heap (`l) n v σ). }

@@ -36,7 +36,7 @@ Proof.
   rewrite -bind_trigger. f_equiv. intros [|].
   - by simpl_itree.
   - simpl_itree. f_equiv. intros v. rewrite /kill_thread.
-      rewrite /yield_if_not_val. destruct (is_value _) eqn:Hval.
+      rewrite /yield_if_not_val. destruct (to_val _) eqn:Hval.
       * rewrite /kill_thread. simpl_itree. rewrite -bind_trigger. f_equiv; first done.
         intros [].
       * rewrite /kill_thread. simpl_itree. f_equiv; first done.
@@ -73,7 +73,7 @@ Lemma base_Beta f_ x_ e v :
      in yield_if_not_val e' ;; compile_expr e'.
 Proof.
   rewrite /compile_expr. simpl_itree. rewrite /yield_if_not_val.
-  destruct (is_value _) eqn:Heq; by simpl_itree.
+  destruct (to_val _) eqn:Heq; by simpl_itree.
 Qed.
 
 Definition compile_tp (tp : list expr) : list (itree heaplangE ()) :=
@@ -87,33 +87,37 @@ Lemma compile_tp_len tp :
   length (compile_tp tp) = length tp.
 Proof. rewrite /compile_tp map_length //. Qed.
 
-Definition can_step (e : expr) σ : Prop :=
-  ∃ e' κ σ' efs, prim_step e σ κ e' σ' efs.
-Definition stuck e σ : Prop :=
-  is_value e = false ∧ ~ can_step e σ.
-
-Global Instance can_step_dec e σ : Decision (can_step e σ).
+Global Instance reducible_dec (e : expr) σ : Decision (reducible e σ).
 Admitted.
-Global Instance stuck_dec e σ : Decision (stuck e σ).
+Global Instance stuck_dec (e : expr) σ : Decision (stuck e σ).
 Proof.
-  destruct (decide (is_value e = false)).
-  - destruct (decide (can_step e σ)).
-    * right. by intros [_ Hstep].
-    * left. by split.
-  - right. by intros [Hval _].
+  destruct (decide (reducible e σ)) as [Hred|Hirr].
+  - right. destruct Hred as (κ&e'&σ'&efs&Hstep). intros [_ Hirr].
+    by apply Hirr in Hstep.
+  - destruct (to_val e) eqn:Hval.
+    * right. intros [Hval' _]. destruct e; discriminate.
+    * left. split; first done. intros κ e' σ' efs Hstep. apply Hirr.
+      by do 4 eexists.
 Qed.
 
-Lemma stuck_false e σ κ e' σ' efs :
+Lemma stuck_false (e : expr) σ κ e' σ' efs :
   stuck e σ →
   prim_step e σ κ e' σ' efs →
   False.
 Proof.
-  intros [_ Hstuck] Hstep. apply Hstuck. by exists e', κ, σ', efs.
+  intros [_ Hstuck] Hstep. by apply Hstuck in Hstep.
 Qed.
 
-(* TODO: [stuck] already exists in Iris [language.v]. Also,
-[subredexes_are_values] may be the same as [Basic]. [is_value] is also captured
-essentially by [to_val]. *)
+Lemma stuck_fill' K e σ :
+  stuck (fill K e) σ →
+  to_val e = None →
+  stuck e σ.
+Proof.
+  intros [_ Hirr] Hval.
+  split; first by inversion e. apply not_reducible.
+  intros Hred. apply (reducible_fill (K := fill K)) in Hred.
+  by apply not_reducible in Hirr.
+Qed.
 
 Inductive Basic : expr → Prop :=
   | BasicVar x :
@@ -157,23 +161,6 @@ Inductive Basic : expr → Prop :=
   | BasicFAA v1 v2 :
     Basic (FAA (Val v1) (Val v2)).
 
-Lemma can_step_fill K e σ :
-  can_step e σ →
-  can_step (fill K e) σ.
-Proof.
-  intros (?&?&?&?&?). do 4 eexists. by apply fill_prim_step.
-Qed.
-
-Lemma stuck_fill K e σ :
-  stuck (fill K e) σ →
-  is_value e = false →
-  stuck e σ.
-Proof.
-  intros [_ Hstep] Hval.
-  split; first done. intros Hstep'.
-  apply Hstep. by apply can_step_fill.
-Qed.
-
 Lemma stuck_basic e σ :
   stuck e σ →
   ∃ K e', e = fill K e' ∧ Basic e' ∧ stuck e' σ.
@@ -185,17 +172,17 @@ Proof.
   - eapply stuck_false in Hstuck as [].
     eapply Ectx_step with (K := []); eauto.
     by constructor.
-  - destruct (is_value e2) eqn:Hval2; first destruct (is_value e1) eqn:Hval1.
-    * apply is_value_val in Hval2 as [v2 ->].
-      apply is_value_val in Hval1 as [v1 ->].
+  - destruct (to_val e2) as [v2|] eqn:Hval2; first destruct (to_val e1) as [v1|] eqn:Hval1.
+    * apply of_to_val in Hval2 as <-.
+      apply of_to_val in Hval1 as <-.
       exists [], (App (Val v1) (Val v2)).
       split; first done. split; first constructor. done.
-    * apply is_value_val in Hval2 as [v2 ->].
-      apply stuck_fill with (K := [AppLCtx v2]) (e := e1) in Hstuck; last done.
+    * apply of_to_val in Hval2 as <-.
+      apply stuck_fill' with (K := [AppLCtx v2]) (e := e1) in Hstuck; last done.
       apply IHe1 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
       exists (K ++ [AppLCtx v2]), e'.
       rewrite fill_app. subst. eauto.
-    * apply stuck_fill with (K := [AppRCtx e1]) (e := e2) in Hstuck; last done.
+    * apply stuck_fill' with (K := [AppRCtx e1]) (e := e2) in Hstuck; last done.
       apply IHe2 in Hstuck as (K&e'&Hfill&Hbasic&Hstuck').
       exists (K ++ [AppRCtx e1]), e'.
       rewrite fill_app. subst. eauto.
@@ -273,13 +260,13 @@ Proof.
   - pose (e' := subst' x v2 (subst' f (RecV f x e0) e0)).
     exists (CTYield tid' tr). split; first split; eauto.
     { intros Hstuck. constructor. by apply Hub. }
-    destruct (is_value e') eqn:Hval.
+    destruct (to_val e') as [v|] eqn:Hval.
     * eapply is_ctrace_insert; first done.
       { simpl. rewrite base_Beta. simpl.
         rewrite /yield_if_not_val. rewrite /e' in Hval. rewrite Hval. rewrite bind_ret_l.
         reflexivity. }
-      rewrite /e' in Hval. apply is_value_val in Hval as [v Heq].
-      rewrite Heq in Htr. rewrite Heq.
+      rewrite /e' in Hval. apply of_to_val in Hval as Heq.
+      rewrite -Heq in Htr. rewrite -Heq.
       rewrite compile_expr_val. rewrite compile_expr_val in Htr.
       simpl in Htr.
       rewrite bind_ret_l. rewrite !bind_ret_l in Htr.
@@ -327,25 +314,9 @@ Proof.
     rewrite list_insert_insert //.
 Admitted.
 
-Lemma base_step_not_value e1 σ1 κs e2 σ2 tfs :
-  base_step e1 σ1 κs e2 σ2 tfs →
-  is_value e1 = false.
-Proof. intros Hbase. by destruct Hbase. Qed.
-
 Lemma lt_gt n m :
   n < m ↔ m > n.
 Proof. lia. Qed.
-
-Lemma fill_is_not_value K e :
-  length K > 0 →
-  is_value (ectx_language.fill K e) = false.
-Proof.
-  induction (length K) as [|n IH] eqn:Heq. { lia. }
-  intros _.
-  unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
-  rewrite /= fill_app /=.
-  by destruct Ki.
-Qed.
 
 (* TODO: Idea: make κ = [] *)
 Lemma has_trace n tp σ tp' σ' κ :
@@ -475,7 +446,7 @@ Lemma ub_execution n e σ tp' σ' κ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   thread_stuck tp' σ' →
   ∃ t1 t2 t3,
-    (* TODO: consisting naming for interpreation relations *)
+    (* TODO: consisting naming for interpretion relations *)
     (* TODO: abstraction for this composite relation *)
     interleaves (R := ()) 0 [compile_expr e ;; yield_if_not_val e ;; kill_thread]%itree t1 ∧
     demonic_instantiates t1 t2 ∧
@@ -502,11 +473,10 @@ Proof.
   eapply interp_tr_state_ub; last done. apply interp_tr_ub. by apply sequencify_ub.
 Qed.
 
-Lemma ub_execution_wpi `{!invGS_gen hlc Σ} n e σ tp' σ' κ :
+Lemma ub_execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   thread_stuck tp' σ' →
   state_interp σ -∗
-  (* TODO: Clean up *)
   WPi (compile_expr e;; yield_if_not_val e;; kill_thread : itree heaplangE ()) @ heaplangH ; ⊤ {{ _, True }} -∗
   |={⊤}=> False.
 Proof.
@@ -517,4 +487,18 @@ Proof.
   iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
   iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
   rewrite Hub /ub -wpi_vis' /=. by iMod "Hwp".
+Qed.
+
+Lemma ub_execution_wpi `{!invGS_gen hlc Σ} n e σ tp' σ' κ :
+  language.nsteps n ([e], σ) κ (tp', σ') →
+  thread_stuck tp' σ' →
+  state_interp σ -∗
+  WPi (compile_expr e) @ heaplangH ; ⊤ {{ _, True }} -∗
+  |={⊤}=> False.
+Proof.
+  iIntros (Hstep Hstuck) "Hstate Hwp".
+  iApply (ub_execution_wpi' with "Hstate"); eauto.
+  iApply wpi_bind. iApply wpi_wand; last done.
+  iIntros (r) "_". iApply wpi_bind. iApply @wpi_yield_if_not_val.
+  iApply @wpi_kill.
 Qed.
