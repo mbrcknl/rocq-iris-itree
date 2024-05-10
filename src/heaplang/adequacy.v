@@ -541,14 +541,18 @@ Proof.
     destruct (val_to_int nv) as [n|] eqn:Heq.
     * destruct nv; try discriminate. destruct l; try discriminate.
       injection Heq as ->.
-      eapply stuck_false in Hstuck as [].
-      eapply Ectx_step with (K := []); eauto.
-      constructor.
-(*
+      destruct (decide (0 < n)%Z).
+      + eapply stuck_false in Hstuck as [].
+        eapply Ectx_step with (K := []); eauto.
+        apply AllocNS with (l := Loc.fresh (dom σ.(heap))); first done.
+        intros i Hlower Hupper.  apply not_elem_of_dom_1. by apply Loc.fresh_fresh.
+      + rewrite /compile_expr. simpl_itree. rewrite /assert decide_False /=. simpl_itree.
+        eapply is_ctrace_ub.
+        rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. done.
     * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
       eapply is_ctrace_ub.
       rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
- - *)
+ - 
 Admitted.
 
 Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) tp' σ' :

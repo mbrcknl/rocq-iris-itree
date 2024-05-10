@@ -188,6 +188,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       v ← compile_expr_yield e;
       n' ← compile_expr_yield ne;
       n ← (val_to_int n')?;
+      assert (0 < n)%Z;;
       σ ← trigger EGetState;
       (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
       (* TODO: There should be a proof obligation for this being nonempty. *)
@@ -474,6 +475,7 @@ Section heaplangH.
     intros Hpos. iIntros (Hmask) "#Hinv".
     rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    rewrite /assert /= decide_True //. simpl_itree.
     iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
