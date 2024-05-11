@@ -59,6 +59,12 @@ Proof.
   by injection Ht' as <-.
 Qed.
 
+Lemma trace_EGetState {R} tid (tp : list (itree heaplangE R)) tr k σ :
+  tp !! tid = Some (v ← trigger EGetState ; k v)%itree →
+  is_ctrace tr tid (<[tid := k σ]>tp) →
+  is_ctrace (CTVis state (subevent _ EGetState) σ tr) tid tp.
+Admitted.
+
 Lemma base_BinOp op v1 v2 v3 :
   bin_op_eval op v1 v2 = Some v3 →
   compile_expr (BinOp op (Val v1) (Val v2)) ≈ Ret v3.
@@ -552,7 +558,54 @@ Proof.
     * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
       eapply is_ctrace_ub.
       rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
- - 
+  - destruct (val_to_loc v) as [l|] eqn:Heq.
+    * destruct (σ.(heap) !! l) as [[x|]|] eqn:Hheap.
+      + destruct v; try discriminate.
+        destruct l0; try discriminate.
+        injection Heq as <-.
+        eapply stuck_false in Hstuck as [].
+        eapply Ectx_step with (K := []); eauto.
+        by eapply FreeS.
+      + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
+        split; first split.
+        ++ intros _. repeat constructor.
+        ++ simpl. rewrite decide_True //.
+        ++ eapply is_ctrace_insert.
+           { rewrite /compile_tp list_lookup_fmap Htp //. }
+           { rewrite compile_expr_bind'; first done. admit. }
+           rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+           eapply trace_EGetState.
+           { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+           rewrite /= Hheap. simpl_itree.
+           eapply is_ctrace_ub.
+           rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
+      + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
+        split; first split.
+        ++ intros _. repeat constructor.
+        ++ simpl. rewrite decide_True //.
+        ++ eapply is_ctrace_insert.
+           { rewrite /compile_tp list_lookup_fmap Htp //. }
+           { rewrite compile_expr_bind'; first done. admit. }
+           rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+           eapply trace_EGetState.
+           { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+           rewrite /= Hheap. simpl_itree.
+           eapply is_ctrace_ub.
+           rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
+    * exists (CTVisEmpty void (subevent _ EUb)).
+      split; first split; eauto. { intros _. constructor. }
+      eapply is_ctrace_insert.
+      { rewrite /compile_tp list_lookup_fmap Htp //. }
+      { rewrite compile_expr_bind'; first done. admit. }
+      rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
+      eapply is_ctrace_ub.
+      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
+  - admit.
 Admitted.
 
 Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) tp' σ' :
