@@ -231,7 +231,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       σ ← trigger EGetState;
       w ← (σ.(heap) !! l)??;
       (* Asserts that equality coincides with the equality of the language. *)
-      assert (vals_compare_safe v1 w) ;;
+      assert (vals_compare_safe v1 w);;
       if decide (v1 = w) then
         trigger (ESetState (state_upd_heap <[l:=Some v2]> σ));;
         Ret (PairV w (LitV (LitBool true)))

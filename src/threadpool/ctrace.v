@@ -388,6 +388,21 @@ Section is_ctrace.
     eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
     econstructor; rewrite list_insert_insert //.
   Qed.
+
+  Lemma is_ctrace_Vis {A} tid (tp : list (itree (threadpoolE +' E) R)) (e : E A) tr k (a : A) :
+    tp !! tid = Some (ITree.bind (trigger e) k) →
+    is_ctrace tr tid (<[tid := k a]>tp) →
+    is_ctrace (CTVis A (subevent _ e) a tr) tid tp.
+  Proof.
+    intros Htp Htr. eapply is_ctrace_insert; first done; first done.
+    rewrite bind_trigger.
+    eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
+    apply is_CTVis.
+    rewrite list_insert_insert.
+    destruct Htr as (t'&Ht'&Htr).
+    rewrite list_lookup_insert in Ht'; last by apply lookup_lt_is_Some_1.
+    by injection Ht' as <-.
+  Qed.
 End is_ctrace.
 
 Fixpoint sequencify {E R} (tr : ctrace E R) : trace E (R + last_thread_killed) :=
