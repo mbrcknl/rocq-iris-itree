@@ -1036,12 +1036,116 @@ Proof.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=None]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
+    { intros Hstuck. do 3 constructor. by apply Hub. }
+    { simpl. rewrite decide_True //. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite /= H. simpl_itree.
+    eapply is_ctrace_Vis.
+    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert.
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTVis state (subevent _ EGetState) σ2 (CTYield tid' tr)). split; first split; eauto.
+    { intros Hstuck. do 2 constructor. by apply Hub. }
+    { simpl. rewrite decide_True //. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite /= H. simpl_itree.
+    rewrite list_insert_insert.
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some w]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
+    { intros Hstuck. do 3 constructor. by apply Hub. }
+    { simpl. rewrite decide_True //. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite /= H. simpl_itree.
+    eapply is_ctrace_Vis.
+    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert.
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
+    { intros Hstuck. do 3 constructor. by apply Hub. }
+    { simpl. rewrite decide_True //. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite /= H. simpl_itree.
+    eapply is_ctrace_Vis.
+    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert.
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - destruct (decide (vl = v1)) as [->|Hneq].
+    * rewrite bool_decide_eq_true_2 // in Hstinv.
+      rewrite bool_decide_eq_true_2 // in Hbase.
+      rewrite bool_decide_eq_true_2 // in Htr.
+      exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
+      { intros Hstuck. do 3 constructor. by apply Hub. }
+      { simpl. rewrite decide_True //. }
+      eapply is_ctrace_insert; first done.
+      { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+      eapply is_ctrace_Vis.
+      { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+      rewrite /= H. simpl_itree.
+      rewrite !list_insert_insert assert_True //. simpl_itree.
+      rewrite decide_True //. simpl_itree.
+      eapply is_ctrace_Vis.
+      { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+      rewrite !list_insert_insert.
+      eapply is_ctrace_yield.
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+    * rewrite bool_decide_eq_false_2 // in Hstinv.
+      rewrite bool_decide_eq_false_2 // in Hbase.
+      rewrite bool_decide_eq_false_2 // in Htr.
+      exists (CTVis state (subevent _ EGetState) σ1 (CTYield tid' tr)). split; first split; eauto.
+      { intros Hstuck. do 2 constructor. by apply Hub. }
+      { simpl. rewrite decide_True //. }
+      eapply is_ctrace_insert; first done.
+      { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+      eapply is_ctrace_Vis.
+      { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+      simpl. rewrite H list_insert_insert. simpl_itree. rewrite assert_True //. simpl_itree.
+      rewrite decide_False //. simpl_itree.
+      eapply is_ctrace_yield.
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some (LitV (LitInt (i1 + i2)))]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
+    { intros Hstuck. do 3 constructor. by apply Hub. }
+    { simpl. rewrite decide_True //. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite /= H. simpl_itree.
+    eapply is_ctrace_Vis.
+    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert.
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
   - exists (CTFork (compile_expr e ;; yield_if_not_val e ;; kill_thread) (CTYield tid' tr)).
     split; first split; eauto.
     { intros Hstuck. repeat constructor. by apply Hub. }
@@ -1052,6 +1156,8 @@ Proof.
       rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite insert_app_l; last rewrite insert_length -lookup_lt_is_Some //.
     rewrite list_insert_insert //.
+  - admit.
+  - admit.
 Admitted.
 
 Lemma lt_gt n m :
