@@ -148,8 +148,8 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
         yield_if_not_val e2;;
         compile_expr' e2
   | Pair e1 e2 =>
-      v1 ← compile_expr_yield e2;
-      v2 ← compile_expr_yield e1;
+      v2 ← compile_expr_yield e2;
+      v1 ← compile_expr_yield e1;
       Ret (PairV v1 v2)
   | Fst e =>
       v ← compile_expr_yield e;
@@ -475,7 +475,7 @@ Section heaplangH.
     intros Hpos. iIntros (Hmask) "#Hinv".
     rewrite /compile_expr. simpl_itree.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    rewrite /assert /= decide_True //. simpl_itree.
+    rewrite assert_True //. simpl_itree.
     iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.

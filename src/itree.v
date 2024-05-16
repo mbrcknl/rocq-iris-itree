@@ -103,7 +103,7 @@ Lemma eutt_weak {E R} b1 b2 (t1 t2 : itree E R) :
   eqit (=) b1 b2 t1 t2 →
   t1 ≈ t2.
 Proof.
-  intros Heqit. 
+  intros Heqit.
   destruct b1, b2.
   - done.
   - by apply euttge_sub_eutt.
@@ -136,5 +136,12 @@ Ltac simplify_obs :=
     apply vis_observe_eqit in H as <-
   end.
 
-Ltac simpl_itree :=
+Ltac _simpl_itree :=
   repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_ret_r || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).
+Ltac _simpl_itree' H :=
+  repeat (setoid_rewrite bind_ret_l in H || setoid_rewrite bind_ret_r in H || setoid_rewrite bind_bind in H || setoid_rewrite interp_bind in H || setoid_rewrite interp_trigger in H || setoid_rewrite interp_ret in H || setoid_rewrite rec_as_interp in H || rewrite rec_as_interp in H || setoid_rewrite interp_vis in H || simpl in H).
+
+Tactic Notation "simpl_itree" :=
+  _simpl_itree.
+Tactic Notation "simpl_itree" "in" ident(H) :=
+  _simpl_itree' H.

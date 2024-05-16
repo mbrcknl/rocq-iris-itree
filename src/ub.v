@@ -145,6 +145,14 @@ Definition assert {E} `{ubE -< E} (P : Prop) `{Decision P} : itree E () :=
     Ret ()
   else ub.
 
+Lemma assert_True {E} `{ubE -< E} (P : Prop) `{Decision P} :
+  P → assert (E := E) P ≈ Ret ().
+Proof. intros HP. rewrite /assert decide_True //. Qed.
+
+Lemma assert_False {E} `{ubE -< E} (P : Prop) `{Decision P} :
+  ¬ P → assert (E := E) P ≈ ub.
+Proof. intros HP. rewrite /assert decide_False //. Qed.
+
 Section wp_ub.
   Context {E : Type → Type} `{H : iHandler Σ E} `{ubE -< E} `{inH Σ ubE E ubH H}.
   Context `{!invGS_gen hlc Σ}.

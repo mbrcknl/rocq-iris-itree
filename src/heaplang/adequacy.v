@@ -59,6 +59,14 @@ Proof.
   by injection Ht' as <-.
 Qed.
 
+Lemma base_UnOp op v v' :
+  un_op_eval op v = Some v' →
+  compile_expr (UnOp op (Val v)) ≈ Ret v'.
+Proof.
+  intros Hop.
+  rewrite /compile_expr. simpl_itree. rewrite Hop. by simpl_itree.
+Qed.
+
 Lemma base_BinOp op v1 v2 v3 :
   bin_op_eval op v1 v2 = Some v3 →
   compile_expr (BinOp op (Val v1) (Val v2)) ≈ Ret v3.
@@ -546,7 +554,7 @@ Proof.
         eapply Ectx_step with (K := []); eauto.
         apply AllocNS with (l := Loc.fresh (dom σ.(heap))); first done.
         intros i Hlower Hupper.  apply not_elem_of_dom_1. by apply Loc.fresh_fresh.
-      + rewrite /compile_expr. simpl_itree. rewrite /assert decide_False /=. simpl_itree.
+      + rewrite /compile_expr. simpl_itree. rewrite assert_False /=. simpl_itree.
         eapply is_ctrace_ub.
         rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. done.
     * rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
@@ -739,7 +747,7 @@ Proof.
                rewrite /compile_expr. simpl_itree. rewrite Heq /=. simpl_itree.
                eapply is_ctrace_Vis.
                { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
-               rewrite /= Hheap. simpl_itree. rewrite /assert decide_False // /ub. simpl_itree.
+               rewrite /= Hheap. simpl_itree. rewrite assert_False // /ub. simpl_itree.
                eapply is_ctrace_ub.
                rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
@@ -848,6 +856,21 @@ Proof.
   - admit.
 Admitted.
 
+Ltac _simpl_itree :=
+  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_ret_r || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).
+Ltac _simpl_itree' H :=
+  repeat (setoid_rewrite bind_ret_l in H || setoid_rewrite bind_ret_r in H || setoid_rewrite bind_bind in H || setoid_rewrite interp_bind in H || setoid_rewrite interp_trigger in H || setoid_rewrite interp_ret in H || setoid_rewrite rec_as_interp in H || rewrite rec_as_interp in H || setoid_rewrite interp_vis in H || simpl in H).
+
+Tactic Notation "simpl_itree" :=
+  _simpl_itree.
+Tactic Notation "simpl_itree" "in" ident(H) :=
+  _simpl_itree' H.
+
+Lemma AllocN_free_locations n v σ ρs l efs :
+  base_step (AllocN (Val $ LitV $ LitInt n) (Val v)) σ ρs (Val $ LitV $ LitLoc l) (state_init_heap l n v σ) efs →
+  ∃ (l' : free_locations n σ), `l' = l.
+Admitted.
+
 Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) tp' σ' :
   base_step e1 σ1 κs e2 σ2 efs →
   is_ctrace tr tid' (<[tid:=(v ← compile_expr e2 ; yield_if_not_val e2 ;; k v)%itree]>tp
@@ -858,10 +881,38 @@ Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree hea
 Proof.
   intros Hbase Htr [Hub Hstinv] Htp.
   inversion Hbase; subst; simpl in Htr; rewrite ?app_nil_r in Htr.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    apply is_ctrace_yield with (t := k (RecV f x e)).
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    apply is_ctrace_yield with (t := k (PairV v1 v2)).
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    apply is_ctrace_yield with (t := k (InjLV v)).
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    apply is_ctrace_yield with (t := k (InjRV v)).
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
   - pose (e' := subst' x v2 (subst' f (RecV f x e0) e0)).
     exists (CTYield tid' tr). split; first split; eauto.
     { intros Hstuck. constructor. by apply Hub. }
@@ -886,7 +937,13 @@ Proof.
       apply is_ctrace_yield with (t := (v ← compile_expr e'; trigger EYield ;; k v)%itree).
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       by rewrite list_insert_insert.
-  - admit.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    rewrite compile_expr_val !bind_ret_l in Htr.
+    eapply is_ctrace_insert with (t' := (trigger EYield ;; k v')%itree); first done.
+    { rewrite base_UnOp // bind_ret_l  //. }
+    eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert.
   - exists (CTYield tid' tr). split; first split; eauto.
     { intros Hstuck. constructor. by apply Hub. }
     rewrite compile_expr_val !bind_ret_l in Htr.
@@ -894,13 +951,91 @@ Proof.
     { rewrite base_BinOp // bind_ret_l  //. }
     eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     by rewrite list_insert_insert.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - admit.
-  - (* AllocN *) admit.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    destruct (to_val e2) eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      eapply is_ctrace_insert; first done.
+      { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+      apply is_ctrace_yield with (t := k v).
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+    * eapply is_ctrace_insert; first done.
+      { simpl. rewrite /compile_expr. simpl_itree.
+        rewrite /yield_if_not_val Hval. simpl_itree. reflexivity. }
+      rewrite /yield_if_not_val Hval in Htr. simpl_itree in Htr.
+      eapply is_ctrace_yield.
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    destruct (to_val e2) eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      eapply is_ctrace_insert; first done.
+      { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+      apply is_ctrace_yield with (t := k v).
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+    * eapply is_ctrace_insert; first done.
+      { simpl. rewrite /compile_expr. simpl_itree.
+        rewrite /yield_if_not_val Hval. simpl_itree. reflexivity. }
+      rewrite /yield_if_not_val Hval in Htr. simpl_itree in Htr.
+      eapply is_ctrace_yield.
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    rewrite compile_expr_val !bind_ret_l in Htr.
+    eapply is_ctrace_insert with (t' := (trigger EYield ;; k v1)%itree); first done.
+    { rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    rewrite compile_expr_val !bind_ret_l in Htr.
+    eapply is_ctrace_insert with (t' := (trigger EYield ;; k v2)%itree); first done.
+    { rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTYield tid' tr). split; first split; eauto.
+    { intros Hstuck. constructor. by apply Hub. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - destruct (AllocN_free_locations _ _ _ _ _ _ Hbase) as [ll <-].
+    exists (CTVis state (subevent _ EGetState) σ1 (CTVis (free_locations n σ1) (subevent _ (EDemonic (free_locations n σ1))) ll (CTVis () (subevent _ (ESetState (state_init_heap (`ll) n v σ1))) () (CTYield tid' tr)))). split; first split; eauto.
+    { intros Hstuck. do 4 constructor. by apply Hub. }
+    { simpl. rewrite decide_True //. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    rewrite assert_True; last lia. simpl_itree.
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // insert_length -lookup_lt_is_Some //. }
+    simpl.
+    eapply is_ctrace_Vis.
+    { rewrite list_insert_insert list_lookup_insert // insert_length -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert.
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
   - admit.
   - admit.
   - admit.
