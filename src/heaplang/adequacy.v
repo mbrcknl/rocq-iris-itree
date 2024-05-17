@@ -856,20 +856,13 @@ Proof.
   - admit.
 Admitted.
 
-Ltac _simpl_itree :=
-  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_ret_r || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).
-Ltac _simpl_itree' H :=
-  repeat (setoid_rewrite bind_ret_l in H || setoid_rewrite bind_ret_r in H || setoid_rewrite bind_bind in H || setoid_rewrite interp_bind in H || setoid_rewrite interp_trigger in H || setoid_rewrite interp_ret in H || setoid_rewrite rec_as_interp in H || rewrite rec_as_interp in H || setoid_rewrite interp_vis in H || simpl in H).
-
-Tactic Notation "simpl_itree" :=
-  _simpl_itree.
-Tactic Notation "simpl_itree" "in" ident(H) :=
-  _simpl_itree' H.
-
+Program Definition to_free_location n v σ ρs l efs (Hbase : base_step (AllocN (Val $ LitV $ LitInt n) (Val v)) σ ρs (Val $ LitV $ LitLoc l) (state_init_heap l n v σ) efs) : free_locations n σ :=
+  exist (λ l, bool_decide (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None))) l _.
+Next Obligation. intros. simpl. apply bool_decide_pack. by inversion Hbase. Qed.
 Lemma AllocN_free_locations n v σ ρs l efs :
   base_step (AllocN (Val $ LitV $ LitInt n) (Val v)) σ ρs (Val $ LitV $ LitLoc l) (state_init_heap l n v σ) efs →
   ∃ (l' : free_locations n σ), `l' = l.
-Admitted.
+Proof. intros Hbase. by exists (to_free_location n v σ ρs l efs Hbase). Qed.
 
 Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE ()) tp' σ' :
   base_step e1 σ1 κs e2 σ2 efs →
