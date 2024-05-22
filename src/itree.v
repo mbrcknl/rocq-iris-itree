@@ -139,8 +139,7 @@ Ltac simplify_obs :=
 Ltac _simpl_itree :=
   repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_ret_r || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).
 Ltac _simpl_itree' H :=
-  repeat (setoid_rewrite bind_ret_l in H || setoid_rewrite bind_ret_r in H || setoid_rewrite bind_bind in H || setoid_rewrite interp_bind in H || setoid_rewrite interp_trigger in H || setoid_rewrite interp_ret in H || setoid_rewrite rec_as_interp in H || rewrite rec_as_interp in H || setoid_rewrite interp_vis in H || simpl in H).
-
+  do [_simpl_itree] in H.
 Tactic Notation "simpl_itree" :=
   _simpl_itree.
 Tactic Notation "simpl_itree" "in" ident(H) :=
