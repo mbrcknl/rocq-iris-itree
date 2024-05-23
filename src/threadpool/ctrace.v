@@ -448,6 +448,9 @@ Proof.
   - done.
 Qed.
 
+Global Instance is_postfix_ctrace_trans {E R} : Transitive (is_postfix_ctrace (E := E) (R := R)).
+Admitted.
+
 Section extend_ctrace.
   Context {E : Type → Type} {R : Type}.
 

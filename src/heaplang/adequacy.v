@@ -105,17 +105,25 @@ Lemma compile_tp_len tp :
 Proof. rewrite /compile_tp map_length enumerate_length //. Qed.
 Lemma compile_tp'_app tp tp' :
   compile_tp' (tp ++ tp') = compile_tp' tp ++ compile_tp' tp'.
-Admitted.
+Proof. rewrite /compile_tp' map_app //. Qed.
 Lemma compile_tp'_cons e tp :
   compile_tp' (e :: tp) = compile_tp' [e] ++ compile_tp' tp.
-Admitted.
+Proof. done. Qed.
+Lemma compile_tp_cons e tp :
+  compile_tp (e :: tp) = compile_tp [e] ++ compile_tp' tp.
+Proof.
+  rewrite /compile_tp /=. f_equiv.
+  replace 1 with (S 0) by done.
+  generalize 0. induction tp as [|e' tp IH]; first done. intros n.
+  simpl. f_equiv. apply IH.
+Qed.
 Lemma compile_tp_app tp tp' :
   length tp ≠ 0 →
   compile_tp (tp ++ tp') = compile_tp tp ++ compile_tp' tp'.
-Admitted.
-Lemma compile_tp_cons e tp :
-  compile_tp (e :: tp) = compile_tp [e] ++ compile_tp' tp.
-Admitted.
+Proof.
+  destruct tp as [|e tp]; first done. intros _.
+  rewrite compile_tp_cons /= compile_tp_cons /= compile_tp'_app //.
+Qed.
 
 Global Instance reducible_dec (e : expr) σ : Decision (reducible e σ).
 Admitted.
@@ -458,43 +466,65 @@ Definition trace_invariant_postfix tp' σ' (tr : ctrace (demonicE +' stateE stat
   | Some tx => ctrace_terminates_in tr tx
   | None => False
   end.
+(* TODO: Add invariant about the final state reached in trace. Should be σ'. *)
 Definition trace_invariant σ tp' σ' (tr : ctrace (demonicE +' stateE state +' ubE) val) :=
   trace_invariant_postfix tp' σ' tr ∧
   is_Some (interp_tr_state σ (interp_tr (sequencify tr))).
-
-Definition undone_tp (tp : list expr) :=
-  ∃ e_fst,
-  tp !! 0 = Some e_fst ∧
-  to_val e_fst = None.
-
-Lemma done_or_undone tp :
-  (∃ v, tp !! 0 = Some (Val v)) ∨ undone_tp tp.
-Admitted.
-
-Lemma trace_invariant_postfix_undone tp' σ' tr :
-  undone_tp tp' →
-  (thread_stuck tp' σ' → is_postfix_ctrace (CTVisEmpty void (subevent _ EUb)) tr) →
-  trace_invariant_postfix tp' σ' tr.
-Admitted.
 
 Lemma trace_invariant_postfix_postfix tp' σ' tr tr' :
   is_postfix_ctrace tr tr' →
   trace_invariant_postfix tp' σ' tr →
   trace_invariant_postfix tp' σ' tr'.
 Proof.
-  intros Hpost Htinv. rewrite /trace_invariant_postfix. rewrite /trace_invariant_postfix in Htinv.
+  intros Hpost Htinv. rewrite /trace_invariant_postfix/tp_termination. rewrite /trace_invariant_postfix/tp_termination in Htinv.
   destruct tp'.
-Admitted.
+  - destruct (decide _); last done. rewrite /ctrace_terminates_in. by etransitivity.
+  - destruct (to_val e) as [v|] eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      rewrite /ctrace_terminates_in. by etransitivity.
+    * destruct (decide _), e; rewrite /ctrace_terminates_in //; by etransitivity.
+Qed.
 
-Lemma is_ctrace_done tp v :
-  tp !! 0 = Some (Val v) →
+Lemma tp_termination_ub (tp : list expr) (σ : state) :
+  tp_termination tp σ = Some TermUb →
+  thread_stuck tp σ.
+Proof.
+  intros Hterm.
+  rewrite /tp_termination in Hterm.
+  destruct tp.
+  - destruct (decide _) as [Hstuck|]; last discriminate.
+    done.
+  - destruct e eqn:Heq; first discriminate; rewrite -Heq in Hterm;
+    destruct (decide _) as [Hstuck|]; try discriminate; rewrite -Heq //.
+Qed.
+
+Lemma is_ctrace_ret tp σ v :
+  tp_termination tp σ = Some (TermRet v) →
   is_ctrace (CTRet v) 0 (compile_tp tp).
-Admitted.
+Proof.
+  intros Hterm.
+  rewrite /tp_termination in Hterm.
+  destruct tp.
+  - destruct (decide _) as [Hstuck|]; discriminate.
+  - destruct e; try destruct (decide (_)) as [Hstuck|]; try discriminate.
+    injection Hterm as ->.
+    rewrite /compile_tp. simpl_itree.
+    exists (Ret v). split; first done. constructor.
+Qed.
 
-Lemma trace_invariant_done tp σ v :
-  tp !! 0 = Some (Val v) →
+Lemma trace_invariant_ret tp σ v :
+  tp_termination tp σ = Some (TermRet v) →
   trace_invariant σ tp σ (CTRet v).
-Admitted.
+Proof.
+  intros Hterm.
+  rewrite /tp_termination in Hterm.
+  destruct tp.
+  - destruct (decide _) as [Hstuck|]; discriminate.
+  - destruct e; try destruct (decide (_)) as [Hstuck|]; try discriminate.
+    injection Hterm as ->.
+    split; last done.
+    rewrite /trace_invariant_postfix/=. constructor.
+Qed.
 
 Lemma UnOp_stuck op v σ :
   stuck (UnOp op (Val v)) σ →
@@ -518,21 +548,33 @@ Proof.
   by constructor.
 Qed.
 
-Lemma enumerate_lookup' {A} (xs : list A) (tid : nat) :
-  (enumerate xs) !! tid = (λ x, (tid, x)) <$> (xs !! tid).
-Admitted.
-
-Lemma stuck_ub tp tid e σ :
-  tp !! tid = Some e →
-  undone_tp tp →
-  stuck e σ →
-  ∃ tr, trace_invariant σ tp σ tr ∧ is_ctrace tr tid (compile_tp tp).
+Lemma enumerate_from_lookup' {A} (n : nat) (xs : list A) (idx : nat) :
+  (enumerate_from n xs) !! idx = (λ x, (n + idx, x)) <$> (xs !! idx).
 Proof.
-  intros Htp Hundone (K&e'&->&Hbasic&Hstuck)%stuck_basic.
+  revert idx n.
+  induction xs as [|x xs IH]; first done.
+  intros idx n.
+  destruct idx as [|idx']; first by replace (n + 0) with n by lia.
+  rewrite enumerate_from_cons /= IH.
+  destruct (xs !! idx'); last done.
+  simpl. f_equiv. f_equiv. lia.
+Qed.
+Lemma enumerate_lookup' {A} (xs : list A) (idx : nat) :
+  (enumerate xs) !! idx = (λ x, (idx, x)) <$> (xs !! idx).
+Proof. apply enumerate_from_lookup'. Qed.
+
+Lemma stuck_ub tp σ :
+  tp_termination tp σ = Some TermUb →
+  ∃ tid tr, trace_invariant σ tp σ tr ∧ is_ctrace tr tid (compile_tp tp).
+Proof.
+  intros Hterm.
+  assert (Hterm' := Hterm).
+  apply tp_termination_ub in Hterm' as (tid&e&Htp&(K&e'&->&Hbasic&Hstuck)%stuck_basic).
+  exists tid.
   destruct Hbasic as [x|f x e0|v1 v2 | | | | | | | | | | | | | | | | | | ].
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -545,7 +587,7 @@ Proof.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -559,7 +601,7 @@ Proof.
       rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -569,7 +611,7 @@ Proof.
     rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -579,7 +621,7 @@ Proof.
     rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -597,7 +639,7 @@ Proof.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -611,7 +653,7 @@ Proof.
       rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -631,7 +673,7 @@ Proof.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -652,7 +694,7 @@ Proof.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
     split; first split; eauto.
-    { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+    { rewrite /trace_invariant_postfix Hterm. constructor. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -680,7 +722,7 @@ Proof.
         by eapply FreeS.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -693,7 +735,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -706,7 +748,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
       split; first split; eauto.
-      { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+      { rewrite /trace_invariant_postfix Hterm. constructor. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -723,7 +765,7 @@ Proof.
         by eapply LoadS.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -736,7 +778,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -749,7 +791,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
       split; first split; eauto.
-      { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+      { rewrite /trace_invariant_postfix Hterm. constructor. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -766,7 +808,7 @@ Proof.
         by eapply StoreS.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -779,7 +821,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -792,7 +834,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
       split; first split; eauto.
-      { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+      { rewrite /trace_invariant_postfix Hterm. constructor. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -809,7 +851,7 @@ Proof.
         by eapply XchgS.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -822,7 +864,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -835,7 +877,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
       split; first split; eauto.
-      { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+      { rewrite /trace_invariant_postfix Hterm. constructor. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -853,7 +895,7 @@ Proof.
            by eapply CmpXchgS.
         ++ exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
            split; first split.
-           +++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+           +++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
            +++ simpl. rewrite decide_True //.
            +++ eapply is_ctrace_insert.
                { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -866,7 +908,7 @@ Proof.
                rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -879,7 +921,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
         split; first split.
-        ++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+        ++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
         ++ simpl. rewrite decide_True //.
         ++ eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -892,7 +934,7 @@ Proof.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
       split; first split; eauto.
-      { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+      { rewrite /trace_invariant_postfix Hterm. constructor. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -915,7 +957,7 @@ Proof.
                by eapply FaaS.
            +++ exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
                split; first split.
-               ++++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+               ++++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
                ++++ simpl. rewrite decide_True //.
                ++++ eapply is_ctrace_insert.
                     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -928,7 +970,7 @@ Proof.
                     rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
         ++ exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
            split; first split.
-           +++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+           +++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
            +++ simpl. rewrite decide_True //.
            +++ eapply is_ctrace_insert.
                { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -941,7 +983,7 @@ Proof.
                rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
         ++ exists (CTVis state (subevent _ EGetState) σ (CTVisEmpty void (subevent _ EUb))).
            split; first split.
-           +++ eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. repeat constructor.
+           +++ rewrite /trace_invariant_postfix Hterm. repeat constructor.
            +++ simpl. rewrite decide_True //.
            +++ eapply is_ctrace_insert.
                { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
@@ -954,7 +996,7 @@ Proof.
                rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVisEmpty void (subevent _ EUb)).
         split; first split; eauto.
-        { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+        { rewrite /trace_invariant_postfix Hterm. constructor. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite compile_expr_bind'; first done. admit. }
@@ -963,7 +1005,7 @@ Proof.
         rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
       split; first split; eauto.
-      { eapply trace_invariant_postfix_undone; eauto. intros Hstuck'. constructor. }
+      { rewrite /trace_invariant_postfix Hterm. constructor. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -1275,27 +1317,22 @@ Lemma lt_gt n m :
 Proof. lia. Qed.
 
 (* TODO: Idea: make κ = [] *)
-Lemma has_trace n tp σ tp' σ' κ :
+Lemma has_trace n tp σ tp' σ' κ tx :
   language.nsteps n (tp, σ) κ (tp', σ') →
+  tp_termination tp' σ' = Some tx →
   length tp > 0 →
-  ∃ tr tid,
+  ∃ tid tr,
     trace_invariant σ tp' σ' tr ∧
     is_ctrace (R := val) tr tid (compile_tp tp).
 Proof.
-  revert tp σ tp' σ' κ. induction n as [|n IH]; intros tp σ tp' σ' κ Hstep Hne.
-  { destruct (done_or_undone tp) as [[v Hdone]|Hundone].
-    * assert (Hdone' := Hdone).
-      apply is_ctrace_done in Hdone as Htr.
-      apply trace_invariant_done with (σ := σ) in Hdone' as Htinv.
-      exists (CTRet v), 0. inversion Hstep. subst. by split.
-    * destruct (decide (thread_stuck tp σ)) as [(tid&e&Htp&Hstuck)|].
-      + apply stuck_ub with (tp := tp) (tid := tid) in Hstuck as (tr&Hinv&Htr); eauto.
-        exists tr, tid. split; last done. inversion Hstep; subst. done.
-      + inversion Hstep; subst.
-        exists CTCut, 0. split; first split.
-        ++ apply trace_invariant_postfix_undone; first done. by intros Hstuck.
-        ++ done.
-        ++ apply is_ctrace_CTCut. rewrite map_length enumerate_length //.
+  revert tp σ tp' σ' κ. induction n as [|n IH]; intros tp σ tp' σ' κ Hstep Hterm Hne.
+  { destruct tx as [r|].
+    - assert (Hterm' := Hterm).
+      apply is_ctrace_ret in Hterm as Htr.
+      apply trace_invariant_ret with (σ := σ') in Hterm' as Htinv.
+      exists 0, (CTRet r). inversion Hstep. subst. by split.
+    - inversion Hstep; subst.
+      apply stuck_ub in Hterm as (tid&tr&Hinv&Htr); eauto.
   }
   inversion Hstep as [|m [tp1 σ1] [tp2 σ2] [tp3 σ3] ? ? Hstep'' Hstep']. subst.
   inversion Hstep'' as [e1' σ1 e2' σ2' efs tpa tpb Htp' Htp2' Hprim].
@@ -1306,7 +1343,7 @@ Proof.
   (* TODO: Use [compile_expr_bind'] *)
   destruct (decide (length K = 0)) as [HK|HK].
   - apply nil_length_inv in HK as ->. simpl. simpl in *.
-    apply IH in Hstep' as [tr [tid [Hinv Htr]]]; last first.
+    apply IH in Hstep' as [tid [tr [Hinv Htr]]]; eauto; last first.
     { rewrite app_length /= app_length.
       rewrite app_length /= in Hne.
       lia.
@@ -1314,26 +1351,26 @@ Proof.
     destruct (decide (length tpa = 0)) as [Htpa|Htpa].
     * apply nil_length_inv in Htpa as ->. simpl. simpl in *.
       apply step_in_thread with (tp := ((v ← compile_expr e1; yield_if_not_val e1;; Ret v)%itree :: compile_tp' tpb)) (tid := 0) (tid' := tid) (k := λ v, Ret v) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
-      + exists tr', 0. rewrite compile_tp_cons //.
+      + exists 0, tr'. rewrite compile_tp_cons //.
       + simpl. rewrite compile_tp_cons compile_tp'_app // in Htr.
       + done.
       + done.
     * apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; kill_thread)%itree :: compile_tp' tpb)) (tid := length (compile_tp tpa)) (tid' := tid) (k := λ v, kill_thread) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
-      + exists tr'. exists (length (compile_tp tpa)). rewrite compile_tp_app //.
+      + exists (length (compile_tp tpa)), tr'. rewrite compile_tp_app //.
       + replace (length (compile_tp tpa)) with (length (compile_tp tpa) + 0) by lia.
         rewrite compile_tp_app // in Htr.
         rewrite insert_app_r /= -app_assoc /=.
         rewrite compile_tp'_cons compile_tp'_app // in Htr.
       + done.
       + by apply list_lookup_middle.
-  - apply IH in Hstep' as [tr [tid [Hinv Htr]]]; last first.
+  - apply IH in Hstep' as [tid [tr [Hinv Htr]]]; eauto; last first.
     { rewrite -lt_gt -Nat.neq_0_lt_0. intros Hemp%nil_length_inv.
       apply app_eq_nil in Hemp as [_ [=]].
     }
     destruct (decide (length tpa = 0)) as [Htpa|Htpa].
     * apply nil_length_inv in Htpa as ->. simpl. simpl in *.
       apply step_in_thread with (tp := ((v ← compile_expr e1; yield_if_not_val e1;; w ← compile_expr (fill K (Val v)); trigger EYield;; Ret w)%itree :: compile_tp' tpb)) (tid := 0) (tid' := tid) (k := λ v, (w ← compile_expr (fill K (Val v)); trigger EYield;; Ret w)%itree) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
-      + exists tr'. exists 0.
+      + exists 0, tr'.
         split; first done.
         rewrite compile_tp_cons /= compile_expr_bind.
         ++ setoid_rewrite fill_not_val; last first. { rewrite -lt_gt -Nat.neq_0_lt_0 //. }
@@ -1352,7 +1389,7 @@ Proof.
     * rewrite compile_tp_app // in Htr.
       rewrite compile_tp_app //.
       apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree :: compile_tp' tpb)) (tid := length tpa) (tid' := tid) (k := λ v, (compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
-      + exists tr'. exists (length tpa).
+      + exists (length tpa), tr'.
         split; first done.
         rewrite /= compile_expr_bind.
         ++ setoid_rewrite fill_not_val; last first. { rewrite -lt_gt -Nat.neq_0_lt_0 //. }
@@ -1455,7 +1492,7 @@ Lemma execution n e σ tp' σ' κ tx :
     end.
 Proof.
   intros Hsteps Hterm.
-  apply has_trace in Hsteps as (tr&tid&[Htinv [tr' Hst]]&Htr); last eauto.
+  apply has_trace with (tx := tx) in Hsteps as (tid&tr&[Htinv [tr' Hst]]&Htr); eauto.
   rewrite /trace_invariant_postfix in Htinv.
   rewrite Hterm in Htinv.
   apply interleaving_extending_trace in Htr as (t1&Hint&Htr).
