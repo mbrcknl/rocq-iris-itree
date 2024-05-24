@@ -449,7 +449,11 @@ Proof.
 Qed.
 
 Global Instance is_postfix_ctrace_trans {E R} : Transitive (is_postfix_ctrace (E := E) (R := R)).
-Admitted.
+Proof.
+  intros tr1 tr2 tr3 Htr12 Htr23.
+  induction Htr23; first done.
+  all: constructor; by apply IHHtr23.
+Qed.
 
 Section extend_ctrace.
   Context {E : Type → Type} {R : Type}.

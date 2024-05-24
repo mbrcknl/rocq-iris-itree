@@ -425,7 +425,17 @@ Qed.
 Definition thread_stuck (tp : list expr) σ :=
   ∃ tid e, tp !! tid = Some e ∧ stuck e σ.
 Global Instance thread_stuck_dec tp σ : Decision (thread_stuck tp σ).
-Admitted.
+Proof.
+  induction tp as [|e tp].
+  - right. intros (?&?&[=]&?).
+  - destruct IHtp as [Hstuck|Hstuck].
+    * left. destruct Hstuck as (tid&e'&Htp&Hstuck). exists (S tid), e'. eauto.
+    * destruct (decide (stuck e σ)).
+      + left. exists 0, e. eauto.
+      + right. intros (tid&e'&Htp&Hstuck').
+        destruct tid. { by injection Htp as ->. }
+        apply Hstuck. exists tid, e'. eauto.
+Qed.
 
 Variant Terminal (R : Type) :=
   | TermRet (r : R)
@@ -1429,12 +1439,37 @@ Qed.
 Lemma interp_tr_term {E E' R} `{ubE -< E'} (tr : trace (E +' E') R) (tx : Terminal R) :
   trace_terminates_in tr tx →
   trace_terminates_in (interp_tr tr) tx.
-Admitted.
+Proof.
+  intros Hterm.
+  induction tr.
+  - rewrite /= /trace_terminates_in. rewrite /trace_terminates_in in Hterm.
+    destruct tx; inversion Hterm. subst. constructor.
+  - simpl. destruct e.
+    * apply IHtr. destruct tx; inversion Hterm; by simplify_K.
+    * constructor. apply IHtr. destruct tx; inversion Hterm; by simplify_K.
+  - rewrite /= /trace_terminates_in. rewrite /trace_terminates_in in Hterm.
+    destruct tx; inversion Hterm. subst. constructor.
+  - rewrite /= /trace_terminates_in. rewrite /trace_terminates_in in Hterm.
+    destruct tx; inversion Hterm.
+Qed.
 
 Lemma sequencify_term {E E' R} `{ubE -< E'} (tr : ctrace (E +' E') R) (tx : Terminal R) :
   ctrace_terminates_in tr tx →
   trace_terminates_in (sequencify tr) (inl <$> tx).
-Admitted.
+Proof.
+  intros Hterm.
+  induction tr.
+  - rewrite /= /trace_terminates_in. rewrite /trace_terminates_in in Hterm.
+    destruct tx; inversion Hterm. subst. constructor.
+  - simpl. constructor. apply IHtr. destruct tx; inversion Hterm; by simplify_K.
+  - rewrite /= /trace_terminates_in.
+    destruct tx; inversion Hterm. subst. constructor.
+  - simpl. apply IHtr. destruct tx; inversion Hterm; by simplify_K.
+  - simpl. apply IHtr. destruct tx; inversion Hterm; by simplify_K.
+  - rewrite /= /trace_terminates_in. destruct tx; inversion Hterm.
+  - simpl. apply IHtr. destruct tx; inversion Hterm; by simplify_K.
+  - rewrite /= /trace_terminates_in. destruct tx; inversion Hterm.
+Qed.
 
 Lemma interp_tr_state_ret {E R S} `{EqDecision S} `{ubE -< E} σ (tr : trace (stateE S +' E) R) tr' (r : R) :
   trace_terminates_in tr (TermRet r) →
@@ -1464,17 +1499,14 @@ Lemma is_trace_term {R} (t : itree ubE R) tr tx :
       | TermUb => ub
       | TermRet r => Ret r
       end.
-Admitted.
-(*
 Proof.
   intros Hterm Htr. pfold. rewrite /eqit_. induction Htr.
-  - inversion Hub.
+  - destruct tx; inversion Hterm. by constructor.
   - by destruct e.
-  - inversion Hub. destruct e. constructor. by intros.
-  - inversion Hub.
+  - destruct tx; inversion Hterm. destruct e. constructor. by intros.
+  - destruct tx; inversion Hterm.
   - constructor; first done. by apply IHHtr.
 Qed.
-*)
 
 Lemma execution n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
