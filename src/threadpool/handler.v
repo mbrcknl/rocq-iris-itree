@@ -43,7 +43,7 @@ Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoo
     return value of the main thread concerns us. *)
     | EFork      => λ Φ s, Φ CurrentThread ∗ s NewThread
     (** To prove that one can [EYield], one must restablish all the invariants. *)
-    | EYield     => λ Φ _, |={∅, ⊤}=> |={⊤, ∅}=> Φ tt
+    | EYield     => λ Φ _, |={∅, ⊤}=> |={⊤, ∅}=> Φ ()
     | EKillThread => λ _ _, |={∅, ⊤}=> True
     end
   )%I _.

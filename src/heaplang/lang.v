@@ -1,6 +1,6 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
-From iris.itree Require Import wpi choice ub state handler itree.
+From iris.itree Require Import wpi choice ub state handler itree later.
 From iris.itree.threadpool Require Import handler.
 From iris.prelude Require Import prelude.
 From iris Require Import ghost_map.
@@ -9,6 +9,7 @@ From iris.heap_lang Require Export lang locations.
 From iris.base_logic.lib Require Import ghost_var.
 From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
+From elpi.apps Require Import locker.
 
 Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
 Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
@@ -20,14 +21,22 @@ Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z en
 Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
   (at level 100, z at level 200, right associativity) : itree_scope.
 
-Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' ubE.
+Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' laterE +' ubE.
 
-Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
+lock Definition step `{threadpoolE -< E} `{laterE -< E} (lt : bool) : itree E () :=
+  (if lt then trigger ELater else Ret ()) ;; trigger EYield.
+Arguments step !_.
+
+Lemma step_unfold `{threadpoolE -< E} `{laterE -< E} (lt : bool) :
+  step lt = ((if lt then trigger ELater else Ret ()) ;; trigger EYield : itree E ())%itree.
+Proof. rewrite unlock //. Qed.
+
+Definition step_if_not_val (lt : bool) (e : expr) {E} `{threadpoolE -< E} `{laterE -< E} : itree E () :=
   match to_val e with
   | Some _ => Ret ()
-  | None => trigger EYield
+  | None => step lt
   end.
-Arguments yield_if_not_val !_ / _.
+Arguments step_if_not_val _ !_.
 
 Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
   (match o with | Some x => Ret x | None => ub end)%itree.
@@ -118,62 +127,62 @@ Proof.
   - right. intros Heq. apply Hneq. by apply dsig_eq.
 Qed.
 
-Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
-  let compile_expr_yield e := (v ← compile_expr' e ; yield_if_not_val e ;; Ret v)%itree in
+Fixpoint compile_expr' (lt : bool) (e : expr) : itree (callE expr val +' heaplangE) val :=
+  let compile_expr_step e := (v ← compile_expr' lt e ; step_if_not_val lt e ;; Ret v)%itree in
   match e with
   | Val v => Ret v
   | Rec f x e => Ret (RecV f x e)
   | App e1 e2 =>
-      x ← compile_expr_yield e2;
-      f ← compile_expr_yield e1;
+      x ← compile_expr_step e2;
+      f ← compile_expr_step e1;
       '(f_, x_, e) ← (val_to_RecV f)?;
       let body := subst' x_ x  (subst' f_ f e) in
-      yield_if_not_val body;;
+      step_if_not_val lt body;;
       call body
   | UnOp op e =>
-      v ← compile_expr_yield e;
+      v ← compile_expr_step e;
       (un_op_eval op v)?
   | BinOp op e1 e2 =>
-      v2 ← compile_expr_yield e2;
-      v1 ← compile_expr_yield e1;
+      v2 ← compile_expr_step e2;
+      v1 ← compile_expr_step e1;
       (bin_op_eval op v1 v2)?
   | If e0 e1 e2 =>
-      v0 ← compile_expr_yield e0;
+      v0 ← compile_expr_step e0;
       b ← (val_to_bool v0)?;
       if b then
-        (* if true then e1 else e2 ~> e1 (must yield here!) ~> ... *)
-        yield_if_not_val e1;;
-        compile_expr' e1
+        (* if true then e1 else e2 ~> e1 (must step here!) ~> ... *)
+        step_if_not_val lt e1;;
+        compile_expr' lt e1
       else
-        yield_if_not_val e2;;
-        compile_expr' e2
+        step_if_not_val lt e2;;
+        compile_expr' lt e2
   | Pair e1 e2 =>
-      v2 ← compile_expr_yield e2;
-      v1 ← compile_expr_yield e1;
+      v2 ← compile_expr_step e2;
+      v1 ← compile_expr_step e1;
       Ret (PairV v1 v2)
   | Fst e =>
-      v ← compile_expr_yield e;
+      v ← compile_expr_step e;
       '(x, _) ← (val_to_pair v)?;
       Ret x
   | Snd e =>
-      v ← compile_expr_yield e;
+      v ← compile_expr_step e;
       '(_, y) ← (val_to_pair v)?;
       Ret y
   | InjL e =>
-      v ← compile_expr_yield e;
+      v ← compile_expr_step e;
       Ret (InjLV v)
   | InjR e =>
-      v ← compile_expr_yield e;
+      v ← compile_expr_step e;
       Ret (InjRV v)
   | Case e0 e1 e2 =>
-      v0' ← compile_expr_yield e0;
+      v0' ← compile_expr_step e0;
       v0 ← (val_to_sum v0')?;
       match v0 with
       | inl v =>
-          trigger EYield;;
+          step lt;;
           call (App e1 (Val v))
       | inr v =>
-          trigger EYield;;
+          step lt;;
           call (App e2 (Val v))
       end
   | Fork e =>
@@ -181,52 +190,50 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       match thread with
       | CurrentThread => Ret (LitV LitUnit)
       | NewThread =>
-          v ← compile_expr_yield e;
+          v ← compile_expr_step e;
           kill_thread
       end
   | AllocN ne e =>
-      v ← compile_expr_yield e;
-      n' ← compile_expr_yield ne;
+      v ← compile_expr_step e;
+      n' ← compile_expr_step ne;
       n ← (val_to_int n')?;
       assert (0 < n)%Z;;
       σ ← trigger EGetState;
-      (* See comment about deallocated cells in [iris_heap_lang/lang.v]. *)
-      (* TODO: There should be a proof obligation for this being nonempty. *)
       l ← trigger (EDemonic (free_locations n σ));
       trigger (ESetState (state_init_heap (`l) n v σ));;
       Ret (LitV (LitLoc (`l)))
   | Free e =>
-      l' ← compile_expr_yield e;
+      l' ← compile_expr_step e;
       l ← (val_to_loc l')?;
       σ ← trigger EGetState;
       (σ.(heap) !! l)??;;
       trigger (ESetState (state_upd_heap (<[l:=None]>) σ));;
       Ret (LitV LitUnit)
   | Load e =>
-      l' ← compile_expr_yield e;
+      l' ← compile_expr_step e;
       l ← (val_to_loc l')?;
       σ ← trigger EGetState;
       (σ.(heap) !! l)??
   | Store e1 e2 =>
-      v ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
+      v ← compile_expr_step e2;
+      l' ← compile_expr_step e1;
       l ← (val_to_loc l')?;
       σ ← trigger EGetState;
       w ← (σ.(heap) !! l)??;
       trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
       Ret (LitV LitUnit)
   | Xchg e1 e2 =>
-      v ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
+      v ← compile_expr_step e2;
+      l' ← compile_expr_step e1;
       l ← (val_to_loc l')?;
       σ ← trigger EGetState;
       w ← (σ.(heap) !! l)??;
       trigger (ESetState (state_upd_heap <[l:=Some v]> σ));;
       Ret w
   | CmpXchg e1 e2 e3 =>
-      v2 ← compile_expr_yield e3;
-      v1 ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
+      v2 ← compile_expr_step e3;
+      v1 ← compile_expr_step e2;
+      l' ← compile_expr_step e1;
       l ← (val_to_loc l')?;
       σ ← trigger EGetState;
       w ← (σ.(heap) !! l)??;
@@ -237,8 +244,8 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
         Ret (PairV w (LitV (LitBool true)))
       else Ret (PairV w (LitV (LitBool false)))
   | FAA e1 e2 =>
-      v' ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
+      v' ← compile_expr_step e2;
+      l' ← compile_expr_step e1;
       v ← (val_to_int v')?;
       l ← (val_to_loc l')?;
       σ ← trigger EGetState;
@@ -249,10 +256,10 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   | _ => ub
   end%itree.
 
-Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
+Definition compile_expr (lt : bool) : expr → itree heaplangE val := rec (compile_expr' lt).
 
-Lemma compile_expr_val (v : val) :
-  compile_expr (Val v) ≈ Ret v.
+Lemma compile_expr_val lt (v : val) :
+  compile_expr lt (Val v) ≈ Ret v.
 Proof. rewrite /compile_expr. by simpl_itree. Qed.
 
 Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
@@ -263,23 +270,30 @@ Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
   | _ => True
   end.
 
-Lemma interp_yield e :
-  interp (recursive compile_expr') (yield_if_not_val e) ≈ yield_if_not_val e.
+Lemma interp_step lt :
+  interp (recursive (compile_expr' lt)) (step lt) ≈ step lt.
 Proof.
-  rewrite /yield_if_not_val. destruct (to_val e); by simpl_itree.
+  rewrite unlock. destruct lt; by simpl_itree.
+Qed.
+Lemma interp_step_if_not_val lt e :
+  interp (recursive (compile_expr' lt)) (step_if_not_val lt e) ≈ step_if_not_val lt e.
+Proof.
+  rewrite /step_if_not_val unlock. destruct lt, (to_val e); by simpl_itree.
 Qed.
 
-Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
+Lemma compile_expr_bind_item lt (Ki : ectx_item) (e : expr) :
   supported_subset_ectx Ki →
-  compile_expr (fill_item Ki e) ≈
-    v ← compile_expr e;
-    yield_if_not_val e;;
-    compile_expr (fill_item Ki (Val v)).
-Admitted. (* Admitted for performance reasons: *)
-(* Proof.
+  compile_expr lt (fill_item Ki e) ≈
+    v ← compile_expr lt e;
+    step_if_not_val lt e;;
+    compile_expr lt (fill_item Ki (Val v)).
+Admitted.
+(* TODO: Commented out for performance reasons:
+Proof.
   intros Hsubset. destruct Ki; simpl; rewrite /compile_expr; try contradiction;
-  simpl_itree; f_equiv; intros v; f_equiv; apply interp_yield.
-Qed. *)
+  simpl_itree; f_equiv; intros v; f_equiv; apply interp_step_if_not_val.
+Qed.
+*)
 
 Lemma split_last {A} (xs : list A) :
   length xs > 0 →
@@ -303,28 +317,28 @@ Proof.
   by apply nil_length_inv in Hlen as ->.
 Qed.
 
-Lemma fill_item_not_val Ki e :
-  yield_if_not_val (fill_item Ki e) ≈ (trigger EYield : itree heaplangE ()).
+Lemma fill_item_not_val lt Ki e :
+  step_if_not_val lt (fill_item Ki e) ≈ (step lt : itree heaplangE ()).
 Proof.
-  rewrite /yield_if_not_val. by destruct Ki.
+  rewrite /step_if_not_val. by destruct Ki.
 Qed.
-Lemma fill_not_val K e :
+Lemma fill_not_val lt K e :
   length K > 0 →
-  yield_if_not_val (fill K e) ≈ (trigger EYield : itree heaplangE ()).
+  step_if_not_val lt (fill K e) ≈ (step lt : itree heaplangE ()).
 Proof.
   intros Hlen.
   unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
   rewrite fill_app /= fill_item_not_val //.
 Qed.
 
-Lemma compile_expr_bind_ind K e l :
+Lemma compile_expr_bind_ind lt K e l :
   Forall supported_subset_ectx K →
   length K = l →
   l > 0 →
-  compile_expr (fill K e) ≈
-    v ← compile_expr e;
-    yield_if_not_val e;;
-    compile_expr (fill K (Val v)).
+  compile_expr lt (fill K e) ≈
+    v ← compile_expr lt e;
+    step_if_not_val lt e;;
+    compile_expr lt (fill K (Val v)).
 Proof.
   revert K. induction l as [|n IH]; intros K Hsubset Hlen Hne.
   { apply nil_length_inv in Hlen. lia. }
@@ -343,26 +357,26 @@ Proof.
   - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
     rewrite Hlen. lia.
 Qed.
-Lemma compile_expr_bind K e :
+Lemma compile_expr_bind lt K e :
   Forall supported_subset_ectx K →
   length K > 0 →
-  compile_expr (fill K e) ≈
-    v ← compile_expr e;
-    yield_if_not_val e;;
-    compile_expr (fill K (Val v)).
+  compile_expr lt (fill K e) ≈
+    v ← compile_expr lt e;
+    step_if_not_val lt e;;
+    compile_expr lt (fill K (Val v)).
 Proof.
   intros Hsubset Hne. by apply compile_expr_bind_ind with (l := length K).
 Qed.
 
-Lemma compile_expr_bind' K e :
+Lemma compile_expr_bind' lt K e :
   Forall supported_subset_ectx K →
-  compile_expr (fill K e) ≈
-    v ← compile_expr e;
+  compile_expr lt (fill K e) ≈
+    v ← compile_expr lt e;
     if (decide (length K = 0)) then
       Ret v
     else
-      yield_if_not_val e;;
-      compile_expr (fill K (Val v)).
+      step_if_not_val lt e;;
+      compile_expr lt (fill K (Val v)).
 Proof.
   intros Hsubset.
   destruct (decide _) as [Heq|Hneq].
@@ -391,18 +405,27 @@ Section heaplangH.
   Global Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
     ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap).
 
-  Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ ubH.
+  Definition heaplangH : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ laterH ⊕ ubH.
 
   Definition heap_inv : iProp Σ :=
     inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)).
 
-  Lemma wpi_yield_if_not_val e Φ :
+  Lemma wpi_step lt Φ :
     Φ () -∗
-    WPi (yield_if_not_val e) @ heaplangH; ⊤ {{ Φ }}.
+    WPi step lt @ heaplangH; ⊤ {{ Φ }}.
   Proof.
-    rewrite /yield_if_not_val. destruct (to_val e).
+    iIntros "HΦ". rewrite step_unfold. destruct lt.
+    - iApply @wpi_bind. iApply @wpi_later. iNext. iModIntro. by iApply @wpi_yield.
+    - simpl_itree. by iApply @wpi_yield.
+  Qed.
+
+  Lemma wpi_step_if_not_val lt e Φ :
+    Φ () -∗
+    WPi (step_if_not_val lt e) @ heaplangH; ⊤ {{ Φ }}.
+  Proof.
+    rewrite /step_if_not_val. destruct (to_val e).
     * iApply wpi_ret.
-    * iIntros "HΦ". by iApply @wpi_yield.
+    * iIntros "HΦ". by iApply @wpi_step.
   Qed.
 
   (*
@@ -416,34 +439,34 @@ Section heaplangH.
   Global Instance wp_heaplang_wp `{!invGS_gen hlc Σ} :
     Wp (iProp Σ) expr val () := λ _ M e Φ, wp_heaplang e M Φ.
  *)
-  Lemma wpi_bind_K K e Φ :
+  Lemma wpi_bind_K lt K e Φ :
     Forall supported_subset_ectx K →
     length K > 0 →
-    WPi compile_expr e @ heaplangH; ⊤ {{ v,
-      WPi compile_expr (fill K (Val v)) @ heaplangH; ⊤ {{ Φ }}
+    WPi compile_expr lt e @ heaplangH; ⊤ {{ v,
+      WPi compile_expr lt (fill K (Val v)) @ heaplangH; ⊤ {{ Φ }}
     }} -∗
-    WPi compile_expr (fill K e) @ heaplangH; ⊤ {{ Φ }}.
+    WPi compile_expr lt (fill K e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
     iIntros (Hs Hlen) "Hwp". rewrite compile_expr_bind //. iApply wpi_bind.
     iApply wpi_wand; last done. iIntros (r) "Hwp".
-    iApply wpi_bind. rewrite /yield_if_not_val. destruct e.
+    iApply wpi_bind. rewrite /step_if_not_val. destruct e.
     1:by iApply wpi_ret.
-    all:by iApply @wpi_yield.
+    all:by iApply @wpi_step.
   Qed.
 
-  Lemma wpi_Fork e Φ :
+  Lemma wpi_Fork lt e Φ :
     Φ (LitV LitUnit) -∗
-    WPi compile_expr e @ heaplangH; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
-    WPi compile_expr (Fork e) @ heaplangH; ⊤ {{ Φ }}.
+    WPi compile_expr lt e @ heaplangH; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
+    WPi compile_expr lt (Fork e) @ heaplangH; ⊤ {{ Φ }}.
   Proof.
     iIntros "HΦ Hwp". rewrite /compile_expr. simpl_itree.
     rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
     - simpl_itree. by iApply wpi_ret.
     - simpl_itree. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->).
-      rewrite /yield_if_not_val. destruct (to_val _) eqn:Hval.
+      rewrite /step_if_not_val. destruct (to_val _) eqn:Hval.
       * rewrite /kill_thread. simpl_itree. rewrite bind_trigger. by iApply @wpi_kill.
-      * rewrite /kill_thread. simpl_itree. iApply wpi_bind. iApply @wpi_yield.
+      * rewrite /kill_thread. rewrite interp_step. iApply wpi_bind. iApply @wpi_step.
         iApply wpi_bind. by iApply @wpi_kill.
   Qed.
 
@@ -464,11 +487,11 @@ Section heaplangH.
       done.
   Qed.
 
-  Lemma wpi_AllocN M v n :
+  Lemma wpi_AllocN lt M v n :
     (0 < n)%Z →
     ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
-    WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; M
+    WPi compile_expr lt (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH; M
       {{ l', ∃ l, ⌜l' = LitV (LitLoc l)⌝ ∧ [∗ list] i ∈ seq 0 (Z.to_nat n),
           (l +ₗ (i : nat)) ↦ v }}.
   Proof.
@@ -496,10 +519,10 @@ Section heaplangH.
     iExists (`l). iSplit; first done. iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
   Qed.
 
-  Lemma wpi_Load M l v dq :
+  Lemma wpi_Load lt M l v dq :
     ↑heaplangH_inv_name ⊆ M →
     l ↦{dq} v -∗
-    WPi compile_expr (Load (Val $ LitV $ LitLoc l)) @ heaplangH; M
+    WPi compile_expr lt (Load (Val $ LitV $ LitLoc l)) @ heaplangH; M
       {{ v', ⌜v' = v⌝ ∧ l ↦{dq} v }}.
   Proof.
     iIntros (Hmask) "Hpointsto".
@@ -510,11 +533,11 @@ Section heaplangH.
     iFrame. iApply wpi_ret. rewrite Hlu. simpl_itree. iApply wpi_ret. eauto.
   Qed.
 
-  Lemma wpi_Store M l v v' :
+  Lemma wpi_Store lt M l v v' :
     ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ v -∗
-    WPi compile_expr (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH; M
+    WPi compile_expr lt (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH; M
       {{ r, ⌜r = LitV (LitUnit)⌝ ∧ l ↦ v' }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto".
@@ -535,11 +558,11 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wpi_Free M l v :
+  Lemma wpi_Free lt M l v :
     ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ v -∗
-    WPi compile_expr (Free (Val $ LitV $ LitLoc l)) @ heaplangH; M
+    WPi compile_expr lt (Free (Val $ LitV $ LitLoc l)) @ heaplangH; M
       {{ r, ⌜r = LitV (LitUnit)⌝ }}.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
@@ -561,11 +584,11 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wp_Xchg M l v v' :
+  Lemma wp_Xchg lt M l v v' :
     ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ v -∗
-    WPi compile_expr (Xchg (Val $ LitV (LitLoc l)) (Val v')) @ heaplangH; M
+    WPi compile_expr lt (Xchg (Val $ LitV (LitLoc l)) (Val v')) @ heaplangH; M
       {{ r, ⌜r = v⌝ ∧ l ↦ v' }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto".
@@ -586,13 +609,13 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wpi_CmpXchg_fail M l dq v' v1 v2 :
+  Lemma wpi_CmpXchg_fail lt M l dq v' v1 v2 :
     ↑heaplangH_inv_name ⊆ M →
     v' ≠ v1 →
     vals_compare_safe v' v1 →
     heap_inv -∗
     l ↦{dq} v' -∗
-    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; M
+    WPi compile_expr lt (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; M
       {{ r, ⌜r = PairV v' (LitV $ LitBool false)⌝ ∧ l ↦{dq} v' }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "#Hinv Hpointsto".
@@ -607,13 +630,13 @@ Section heaplangH.
     iApply wpi_ret. iSplitL "Hauth"; first eauto. eauto.
   Qed.
 
-  Lemma wpi_CmpXchg_suc M l v' v1 v2 :
+  Lemma wpi_CmpXchg_suc lt M l v' v1 v2 :
     ↑heaplangH_inv_name ⊆ M →
     v' = v1 →
     vals_compare_safe v' v1 →
     heap_inv -∗
     l ↦ v' -∗
-    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; M
+    WPi compile_expr lt (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH; M
       {{ r, ⌜r = PairV v' (LitV $ LitBool true)⌝ ∧ l ↦ v2 }}.
   Proof.
     iIntros (Hmask Heq Hcmp) "#Hinv Hpointsto".
@@ -635,11 +658,11 @@ Section heaplangH.
     eauto.
   Qed.
 
-  Lemma wpi_FAA M l i1 i2 :
+  Lemma wpi_FAA lt M l i1 i2 :
     ↑heaplangH_inv_name ⊆ M →
     heap_inv -∗
     l ↦ LitV (LitInt i1) -∗
-    WPi compile_expr (FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2)) @ heaplangH; M
+    WPi compile_expr lt (FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2)) @ heaplangH; M
       {{ r, ⌜r = LitV (LitInt i1)⌝ ∧ l ↦ LitV (LitInt (i1 + i2)) }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto".

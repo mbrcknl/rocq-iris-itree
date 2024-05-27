@@ -4,6 +4,7 @@ From iris Require Import invariants ghost_map.
 From iris.proofmode Require Import proofmode.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.program_logic Require Import language.
+From iris.itree Require Import later.
 From iris.itree.threadpool Require Import handler interleaving.
 From iris.itree.heaplang Require Import lang.
 From Paco Require Import paco.
@@ -21,13 +22,13 @@ Proof.
   - right. intros Heq. by injection Heq as -> ->.
 Qed.
 
-Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
-  (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
+Lemma compile_Fork {R} lt e (k : val → itree heaplangE R) :
+  (v ← compile_expr lt (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
     match thread with
     | CurrentThread => k (LitV LitUnit)
     | NewThread =>
-        v ← compile_expr e;
-        yield_if_not_val e;;
+        v ← compile_expr lt e;
+        step_if_not_val lt e;;
         kill_thread
     end
   )%itree.
@@ -36,17 +37,14 @@ Proof.
   rewrite -bind_trigger. f_equiv. intros [|].
   - by simpl_itree.
   - simpl_itree. f_equiv. intros v. rewrite /kill_thread.
-      rewrite /yield_if_not_val. destruct (to_val _) eqn:Hval.
-      * rewrite /kill_thread. simpl_itree. rewrite -bind_trigger. f_equiv; first done.
-        intros [].
-      * rewrite /kill_thread. simpl_itree. f_equiv; first done.
-        intros []. rewrite -bind_trigger. f_equiv; first done. intros [].
+    rewrite interp_step_if_not_val. f_equiv. intros _. rewrite -bind_trigger.
+    f_equiv; first done. intros [].
 Qed.
 
-Lemma trace_base_Fork {R} tid (tp : list (itree heaplangE R)) tr e k :
-  tp !! tid = Some (v ← compile_expr (Fork e) ; k v)%itree →
-  is_ctrace tr tid (<[tid := k (LitV LitUnit)]>tp ++ [(compile_expr e ;; yield_if_not_val e ;; kill_thread)%itree]) →
-  is_ctrace (CTFork (compile_expr e ;; yield_if_not_val e ;; kill_thread) tr) tid tp.
+Lemma trace_base_Fork {R} lt tid (tp : list (itree heaplangE R)) tr e k :
+  tp !! tid = Some (v ← compile_expr lt (Fork e) ; k v)%itree →
+  is_ctrace tr tid (<[tid := k (LitV LitUnit)]>tp ++ [(compile_expr lt e ;; step_if_not_val lt e ;; kill_thread)%itree]) →
+  is_ctrace (CTFork (compile_expr lt e ;; step_if_not_val lt e ;; kill_thread) tr) tid tp.
 Proof.
   intros Htp Htr. eapply is_ctrace_insert; first done; first apply compile_Fork; eauto.
   eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
@@ -59,67 +57,66 @@ Proof.
   by injection Ht' as <-.
 Qed.
 
-Lemma base_UnOp op v v' :
+Lemma base_UnOp lt op v v' :
   un_op_eval op v = Some v' →
-  compile_expr (UnOp op (Val v)) ≈ Ret v'.
+  compile_expr lt (UnOp op (Val v)) ≈ Ret v'.
 Proof.
   intros Hop.
   rewrite /compile_expr. simpl_itree. rewrite Hop. by simpl_itree.
 Qed.
 
-Lemma base_BinOp op v1 v2 v3 :
+Lemma base_BinOp lt op v1 v2 v3 :
   bin_op_eval op v1 v2 = Some v3 →
-  compile_expr (BinOp op (Val v1) (Val v2)) ≈ Ret v3.
+  compile_expr lt (BinOp op (Val v1) (Val v2)) ≈ Ret v3.
 Proof.
   intros Hop.
   rewrite /compile_expr. simpl_itree. rewrite Hop. by simpl_itree.
 Qed.
 
-Lemma base_Beta f_ x_ e v :
-  compile_expr (App (Val (RecV f_ x_ e)) (Val v))
+Lemma base_Beta lt f_ x_ e v :
+  compile_expr lt (App (Val (RecV f_ x_ e)) (Val v))
   ≈ let e' := (subst' x_ v (subst' f_ (RecV f_ x_ e) e))
-     in yield_if_not_val e' ;; compile_expr e'.
+     in step_if_not_val lt e' ;; compile_expr lt e'.
 Proof.
-  rewrite /compile_expr. simpl_itree. rewrite /yield_if_not_val.
-  destruct (to_val _) eqn:Heq; by simpl_itree.
+  rewrite /compile_expr. simpl_itree. rewrite interp_step_if_not_val //.
 Qed.
 
-Definition compile_tp' (tp : list expr) : list (itree heaplangE val) :=
+Definition compile_tp' lt (tp : list expr) : list (itree heaplangE val) :=
   map (λ e,
-    compile_expr e ;;
-    yield_if_not_val e ;;
+    compile_expr lt e ;;
+    step_if_not_val lt e ;;
     kill_thread
   )%itree tp.
-Definition compile_tp (tp : list expr) : list (itree heaplangE val) :=
+Definition compile_tp lt (tp : list expr) : list (itree heaplangE val) :=
   map (λ '(tid, e),
-    v ← compile_expr e ;
-    yield_if_not_val e ;;
+    v ← compile_expr lt e ;
+    step_if_not_val lt e ;;
     match tid with
     | 0 => Ret v
     | _ => kill_thread
     end
   )%itree (enumerate tp).
 
-Lemma compile_tp_len tp :
-  length (compile_tp tp) = length tp.
+Lemma compile_tp_len lt tp :
+  length (compile_tp lt tp) = length tp.
 Proof. rewrite /compile_tp map_length enumerate_length //. Qed.
-Lemma compile_tp'_app tp tp' :
-  compile_tp' (tp ++ tp') = compile_tp' tp ++ compile_tp' tp'.
+Lemma compile_tp'_app lt tp tp' :
+  compile_tp' lt (tp ++ tp') = compile_tp' lt tp ++ compile_tp' lt tp'.
 Proof. rewrite /compile_tp' map_app //. Qed.
-Lemma compile_tp'_cons e tp :
-  compile_tp' (e :: tp) = compile_tp' [e] ++ compile_tp' tp.
+Lemma compile_tp'_cons lt e tp :
+  compile_tp' lt (e :: tp) = compile_tp' lt [e] ++ compile_tp' lt tp.
 Proof. done. Qed.
-Lemma compile_tp_cons e tp :
-  compile_tp (e :: tp) = compile_tp [e] ++ compile_tp' tp.
+Lemma compile_tp_cons lt e tp :
+  compile_tp lt (e :: tp) = compile_tp lt [e] ++ compile_tp' lt tp.
 Proof.
   rewrite /compile_tp /=. f_equiv.
   replace 1 with (S 0) by done.
   generalize 0. induction tp as [|e' tp IH]; first done. intros n.
   simpl. f_equiv. apply IH.
 Qed.
-Lemma compile_tp_app tp tp' :
+Lemma compile_tp_app lt tp tp' :
   length tp ≠ 0 →
-  compile_tp (tp ++ tp') = compile_tp tp ++ compile_tp' tp'.
+  compile_tp lt (tp ++ tp') = compile_tp lt tp ++ compile_tp' lt tp'.
 Proof.
   destruct tp as [|e tp]; first done. intros _.
   rewrite compile_tp_cons /= compile_tp_cons /= compile_tp'_app //.
@@ -471,15 +468,27 @@ Definition tp_termination (tp : list expr) (σ : state) : option (Terminal val) 
   | _ => if decide (thread_stuck tp σ) then Some TermUb else None
   end.
 
-Definition trace_invariant_postfix tp' σ' (tr : ctrace (demonicE +' stateE state +' ubE) val) :=
+(* TODO: Factor this event type into its own definition. *)
+Definition trace_invariant_postfix tp' σ' (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
   match tp_termination tp' σ' with
   | Some tx => ctrace_terminates_in tr tx
   | None => False
   end.
+Fixpoint no_laters {R} (tr : trace (laterE +' ubE) R) : bool :=
+  match tr with
+  | TVis _ (inl1 ELater) _ _ => false
+  | TVis _ _ _ tr' => no_laters tr'
+  | _ => true
+  end.
+Definition trace_invariant_state (lt : bool) σ (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+  match interp_tr_state σ (interp_tr (sequencify tr)) with
+  | Some tr' => no_laters tr' || lt
+  | None => false
+  end.
 (* TODO: Add invariant about the final state reached in trace. Should be σ'. *)
-Definition trace_invariant σ tp' σ' (tr : ctrace (demonicE +' stateE state +' ubE) val) :=
+Definition trace_invariant (lt : bool) σ tp' σ' (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
   trace_invariant_postfix tp' σ' tr ∧
-  is_Some (interp_tr_state σ (interp_tr (sequencify tr))).
+  trace_invariant_state lt σ tr.
 
 Lemma trace_invariant_postfix_postfix tp' σ' tr tr' :
   is_postfix_ctrace tr tr' →
@@ -508,9 +517,9 @@ Proof.
     destruct (decide _) as [Hstuck|]; try discriminate; rewrite -Heq //.
 Qed.
 
-Lemma is_ctrace_ret tp σ v :
+Lemma is_ctrace_ret lt tp σ v :
   tp_termination tp σ = Some (TermRet v) →
-  is_ctrace (CTRet v) 0 (compile_tp tp).
+  is_ctrace (CTRet v) 0 (compile_tp lt tp).
 Proof.
   intros Hterm.
   rewrite /tp_termination in Hterm.
@@ -522,9 +531,9 @@ Proof.
     exists (Ret v). split; first done. constructor.
 Qed.
 
-Lemma trace_invariant_ret tp σ v :
+Lemma trace_invariant_ret lt tp σ v :
   tp_termination tp σ = Some (TermRet v) →
-  trace_invariant σ tp σ (CTRet v).
+  trace_invariant lt σ tp σ (CTRet v).
 Proof.
   intros Hterm.
   rewrite /tp_termination in Hterm.
@@ -573,9 +582,9 @@ Lemma enumerate_lookup' {A} (xs : list A) (idx : nat) :
   (enumerate xs) !! idx = (λ x, (idx, x)) <$> (xs !! idx).
 Proof. apply enumerate_from_lookup'. Qed.
 
-Lemma stuck_ub tp σ :
+Lemma stuck_ub lt tp σ :
   tp_termination tp σ = Some TermUb →
-  ∃ tid tr, trace_invariant σ tp σ tr ∧ is_ctrace tr tid (compile_tp tp).
+  ∃ tid tr, trace_invariant lt σ tp σ tr ∧ is_ctrace tr tid (compile_tp lt tp).
 Proof.
   intros Hterm.
   assert (Hterm' := Hterm).
@@ -596,8 +605,9 @@ Proof.
     eapply Ectx_step with (K := []); eauto.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -610,8 +620,9 @@ Proof.
       eapply is_ctrace_ub.
       rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -620,8 +631,9 @@ Proof.
     simpl_itree. eapply is_ctrace_ub.
     rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -630,8 +642,9 @@ Proof.
     simpl_itree. eapply is_ctrace_ub.
     rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -648,8 +661,9 @@ Proof.
     eapply Ectx_step with (K := []); eauto.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -662,8 +676,9 @@ Proof.
       eapply is_ctrace_ub.
       rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -682,8 +697,9 @@ Proof.
     eapply Ectx_step with (K := []); eauto.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -703,8 +719,9 @@ Proof.
     eapply Ectx_step with (K := []); eauto.
     by constructor.
   - exists (CTVisEmpty void (subevent _ EUb)).
-    split; first split; eauto.
+    split; first split.
     { rewrite /trace_invariant_postfix Hterm. constructor. }
+    { done. }
     eapply is_ctrace_insert.
     { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
     { rewrite compile_expr_bind'; first done. admit. }
@@ -757,8 +774,9 @@ Proof.
            eapply is_ctrace_ub.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
-      split; first split; eauto.
+      split; first split.
       { rewrite /trace_invariant_postfix Hterm. constructor. }
+      { done. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -800,8 +818,9 @@ Proof.
            eapply is_ctrace_ub.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
-      split; first split; eauto.
+      split; first split.
       { rewrite /trace_invariant_postfix Hterm. constructor. }
+      { done. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -843,8 +862,9 @@ Proof.
            eapply is_ctrace_ub.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
-      split; first split; eauto.
+      split; first split.
       { rewrite /trace_invariant_postfix Hterm. constructor. }
+      { done. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -886,8 +906,9 @@ Proof.
            eapply is_ctrace_ub.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
-      split; first split; eauto.
+      split; first split.
       { rewrite /trace_invariant_postfix Hterm. constructor. }
+      { done. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -943,8 +964,9 @@ Proof.
            eapply is_ctrace_ub.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
-      split; first split; eauto.
+      split; first split.
       { rewrite /trace_invariant_postfix Hterm. constructor. }
+      { done. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -1005,8 +1027,9 @@ Proof.
                eapply is_ctrace_ub.
                rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (CTVisEmpty void (subevent _ EUb)).
-        split; first split; eauto.
+        split; first split.
         { rewrite /trace_invariant_postfix Hterm. constructor. }
+        { done. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite compile_expr_bind'; first done. admit. }
@@ -1014,8 +1037,9 @@ Proof.
         eapply is_ctrace_ub.
         rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
     * exists (CTVisEmpty void (subevent _ EUb)).
-      split; first split; eauto.
+      split; first split.
       { rewrite /trace_invariant_postfix Hterm. constructor. }
+      { done. }
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite compile_expr_bind'; first done. admit. }
@@ -1033,156 +1057,219 @@ Lemma AllocN_free_locations n v σ ρs l efs :
   ∃ (l' : free_locations n σ), `l' = l.
 Proof. intros Hbase. by exists (to_free_location n v σ ρs l efs Hbase). Qed.
 
-Lemma step_in_thread e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE val) tp' σ' :
-  base_step e1 σ1 κs e2 σ2 efs →
-  is_ctrace tr tid' (<[tid:=(v ← compile_expr e2 ; yield_if_not_val e2 ;; k v)%itree]>tp
-                    ++ compile_tp' efs) →
-  trace_invariant σ2 tp' σ' tr →
-  tp !! tid = Some (v ← compile_expr e1 ; yield_if_not_val e1 ;; k v)%itree →
-  ∃ tr', trace_invariant σ1 tp' σ' tr' ∧ is_ctrace tr' tid tp.
+Definition ctrace_step (lt : bool) (tid : nat) (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+  if lt then CTVis () (subevent _ ELater) () (CTYield tid tr) else CTYield tid tr.
+Lemma is_ctrace_step lt tid tid' tp tr t :
+  tp !! tid = Some (ITree.bind (step lt) (λ _, t))%itree →
+  is_ctrace tr tid' (<[tid := t]>tp) →
+  is_ctrace (ctrace_step lt tid' tr) tid tp.
 Proof.
-  intros Hbase Htr [Hub Hstinv] Htp.
+  intros Htp Htr. rewrite /ctrace_step. rewrite step_unfold in Htp. destruct lt.
+  - eapply is_ctrace_insert; first done. { simpl_itree. reflexivity. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert.
+  - eapply is_ctrace_insert; first done. { simpl_itree. reflexivity. }
+    eapply is_ctrace_yield.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert.
+Qed.
+
+Lemma state_invariant_step lt tid σ tr :
+  trace_invariant_state lt σ tr →
+  trace_invariant_state lt σ (ctrace_step lt tid tr).
+Proof.
+  intros Hinv.
+  rewrite /trace_invariant_state. rewrite /trace_invariant_state in Hinv.
+  destruct lt.
+  - rewrite /ctrace_step /=. by destruct (interp_tr_state _ _).
+  - done.
+Qed.
+
+Lemma step_in_thread lt e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE val) tp' σ' :
+  base_step e1 σ1 κs e2 σ2 efs →
+  is_ctrace tr tid' (<[tid:=(v ← compile_expr lt e2 ; step_if_not_val lt e2 ;; k v)%itree]>tp
+                    ++ compile_tp' lt efs) →
+  trace_invariant lt σ2 tp' σ' tr →
+  tp !! tid = Some (v ← compile_expr lt e1 ; step_if_not_val lt e1 ;; k v)%itree →
+  ∃ tr', trace_invariant lt σ1 tp' σ' tr' ∧ is_ctrace tr' tid tp.
+Proof.
+  intros Hbase Htr (Hub&Hstinv) Htp.
   inversion Hbase; subst; simpl in Htr; rewrite ?app_nil_r in Htr.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    apply is_ctrace_yield with (t := k (RecV f x e)).
+    { rewrite /compile_expr /step_if_not_val. simpl_itree. reflexivity. }
+    apply is_ctrace_step with (t := k (RecV f x e)).
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    apply is_ctrace_yield with (t := k (PairV v1 v2)).
+    { rewrite /= /compile_expr. simpl_itree. reflexivity. }
+    apply is_ctrace_step with (t := k (PairV v1 v2)).
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    apply is_ctrace_yield with (t := k (InjLV v)).
+    { rewrite /= /compile_expr. simpl_itree. reflexivity. }
+    apply is_ctrace_step with (t := k (InjLV v)).
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    apply is_ctrace_yield with (t := k (InjRV v)).
+    { rewrite /= /compile_expr. simpl_itree. reflexivity. }
+    apply is_ctrace_step with (t := k (InjRV v)).
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
   - pose (e' := subst' x v2 (subst' f (RecV f x e0) e0)).
-    exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+    exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     destruct (to_val e') as [v|] eqn:Hval.
     * eapply is_ctrace_insert; first done.
-      { simpl. rewrite base_Beta. simpl.
-        rewrite /yield_if_not_val. rewrite /e' in Hval. rewrite Hval. rewrite bind_ret_l.
+      { rewrite /= base_Beta /= /step_if_not_val.
+        rewrite /e' in Hval. rewrite Hval. rewrite bind_ret_l.
         reflexivity. }
       rewrite /e' in Hval. apply of_to_val in Hval as Heq.
       rewrite -Heq in Htr. rewrite -Heq.
       rewrite compile_expr_val. rewrite compile_expr_val in Htr.
       simpl in Htr.
       rewrite bind_ret_l. rewrite !bind_ret_l in Htr.
-      apply is_ctrace_yield with (t := k v).
+      apply is_ctrace_step with (t := k v).
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       by rewrite list_insert_insert.
     * eapply is_ctrace_insert; first done.
-      { simpl. rewrite base_Beta. simpl. rewrite /yield_if_not_val. rewrite /e' in Hval.
+      { rewrite /= base_Beta /= /step_if_not_val. rewrite /e' in Hval.
         rewrite Hval. reflexivity. }
-      rewrite /e' in Hval. rewrite /yield_if_not_val in Htr. rewrite Hval in Htr.
+      rewrite /e' in Hval. rewrite /step_if_not_val in Htr. rewrite Hval in Htr.
       rewrite bind_bind.
-      apply is_ctrace_yield with (t := (v ← compile_expr e'; trigger EYield ;; k v)%itree).
+      apply is_ctrace_step with (t := (v ← compile_expr lt e'; step lt ;; k v)%itree).
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       by rewrite list_insert_insert.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     rewrite compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (trigger EYield ;; k v')%itree); first done.
+    eapply is_ctrace_insert with (t' := (step lt ;; k v')%itree); first done.
     { rewrite base_UnOp // bind_ret_l  //. }
-    eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    eapply is_ctrace_step. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     by rewrite list_insert_insert.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     rewrite compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (trigger EYield ;; k v')%itree); first done.
+    eapply is_ctrace_insert with (t' := (step lt ;; k v')%itree); first done.
     { rewrite base_BinOp // bind_ret_l  //. }
-    eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    eapply is_ctrace_step. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     by rewrite list_insert_insert.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     destruct (to_val e2) eqn:Hval.
     * apply of_to_val in Hval as <-.
       eapply is_ctrace_insert; first done.
-      { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-      apply is_ctrace_yield with (t := k v).
+      { rewrite /= /compile_expr. simpl_itree. reflexivity. }
+      apply is_ctrace_step with (t := k v).
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+    * eapply is_ctrace_insert; first done.
+      { rewrite /compile_expr. simpl_itree.
+        rewrite /step_if_not_val Hval interp_step /=. reflexivity. }
+      rewrite /step_if_not_val Hval in Htr. simpl_itree in Htr.
+      eapply is_ctrace_step.
+      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert.
+      by simpl_itree in Htr.
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
+    destruct (to_val e2) eqn:Hval.
+    * apply of_to_val in Hval as <-.
+      eapply is_ctrace_insert; first done.
+      { rewrite /compile_expr. simpl_itree.
+        rewrite /step_if_not_val /=. reflexivity. }
+      apply is_ctrace_step with (t := k v).
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       rewrite list_insert_insert.
       by simpl_itree in Htr.
     * eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr. simpl_itree.
-        rewrite /yield_if_not_val Hval. simpl_itree. reflexivity. }
-      rewrite /yield_if_not_val Hval in Htr. simpl_itree in Htr.
-      eapply is_ctrace_yield.
+        rewrite /step_if_not_val Hval interp_step /=. reflexivity. }
+      rewrite /step_if_not_val Hval in Htr. simpl_itree in Htr.
+      eapply is_ctrace_step.
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       rewrite list_insert_insert.
       by simpl_itree in Htr.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-    destruct (to_val e2) eqn:Hval.
-    * apply of_to_val in Hval as <-.
-      eapply is_ctrace_insert; first done.
-      { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-      apply is_ctrace_yield with (t := k v).
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
-      by simpl_itree in Htr.
-    * eapply is_ctrace_insert; first done.
-      { simpl. rewrite /compile_expr. simpl_itree.
-        rewrite /yield_if_not_val Hval. simpl_itree. reflexivity. }
-      rewrite /yield_if_not_val Hval in Htr. simpl_itree in Htr.
-      eapply is_ctrace_yield.
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
-      by simpl_itree in Htr.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     rewrite compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (trigger EYield ;; k v1)%itree); first done.
+    eapply is_ctrace_insert with (t' := (step lt ;; k v1)%itree); first done.
     { rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    eapply is_ctrace_step. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     by rewrite list_insert_insert.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     rewrite compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (trigger EYield ;; k v2)%itree); first done.
+    eapply is_ctrace_insert with (t' := (step lt ;; k v2)%itree); first done.
     { rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    eapply is_ctrace_step. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     by rewrite list_insert_insert.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_yield.
+    { simpl. rewrite /compile_expr. simpl_itree.
+      rewrite /step_if_not_val /= interp_step. reflexivity. }
+    eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTYield tid' tr). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (ctrace_step lt tid' tr). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_yield.
+    { simpl. rewrite /compile_expr. simpl_itree.
+      rewrite /step_if_not_val /= interp_step. reflexivity. }
+    eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
   - destruct (AllocN_free_locations _ _ _ _ _ _ Hbase) as [ll <-].
-    exists (CTVis state (subevent _ EGetState) σ1 (CTVis (free_locations n σ1) (subevent _ (EDemonic (free_locations n σ1))) ll (CTVis () (subevent _ (ESetState (state_init_heap (`ll) n v σ1))) () (CTYield tid' tr)))). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-    { simpl. rewrite decide_True //. }
+    exists (CTVis state (subevent _ EGetState) σ1 (CTVis (free_locations n σ1) (subevent _ (EDemonic (free_locations n σ1))) ll (CTVis () (subevent _ (ESetState (state_init_heap (`ll) n v σ1))) () (ctrace_step lt tid' tr)))).
+    repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
     rewrite assert_True; last lia. simpl_itree.
@@ -1194,13 +1281,14 @@ Proof.
     eapply is_ctrace_Vis.
     { rewrite list_insert_insert list_lookup_insert // insert_length -lookup_lt_is_Some //. }
     rewrite !list_insert_insert.
-    eapply is_ctrace_yield.
+    eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=None]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-    { simpl. rewrite decide_True //. }
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=None]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
     eapply is_ctrace_Vis.
@@ -1209,41 +1297,28 @@ Proof.
     eapply is_ctrace_Vis.
     { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
     rewrite !list_insert_insert.
-    eapply is_ctrace_yield.
+    eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ2 (CTYield tid' tr)). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-    { simpl. rewrite decide_True //. }
+  - exists (CTVis state (subevent _ EGetState) σ2 (ctrace_step lt tid' tr)). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
     eapply is_ctrace_Vis.
     { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
     rewrite /= H. simpl_itree.
     rewrite list_insert_insert.
-    eapply is_ctrace_yield.
+    eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some w]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-    { simpl. rewrite decide_True //. }
-    eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_Vis.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite /= H. simpl_itree.
-    eapply is_ctrace_Vis.
-    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite !list_insert_insert.
-    eapply is_ctrace_yield.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
-    by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-    { simpl. rewrite decide_True //. }
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some w]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
     eapply is_ctrace_Vis.
@@ -1252,7 +1327,23 @@ Proof.
     eapply is_ctrace_Vis.
     { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
     rewrite !list_insert_insert.
-    eapply is_ctrace_yield.
+    eapply is_ctrace_step.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /= decide_True //. by apply state_invariant_step. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_Vis.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite /= H. simpl_itree.
+    eapply is_ctrace_Vis.
+    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert.
+    eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
@@ -1260,9 +1351,10 @@ Proof.
     * rewrite bool_decide_eq_true_2 // in Hstinv.
       rewrite bool_decide_eq_true_2 // in Hbase.
       rewrite bool_decide_eq_true_2 // in Htr.
-      exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
-      { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-      { simpl. rewrite decide_True //. }
+      exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+      { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+        destruct lt; repeat constructor. }
+      { rewrite /= decide_True //. by apply state_invariant_step. }
       eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
       eapply is_ctrace_Vis.
@@ -1273,29 +1365,31 @@ Proof.
       eapply is_ctrace_Vis.
       { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
       rewrite !list_insert_insert.
-      eapply is_ctrace_yield.
+      eapply is_ctrace_step.
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       rewrite list_insert_insert.
       by simpl_itree in Htr.
     * rewrite bool_decide_eq_false_2 // in Hstinv.
       rewrite bool_decide_eq_false_2 // in Hbase.
       rewrite bool_decide_eq_false_2 // in Htr.
-      exists (CTVis state (subevent _ EGetState) σ1 (CTYield tid' tr)). split; first split; eauto.
-      { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-      { simpl. rewrite decide_True //. }
+      exists (CTVis state (subevent _ EGetState) σ1 (ctrace_step lt tid' tr)). repeat split.
+      { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+        destruct lt; repeat constructor. }
+      { rewrite /= decide_True //. by apply state_invariant_step. }
       eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
       eapply is_ctrace_Vis.
       { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
       simpl. rewrite H list_insert_insert. simpl_itree. rewrite assert_True //. simpl_itree.
       rewrite decide_False //. simpl_itree.
-      eapply is_ctrace_yield.
+      eapply is_ctrace_step.
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       rewrite list_insert_insert.
       by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some (LitV (LitInt (i1 + i2)))]> σ1))) () (CTYield tid' tr))). split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
-    { simpl. rewrite decide_True //. }
+  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some (LitV (LitInt (i1 + i2)))]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
     eapply is_ctrace_Vis.
@@ -1304,16 +1398,18 @@ Proof.
     eapply is_ctrace_Vis.
     { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
     rewrite !list_insert_insert.
-    eapply is_ctrace_yield.
+    eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTFork (compile_expr e ;; yield_if_not_val e ;; kill_thread) (CTYield tid' tr)).
-    split; first split; eauto.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto. repeat constructor. }
+  - exists (CTFork (compile_expr lt e ;; step_if_not_val lt e ;; kill_thread) (ctrace_step lt tid' tr)).
+    repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { by apply state_invariant_step. }
     rewrite compile_expr_val !bind_ret_l in Htr.
     eapply trace_base_Fork; first apply Htp.
-    eapply is_ctrace_yield.
+    eapply is_ctrace_step.
     { rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
       rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite insert_app_l; last rewrite insert_length -lookup_lt_is_Some //.
@@ -1327,22 +1423,22 @@ Lemma lt_gt n m :
 Proof. lia. Qed.
 
 (* TODO: Idea: make κ = [] *)
-Lemma has_trace n tp σ tp' σ' κ tx :
+Lemma has_trace lt n tp σ tp' σ' κ tx :
   language.nsteps n (tp, σ) κ (tp', σ') →
   tp_termination tp' σ' = Some tx →
   length tp > 0 →
   ∃ tid tr,
-    trace_invariant σ tp' σ' tr ∧
-    is_ctrace (R := val) tr tid (compile_tp tp).
+    trace_invariant lt σ tp' σ' tr ∧
+    is_ctrace (R := val) tr tid (compile_tp lt tp).
 Proof.
   revert tp σ tp' σ' κ. induction n as [|n IH]; intros tp σ tp' σ' κ Hstep Hterm Hne.
   { destruct tx as [r|].
     - assert (Hterm' := Hterm).
-      apply is_ctrace_ret in Hterm as Htr.
-      apply trace_invariant_ret with (σ := σ') in Hterm' as Htinv.
+      apply is_ctrace_ret with (lt := lt) in Hterm as Htr.
+      apply trace_invariant_ret with (lt := lt) (σ := σ') in Hterm' as Htinv.
       exists 0, (CTRet r). inversion Hstep. subst. by split.
     - inversion Hstep; subst.
-      apply stuck_ub in Hterm as (tid&tr&Hinv&Htr); eauto.
+      apply stuck_ub with (lt := lt) in Hterm as (tid&tr&Hinv&Htr); eauto.
   }
   inversion Hstep as [|m [tp1 σ1] [tp2 σ2] [tp3 σ3] ? ? Hstep'' Hstep']. subst.
   inversion Hstep'' as [e1' σ1 e2' σ2' efs tpa tpb Htp' Htp2' Hprim].
@@ -1360,14 +1456,14 @@ Proof.
     }
     destruct (decide (length tpa = 0)) as [Htpa|Htpa].
     * apply nil_length_inv in Htpa as ->. simpl. simpl in *.
-      apply step_in_thread with (tp := ((v ← compile_expr e1; yield_if_not_val e1;; Ret v)%itree :: compile_tp' tpb)) (tid := 0) (tid' := tid) (k := λ v, Ret v) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
+      apply step_in_thread with (lt := lt) (tp := ((v ← compile_expr lt e1; step_if_not_val lt e1;; Ret v)%itree :: compile_tp' lt tpb)) (tid := 0) (tid' := tid) (k := λ v, Ret v) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
       + exists 0, tr'. rewrite compile_tp_cons //.
       + simpl. rewrite compile_tp_cons compile_tp'_app // in Htr.
       + done.
       + done.
-    * apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; kill_thread)%itree :: compile_tp' tpb)) (tid := length (compile_tp tpa)) (tid' := tid) (k := λ v, kill_thread) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
-      + exists (length (compile_tp tpa)), tr'. rewrite compile_tp_app //.
-      + replace (length (compile_tp tpa)) with (length (compile_tp tpa) + 0) by lia.
+    * apply step_in_thread with (lt := lt) (tp := (compile_tp lt tpa ++ (v ← compile_expr lt e1; step_if_not_val lt e1;; kill_thread)%itree :: compile_tp' lt tpb)) (tid := length (compile_tp lt tpa)) (tid' := tid) (k := λ v, kill_thread) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
+      + exists (length (compile_tp lt tpa)), tr'. rewrite compile_tp_app //.
+      + replace (length (compile_tp lt tpa)) with (length (compile_tp lt tpa) + 0) by lia.
         rewrite compile_tp_app // in Htr.
         rewrite insert_app_r /= -app_assoc /=.
         rewrite compile_tp'_cons compile_tp'_app // in Htr.
@@ -1379,7 +1475,7 @@ Proof.
     }
     destruct (decide (length tpa = 0)) as [Htpa|Htpa].
     * apply nil_length_inv in Htpa as ->. simpl. simpl in *.
-      apply step_in_thread with (tp := ((v ← compile_expr e1; yield_if_not_val e1;; w ← compile_expr (fill K (Val v)); trigger EYield;; Ret w)%itree :: compile_tp' tpb)) (tid := 0) (tid' := tid) (k := λ v, (w ← compile_expr (fill K (Val v)); trigger EYield;; Ret w)%itree) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
+      apply step_in_thread with (lt := lt) (tp := ((v ← compile_expr lt e1; step_if_not_val lt e1;; w ← compile_expr lt (fill K (Val v)); step lt;; Ret w)%itree :: compile_tp' lt tpb)) (tid := 0) (tid' := tid) (k := λ v, (w ← compile_expr lt (fill K (Val v)); step lt;; Ret w)%itree) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
       + exists 0, tr'.
         split; first done.
         rewrite compile_tp_cons /= compile_expr_bind.
@@ -1398,7 +1494,7 @@ Proof.
       + done.
     * rewrite compile_tp_app // in Htr.
       rewrite compile_tp_app //.
-      apply step_in_thread with (tp := (compile_tp tpa ++ (v ← compile_expr e1; yield_if_not_val e1;; compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree :: compile_tp' tpb)) (tid := length tpa) (tid' := tid) (k := λ v, (compile_expr (fill K (Val v));; trigger EYield;; kill_thread)%itree) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
+      apply step_in_thread with (lt := lt) (tp := (compile_tp lt tpa ++ (v ← compile_expr lt e1; step_if_not_val lt e1;; compile_expr lt (fill K (Val v));; step lt ;; kill_thread)%itree :: compile_tp' lt tpb)) (tid := length tpa) (tid' := tid) (k := λ v, (compile_expr lt (fill K (Val v));; step lt;; kill_thread)%itree) (tr := tr) (tp' := tp') (σ' := σ') in Hbase as [tr' [Hinv' Htr']].
       + exists (length tpa), tr'.
         split; first done.
         rewrite /= compile_expr_bind.
@@ -1406,7 +1502,7 @@ Proof.
            rewrite bind_bind. by setoid_rewrite bind_bind.
         ++ admit.
         ++ rewrite -lt_gt -Nat.neq_0_lt_0 //.
-      + replace (length tpa) with (length (compile_tp tpa) + 0) by rewrite compile_tp_len //.
+      + replace (length tpa) with (length (compile_tp lt tpa) + 0) by rewrite compile_tp_len //.
         rewrite insert_app_r /= -app_assoc /=.
         rewrite compile_tp'_cons compile_tp'_app /= compile_expr_bind in Htr.
         ++ setoid_rewrite fill_not_val in Htr; last first. { rewrite -lt_gt -Nat.neq_0_lt_0 //. }
@@ -1492,21 +1588,27 @@ Proof.
   - inversion Hret.
 Qed.
 
-Lemma is_trace_term {R} (t : itree ubE R) tr tx :
+Lemma is_trace_term {R} (t : itree (laterE +' ubE) R) tr tx :
   trace_terminates_in tr tx →
   is_trace tr t →
+  no_laters tr →
   t ≈ match tx with
       | TermUb => ub
       | TermRet r => Ret r
       end.
 Proof.
-  intros Hterm Htr. pfold. rewrite /eqit_. induction Htr.
+  intros Hterm Htr Hlater. pfold. rewrite /eqit_. induction Htr.
   - destruct tx; inversion Hterm. by constructor.
-  - by destruct e.
-  - destruct tx; inversion Hterm. destruct e. constructor. by intros.
+  - destruct e as [e|e]; by destruct e.
+  - destruct tx; inversion Hterm. destruct e as [e|e]; first by destruct e.
+    destruct e. constructor. by intros.
   - destruct tx; inversion Hterm.
   - constructor; first done. by apply IHHtr.
 Qed.
+
+Global Instance AnswerEqDecision_laterE :
+  AnswerEqDecision laterE.
+Proof. intros A [] [] []. by left. Qed.
 
 Lemma execution n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
@@ -1514,7 +1616,7 @@ Lemma execution n e σ tp' σ' κ tx :
   ∃ t1 t2 t3,
     (* TODO: consisting naming for interpretion relations *)
     (* TODO: abstraction for this composite relation *)
-    interleaves (R := val) 0 [v ← compile_expr e ; yield_if_not_val e ;; Ret v]%itree t1 ∧
+    interleaves (R := val) 0 [v ← compile_expr false e ; step_if_not_val false e ;; Ret v]%itree t1 ∧
     demonic_instantiates t1 t2 ∧
     eval σ t2 t3 ∧
     (* TODO: use UB adequacy *)
@@ -1524,7 +1626,11 @@ Lemma execution n e σ tp' σ' κ tx :
     end.
 Proof.
   intros Hsteps Hterm.
-  apply has_trace with (tx := tx) in Hsteps as (tid&tr&[Htinv [tr' Hst]]&Htr); eauto.
+  apply has_trace with (lt := false) (tx := tx) in Hsteps as (tid&tr&[Htinv Hstinv]&Htr); eauto.
+  rewrite /trace_invariant_state in Hstinv.
+  destruct (interp_tr_state σ (interp_tr (sequencify tr))) as [tr'|] eqn:Heq;
+    rewrite Heq // in Hstinv.
+  rewrite orb_false_r in Hstinv. 
   rewrite /trace_invariant_postfix in Htinv.
   rewrite Hterm in Htinv.
   apply interleaving_extending_trace in Htr as (t1&Hint&Htr).
@@ -1543,7 +1649,7 @@ Proof.
   - apply sequencify_term in Htinv. apply interp_tr_term in Htinv.
     eapply interp_tr_state_ret in Htinv as [σ'' Htinv]; last done.
     exists σ''. by apply is_trace_term with (t := t3) (tr := tr') (tx := TermRet (σ'', inl r)).
-  - apply is_trace_term with (t := t3) (tr := tr') (tx := TermUb); last done.
+  - apply is_trace_term with (t := t3) (tr := tr') (tx := TermUb); eauto.
     eapply interp_tr_state_ub; last done. apply interp_tr_term. by apply sequencify_term in Htinv.
 Qed.
 
@@ -1551,7 +1657,7 @@ Lemma execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' = Some tx →
   state_interp σ -∗
-  WPi (v ← compile_expr e; yield_if_not_val e;; Ret v) @ heaplangH ; ⊤ {{ Φ }} -∗
+  WPi (v ← compile_expr false e; step_if_not_val false e;; Ret v) @ heaplangH ; ⊤ {{ Φ }} -∗
   |={⊤}=> match tx with
   | TermUb => False
   | TermRet v => Φ v
@@ -1572,7 +1678,7 @@ Lemma ub_execution_wpi `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' = Some tx →
   state_interp σ -∗
-  WPi (compile_expr e) @ heaplangH ; ⊤ {{ Φ }} -∗
+  WPi (compile_expr false e) @ heaplangH ; ⊤ {{ Φ }} -∗
   |={⊤}=> match tx with
   | TermUb => False
   | TermRet v => Φ v
@@ -1581,6 +1687,6 @@ Proof.
   iIntros (Hstep Hterm) "Hstate Hwp".
   iApply (execution_wpi' with "Hstate"); eauto.
   iApply wpi_bind. iApply wpi_wand; last done.
-  iIntros (r) "HΦ". iApply wpi_bind. iApply @wpi_yield_if_not_val.
+  iIntros (r) "HΦ". iApply wpi_bind. iApply @wpi_step_if_not_val.
   by iApply @wpi_ret.
 Qed.
