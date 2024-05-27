@@ -1606,10 +1606,6 @@ Proof.
   - constructor; first done. by apply IHHtr.
 Qed.
 
-Global Instance AnswerEqDecision_laterE :
-  AnswerEqDecision laterE.
-Proof. intros A [] [] []. by left. Qed.
-
 Lemma execution n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' = Some tx →
