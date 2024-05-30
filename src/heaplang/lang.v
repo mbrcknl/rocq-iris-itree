@@ -38,13 +38,6 @@ Definition step_if_not_val (lt : bool) (e : expr) {E} `{threadpoolE -< E} `{late
   end.
 Arguments step_if_not_val _ !_.
 
-Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
-  (match o with | Some x => Ret x | None => ub end)%itree.
-Notation "x ?" := (some_or_ub x) (at level 10, format "x ?") : itree_scope.
-Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E R :=
-  (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
-Notation "x ??" := (some_some_or_ub x) (at level 10, format "x ??") : itree_scope.
-
 Definition val_to_RecV (v : val) : option (binder * binder * expr) :=
   match v with
   | RecV f_ x_ e => Some (f_, x_, e)

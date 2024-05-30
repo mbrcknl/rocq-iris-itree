@@ -5,6 +5,16 @@ From ITree Require Import TranslateFacts InterpFacts RecursionFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
+Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
+Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
+  (at level 20, y at level 100, z at level 200,
+  format "x  ←  y ;  '/' z") : itree_scope.
+Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z end)%itree)
+  (at level 20, x pattern, y at level 100, z at level 200,
+  format "' x  ←  y ;  '/' z") : itree_scope.
+Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
+  (at level 100, z at level 200, right associativity) : itree_scope.
+
 (* Global Instance itree_equiv (E : Type → Type) R : Equiv (itree E R) := eq_itree (=). *)
 
 Global Instance eq_itree_iff {E R} (t' : itree E R) :

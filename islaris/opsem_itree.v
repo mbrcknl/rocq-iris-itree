@@ -2,17 +2,6 @@ From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.itree Require Import wpi choice ub state handler itree.
 Require Export isla.opsem.
 
-(* TODO: move these to a proper place *)
-Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
-Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
-  (at level 20, y at level 100, z at level 200,
-  format "x  ←  y ;  '/' z") : itree_scope.
-Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z end)%itree)
-  (at level 20, x pattern, y at level 100, z at level 200,
-  format "' x  ←  y ;  '/' z") : itree_scope.
-Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
-  (at level 100, z at level 200, right associativity) : itree_scope.
-
 (* TODO: It would be very nice to have demonic without sideconditions in decidability. *)
 Program Definition demonic {E} `{demonicE -< E} (A : Type) : itree E A :=
   trigger (@EDemonic A _ _).
@@ -44,14 +33,6 @@ Definition get_state {S} `{!stateE S -< E} : itree E S :=
 
 Definition set_state {S} `{!stateE S -< E} (s : S) : itree E unit :=
   trigger (ESetState s).
-
-(* TODO: Put these in some shared place *)
-Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
-  (match o with | Some x => Ret x | None => ub end)%itree.
-Notation "x ?" := (some_or_ub x) (at level 10, format "x ?") : itree_scope.
-Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E R :=
-  (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
-Notation "x ??" := (some_some_or_ub x) (at level 10, format "x ??") : itree_scope.
 
 Definition some_or_nb {E R} `{!demonicE -< E} (o : option R) : itree E R :=
   (match o with | Some x => Ret x | None => nb end)%itree.
