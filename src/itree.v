@@ -136,8 +136,15 @@ Ltac simplify_obs :=
     apply vis_observe_eqit in H as <-
   end.
 
+Definition do {E R A B} (t : itree E R) : itree (callE A B +' E) R :=
+  translate inr1 t.
+
+Lemma interp_do {E A B R} (f : A → itree (callE A B +' E) B) (t : itree E R) :
+  interp (recursive f) (do t) ≈ t.
+Proof. rewrite /do interp_translate /= interp_trigger_h //. Qed.
+
 Ltac _simpl_itree :=
-  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_ret_r || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || simpl).
+  repeat (setoid_rewrite bind_ret_l || setoid_rewrite bind_ret_r || setoid_rewrite bind_bind || setoid_rewrite interp_bind || setoid_rewrite interp_trigger || setoid_rewrite interp_ret || setoid_rewrite rec_as_interp || rewrite rec_as_interp || setoid_rewrite interp_vis || setoid_rewrite interp_do || simpl).
 Ltac _simpl_itree' H :=
   do [_simpl_itree] in H.
 Tactic Notation "simpl_itree" :=

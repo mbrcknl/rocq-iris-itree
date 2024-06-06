@@ -37,8 +37,7 @@ Proof.
   rewrite -bind_trigger. f_equiv. intros [|].
   - by simpl_itree.
   - simpl_itree. f_equiv. intros v. rewrite /kill_thread.
-    rewrite interp_step_if_not_val. f_equiv. intros _. rewrite -bind_trigger.
-    f_equiv; first done. intros [].
+    f_equiv. intros _. rewrite -bind_trigger. f_equiv; first done. intros [].
 Qed.
 
 Lemma trace_base_Fork {R} lt tid (tp : list (itree heaplangE R)) tr e k :
@@ -78,7 +77,7 @@ Lemma base_Beta lt f_ x_ e v :
   ≈ let e' := (subst' x_ v (subst' f_ (RecV f_ x_ e) e))
      in step_if_not_val lt e' ;; compile_expr lt e'.
 Proof.
-  rewrite /compile_expr. simpl_itree. rewrite interp_step_if_not_val //.
+  rewrite /compile_expr. by simpl_itree.
 Qed.
 
 Definition compile_tp' lt (tp : list expr) : list (itree heaplangE val) :=
@@ -1089,6 +1088,76 @@ Proof.
   - done.
 Qed.
 
+Definition ctrace_store' l x σ (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+  CTVis state (subevent _ EGetState) σ (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=x]> σ))) () tr).
+Definition ctrace_store l x σ (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+  ctrace_store' l (Some x) σ tr.
+Definition ctrace_load σ (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+  CTVis state (subevent _ EGetState) σ tr.
+
+Lemma is_ctrace_store' σ l x v tid tp tr k :
+  σ.(heap) !! l = Some (Some v) →
+  tp !! tid = Some (ITree.bind (store' l x) k)%itree →
+  is_ctrace tr tid (<[tid := k v]>tp) →
+  is_ctrace (ctrace_store' l x σ tr) tid tp.
+Proof.
+  intros Hl Htp Htr.
+  rewrite /ctrace_step. rewrite unlock in Htp.
+  eapply is_ctrace_insert; first done. { simpl_itree. reflexivity. }
+  eapply is_ctrace_Vis.
+  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+  rewrite list_insert_insert Hl /=. simpl_itree.
+  eapply is_ctrace_Vis.
+  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+  rewrite list_insert_insert //.
+Qed.
+Lemma is_ctrace_store σ l x v tid tp tr k :
+  σ.(heap) !! l = Some (Some v) →
+  tp !! tid = Some (ITree.bind (store l x) k)%itree →
+  is_ctrace tr tid (<[tid := k v]>tp) →
+  is_ctrace (ctrace_store l x σ tr) tid tp.
+Proof.
+  intros Hl Htp Htr.
+  rewrite /ctrace_step. rewrite unlock in Htp.
+  by eapply is_ctrace_store'.
+Qed.
+Lemma is_ctrace_load σ l v tid tp tr k :
+  σ.(heap) !! l = Some (Some v) →
+  tp !! tid = Some (ITree.bind (load l) k)%itree →
+  is_ctrace tr tid (<[tid := k v]>tp) →
+  is_ctrace (ctrace_load σ tr) tid tp.
+Proof.
+  intros Hl Htp Htr.
+  rewrite /ctrace_step. rewrite unlock in Htp.
+  eapply is_ctrace_insert; first done. { simpl_itree. reflexivity. }
+  eapply is_ctrace_Vis.
+  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+  rewrite list_insert_insert Hl /=. by simpl_itree.
+Qed.
+
+Lemma state_invariant_store' lt l x σ tr :
+  trace_invariant_state lt (state_upd_heap <[l:=x]> σ) tr →
+  trace_invariant_state lt σ (ctrace_store' l x σ tr).
+Proof.
+  intros Hinv.
+  rewrite /trace_invariant_state. rewrite /trace_invariant_state in Hinv.
+  simpl. rewrite decide_True //.
+Qed.
+Lemma state_invariant_store lt l x σ tr :
+  trace_invariant_state lt (state_upd_heap <[l:=Some x]> σ) tr →
+  trace_invariant_state lt σ (ctrace_store l x σ tr).
+Proof.
+  intros Hinv. by apply state_invariant_store'.
+Qed.
+Lemma state_invariant_load lt σ tr :
+  trace_invariant_state lt σ tr →
+  trace_invariant_state lt σ (ctrace_load σ tr).
+Proof.
+  intros Hinv.
+  rewrite /trace_invariant_state. rewrite /trace_invariant_state in Hinv.
+  simpl. rewrite decide_True //.
+Qed.
+
 Lemma step_in_thread lt e1 σ1 κs e2 σ2 efs tr tid tid' tp (k : val → itree heaplangE val) tp' σ' :
   base_step e1 σ1 κs e2 σ2 efs →
   is_ctrace tr tid' (<[tid:=(v ← compile_expr lt e2 ; step_if_not_val lt e2 ;; k v)%itree]>tp
@@ -1197,7 +1266,7 @@ Proof.
       by simpl_itree in Htr.
     * eapply is_ctrace_insert; first done.
       { rewrite /compile_expr. simpl_itree.
-        rewrite /step_if_not_val Hval interp_step /=. reflexivity. }
+        rewrite /step_if_not_val Hval /=. reflexivity. }
       rewrite /step_if_not_val Hval in Htr. simpl_itree in Htr.
       eapply is_ctrace_step.
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
@@ -1218,7 +1287,7 @@ Proof.
       by simpl_itree in Htr.
     * eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr. simpl_itree.
-        rewrite /step_if_not_val Hval interp_step /=. reflexivity. }
+        rewrite /step_if_not_val Hval /=. reflexivity. }
       rewrite /step_if_not_val Hval in Htr. simpl_itree in Htr.
       eapply is_ctrace_step.
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
@@ -1248,7 +1317,7 @@ Proof.
     { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree.
-      rewrite /step_if_not_val /= interp_step. reflexivity. }
+      rewrite /step_if_not_val /=. reflexivity. }
     eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
@@ -1259,7 +1328,7 @@ Proof.
     { by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree.
-      rewrite /step_if_not_val /= interp_step. reflexivity. }
+      rewrite /step_if_not_val /=. reflexivity. }
     eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
@@ -1269,7 +1338,7 @@ Proof.
     repeat split.
     { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
       destruct lt; repeat constructor. }
-    { rewrite /= decide_True //. by apply state_invariant_step. }
+    { rewrite /trace_invariant_state /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
     rewrite assert_True; last lia. simpl_itree.
@@ -1285,63 +1354,52 @@ Proof.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=None]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+  - exists (ctrace_store' l None σ1 (ctrace_step lt tid' tr)). repeat split.
     { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
       destruct lt; repeat constructor. }
-    { rewrite /= decide_True //. by apply state_invariant_step. }
+    { rewrite /trace_invariant_state /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_Vis.
+    eapply is_ctrace_store'; first done.
     { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite /= H. simpl_itree.
-    eapply is_ctrace_Vis.
-    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
+    eapply is_ctrace_step.
+    { rewrite list_lookup_insert // insert_length. by apply lookup_lt_is_Some. }
+    rewrite !list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (ctrace_load σ2 (ctrace_step lt tid' tr)). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /trace_invariant_state /= decide_True //. by apply state_invariant_step. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_load; first done.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite list_insert_insert.
+    eapply is_ctrace_step.
+    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert.
+    by simpl_itree in Htr.
+  - exists (ctrace_store l w σ1 (ctrace_step lt tid' tr)). repeat split.
+    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
+      destruct lt; repeat constructor. }
+    { rewrite /trace_invariant_state /= decide_True //. by apply state_invariant_step. }
+    eapply is_ctrace_insert; first done.
+    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
+    eapply is_ctrace_store; first done.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
     rewrite !list_insert_insert.
     eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.
     by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ2 (ctrace_step lt tid' tr)). repeat split.
+  - exists (ctrace_store l v2 σ1 (ctrace_step lt tid' tr)). repeat split.
     { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
       destruct lt; repeat constructor. }
-    { rewrite /= decide_True //. by apply state_invariant_step. }
+    { rewrite /trace_invariant_state /= decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_Vis.
+    eapply is_ctrace_store; first done.
     { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite /= H. simpl_itree.
-    rewrite list_insert_insert.
-    eapply is_ctrace_step.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
-    by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some w]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
-      destruct lt; repeat constructor. }
-    { rewrite /= decide_True //. by apply state_invariant_step. }
-    eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_Vis.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite /= H. simpl_itree.
-    eapply is_ctrace_Vis.
-    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite !list_insert_insert.
-    eapply is_ctrace_step.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
-    by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
-    { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
-      destruct lt; repeat constructor. }
-    { rewrite /= decide_True //. by apply state_invariant_step. }
-    eapply is_ctrace_insert; first done.
-    { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_Vis.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite /= H. simpl_itree.
-    eapply is_ctrace_Vis.
-    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
     rewrite !list_insert_insert.
     eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
@@ -1351,18 +1409,17 @@ Proof.
     * rewrite bool_decide_eq_true_2 // in Hstinv.
       rewrite bool_decide_eq_true_2 // in Hbase.
       rewrite bool_decide_eq_true_2 // in Htr.
-      exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some v2]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+      exists (ctrace_load σ1 (ctrace_store l v2 σ1 (ctrace_step lt tid' tr))). repeat split.
       { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
         destruct lt; repeat constructor. }
-      { rewrite /= decide_True //. by apply state_invariant_step. }
+      { rewrite /trace_invariant_state /= !decide_True //. by apply state_invariant_step. }
       eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-      eapply is_ctrace_Vis.
+      eapply is_ctrace_load; first done.
       { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-      rewrite /= H. simpl_itree.
       rewrite !list_insert_insert assert_True //. simpl_itree.
       rewrite decide_True //. simpl_itree.
-      eapply is_ctrace_Vis.
+      eapply is_ctrace_store; first done.
       { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
       rewrite !list_insert_insert.
       eapply is_ctrace_step.
@@ -1372,32 +1429,31 @@ Proof.
     * rewrite bool_decide_eq_false_2 // in Hstinv.
       rewrite bool_decide_eq_false_2 // in Hbase.
       rewrite bool_decide_eq_false_2 // in Htr.
-      exists (CTVis state (subevent _ EGetState) σ1 (ctrace_step lt tid' tr)). repeat split.
+      exists (ctrace_load σ1 (ctrace_step lt tid' tr)). repeat split.
       { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
         destruct lt; repeat constructor. }
-      { rewrite /= decide_True //. by apply state_invariant_step. }
+      { rewrite /trace_invariant_state /= !decide_True //. by apply state_invariant_step. }
       eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-      eapply is_ctrace_Vis.
+      eapply is_ctrace_load; first done.
       { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-      simpl. rewrite H list_insert_insert. simpl_itree. rewrite assert_True //. simpl_itree.
-      rewrite decide_False //. simpl_itree.
+      simpl. rewrite list_insert_insert. rewrite assert_True // decide_False //. simpl_itree.
       eapply is_ctrace_step.
       { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
       rewrite list_insert_insert.
       by simpl_itree in Htr.
-  - exists (CTVis state (subevent _ EGetState) σ1 (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=Some (LitV (LitInt (i1 + i2)))]> σ1))) () (ctrace_step lt tid' tr))). repeat split.
+  - exists (ctrace_load σ1 (ctrace_store l (LitV (LitInt (i1 + i2))) σ1 (ctrace_step lt tid' tr))). repeat split.
     { apply trace_invariant_postfix_postfix with (tr := tr); eauto.
       destruct lt; repeat constructor. }
-    { rewrite /= decide_True //. by apply state_invariant_step. }
+    { rewrite /trace_invariant_state /= !decide_True //. by apply state_invariant_step. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr. simpl_itree. reflexivity. }
-    eapply is_ctrace_Vis.
+    eapply is_ctrace_load; first done.
     { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite /= H. simpl_itree.
-    eapply is_ctrace_Vis.
-    { rewrite list_insert_insert list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite !list_insert_insert.
+    rewrite list_insert_insert. simpl_itree.
+    eapply is_ctrace_store; first done.
+    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    rewrite list_insert_insert.
     eapply is_ctrace_step.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     rewrite list_insert_insert.

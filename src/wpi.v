@@ -534,7 +534,7 @@ Section wp_itree_mask.
   (* TODO: Make this rule derived. *)
   Lemma wpi_open_invariant {R} N M (Φ : R → iProp Σ) t P :
     ↑N ⊆ M →
-    inv N P -∗ 
+    inv N P -∗
     (▷ P -∗ WPi t @ H; M ∖ ↑N {{ v, ▷ P ∗ Φ v }}) -∗
     WPi t @ H; M {{ Φ }}.
   Proof.
