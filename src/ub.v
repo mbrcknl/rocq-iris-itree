@@ -29,6 +29,13 @@ Proof. intros A [] []. Qed.
 Definition ub {R : Type} `{ubE -< E} : itree E R :=
   vis EUb (λ (a : Empty_set), match a with end).
 
+Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
+  (match o with | Some x => Ret x | None => ub end)%itree.
+Notation "x ?" := (some_or_ub x) (at level 10, format "x ?") : itree_scope.
+Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E R :=
+  (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
+Notation "x ??" := (some_some_or_ub x) (at level 10, format "x ??") : itree_scope.
+
 Section handler.
   Context {Σ : gFunctors}.
 
