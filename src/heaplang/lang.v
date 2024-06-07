@@ -144,6 +144,8 @@ Fixpoint compile_expr' (lt : bool) (e : expr) : itree (callE expr val +' heaplan
   let store' l x := do (store' l x) in
   let store l x := do (store l x) in
   let load l := do (load l) in
+  let ub := do ub in
+  let assert P `{Decision P} := do (assert P) in
   let compile_expr_step e := (v ← compile_expr' lt e ; step_if_not_val lt e ;; Ret v)%itree in
   match e with
   | Val v => Ret v
