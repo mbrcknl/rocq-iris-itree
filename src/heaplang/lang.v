@@ -11,16 +11,6 @@ From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
 
-Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
-Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
-  (at level 20, y at level 100, z at level 200,
-  format "x  ←  y ;  '/' z") : itree_scope.
-Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z end)%itree)
-  (at level 20, x pattern, y at level 100, z at level 200,
-  format "' x  ←  y ;  '/' z") : itree_scope.
-Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
-  (at level 100, z at level 200, right associativity) : itree_scope.
-
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' laterE +' ubE.
 
 lock Definition step `{threadpoolE -< E} `{laterE -< E} (lt : bool) : itree E () :=
@@ -37,13 +27,6 @@ Definition step_if_not_val (lt : bool) (e : expr) {E} `{threadpoolE -< E} `{late
   | None => step lt
   end.
 Arguments step_if_not_val _ !_ / _.
-
-Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
-  (match o with | Some x => Ret x | None => ub end)%itree.
-Notation "x ?" := (do $ some_or_ub x) (at level 10, format "x ?") : itree_scope.
-Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E R :=
-  (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
-Notation "x ??" := (do $ some_some_or_ub x) (at level 10, format "x ??") : itree_scope.
 
 Definition val_to_RecV (v : val) : option (binder * binder * expr) :=
   match v with
@@ -110,6 +93,7 @@ Instance free_locations_dec n l σ :
 Proof. apply Decision_range. apply _. Qed.
 Definition free_locations n σ : Set :=
   {l : loc | bool_decide (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None))}.
+Global Hint Transparent free_locations : itree_auto.
 Instance free_locations_Inhabited n σ :
   Inhabited (free_locations n σ).
 Proof.
