@@ -291,6 +291,13 @@ Lemma normalize_itree_interp_Ret {E F R} (f : E ~> itree F) (x : R) :
 Proof. constructor. by rewrite interp_ret. Qed.
 Global Hint Resolve normalize_itree_interp_Ret : itree_auto.
 
+Lemma normalize_itree_rec {E A B} p1 p2 (f : A → itree (callE A B +' E) B) (x : A) fx' t' :
+  NormalizeITree p1 (f x) fx' →
+  NormalizeITree p2 (interp (recursive f) fx') t' →
+  NormalizeITree true (rec f x) t'.
+Proof. move => [Heq1] [Heq2]. constructor. rewrite rec_as_interp -Heq2 -Heq1 //. Qed.
+Global Hint Resolve normalize_itree_rec : itree_auto.
+
 (* TODO: generalize to more interp functions? *)
 Lemma normalize_itree_interp_recursive_translate {E R A B} f (t : itree (callE A B +' E) R) t' :
   ITreeToTranslate t _ t' →

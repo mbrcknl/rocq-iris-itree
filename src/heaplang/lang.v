@@ -274,7 +274,7 @@ Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
 
 Lemma compile_expr_val (v : val) :
   compile_expr (Val v) ≈ Ret v.
-Proof. rewrite /compile_expr. by simpl_itree. Qed.
+Proof. rewrite /compile_expr/compile_expr'. by eutt_norm. Qed.
 
 Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
   match Ki with
@@ -291,13 +291,10 @@ Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
     v ← compile_expr e;
     yield_if_not_val e;;
     compile_expr (fill_item Ki (Val v)).
-Admitted.
-(* TODO: Commented out for performance reasons:
 Proof.
   intros Hsubset. destruct Ki; simpl; rewrite /compile_expr; try contradiction;
-  simpl_itree.
+  eutt_norm; simpl; by eutt_norm.
 Qed.
-*)
 
 Lemma split_last {A} (xs : list A) :
   length xs > 0 →
@@ -385,7 +382,7 @@ Proof.
   intros Hsubset.
   destruct (decide _) as [Heq|Hneq].
   - apply nil_length_inv in Heq as ->.
-    by simpl_itree.
+    by eutt_norm.
   - apply compile_expr_bind; first done. lia.
 Qed.
 
@@ -456,7 +453,7 @@ Section heaplangH.
   Proof.
     iIntros "HΦ Hwp". rewrite /compile_expr. simpl_itree.
     rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
-    - simpl_itree. iApply wpi_bind. iApply wpi_step.
+    - simpl_itree. iApply wpi_bind. iApply @wpi_later.
       iApply lat_mono; last done. iIntros "HΦ". by iApply wpi_ret.
     - simpl_itree. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->).
