@@ -16,7 +16,8 @@ Variant threadpoolE : Type → Type :=
   continues in the thread with answer [CurrentThread] until a [EYield] is
   emitted. *)
   | EFork : threadpoolE thread
-  (** Yield control to another (demonically chosen) thread in the thread-pool. *)
+  (** Yield control to another (demonically chosen) thread in the thread-pool
+  or the current thread. *)
   | EYield : threadpoolE unit
   (** (Safely) kill the current thread and yield. *)
   | EKillThread : threadpoolE Empty_set.
@@ -30,6 +31,11 @@ Lemma kill_thread_bind {A B : Type} `{threadpoolE -< E} (k : A → itree E B) :
 Proof.
   rewrite /kill_thread. rewrite bind_vis. do 2 f_equiv. intros [].
 Qed.
+
+(** Yield control to another (demonically chosen) thread in the thread-pool
+or the current thread. *)
+Definition yield `{threadpoolE -< E} : itree E () :=
+  trigger EYield.
 
 (** [iHandler] for [threadpoolE]. *)
 Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoolE :=
