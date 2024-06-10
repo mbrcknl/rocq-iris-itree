@@ -548,7 +548,7 @@ Section wp_itree_mask.
   Lemma wpi_open_invariant_timeless {R} N M (Φ : R → iProp Σ) t P :
     Timeless P →
     ↑N ⊆ M →
-    inv N P -∗ 
+    inv N P -∗
     (P -∗ WPi t @ H; M ∖ ↑N {{ v, P ∗ Φ v }}) -∗
     WPi t @ H; M {{ Φ }}.
   Proof.
@@ -748,3 +748,21 @@ Section inH.
     rewrite -!(wpi_clear_mask M). f_equiv. apply wpi_inH_emp_mask.
   Qed.
 End inH.
+
+(** Tactics *)
+Section tactics.
+  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen hlc Σ}.
+  Context {H : iHandler Σ E}.
+
+  Import environments.
+  Lemma tac_wpi_norm R Δ p (t : itree E R) t' M Φ :
+    NormalizeITree p t t' →
+    envs_entails Δ (WPi t' @ H; M {{ Φ }}) →
+    envs_entails Δ (WPi t @ H; M {{ Φ }}).
+  Proof. by move => [->]. Qed.
+End tactics.
+
+Ltac wpi_norm :=
+  notypeclasses refine (tac_wpi_norm _ _ _ _ _ _ _ _ _); [solve_normalize_itree|].
+Tactic Notation "wpi_norm/=" :=
+  repeat (simpl; wpi_norm).

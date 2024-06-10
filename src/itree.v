@@ -5,6 +5,16 @@ From ITree Require Import TranslateFacts InterpFacts RecursionFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
+Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
+Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
+  (at level 20, y at level 100, z at level 200,
+  format "x  ←  y ;  '/' z") : itree_scope.
+Notation "' x ← y ; z" := (ITree.bind y (fun x_ : _ => match x_ with x => z end)%itree)
+  (at level 20, x pattern, y at level 100, z at level 200,
+  format "' x  ←  y ;  '/' z") : itree_scope.
+Notation "x ;; z" := (ITree.bind x (fun _ => z)%itree)
+  (at level 100, z at level 200, right associativity) : itree_scope.
+
 (* Global Instance itree_equiv (E : Type → Type) R : Equiv (itree E R) := eq_itree (=). *)
 
 Global Instance eq_itree_iff {E R} (t' : itree E R) :
@@ -117,6 +127,14 @@ Proof.
   rewrite /ITree.map bind_vis //.
 Qed.
 
+Lemma translate_trigger_eq {E F G} `{E -< F} :
+  forall X (e: E X) (h: F ~> G),
+    translate h (trigger e) ≅ trigger (h _ (subevent X e)).
+Proof.
+  intros; unfold trigger; rewrite translate_vis; setoid_rewrite translate_ret; reflexivity.
+Qed.
+
+
 Lemma unobserve {E R} (to : itree' E R) :
   ∃ t, to = observe t.
 Proof.
@@ -152,4 +170,185 @@ Tactic Notation "simpl_itree" :=
 Tactic Notation "simpl_itree" "in" ident(H) :=
   _simpl_itree' H.
 
+(** * Typeclass-based itree automation *)
+(** ** Creating the hint database *)
+(** We use a new hint database instead of typeclass_instances such
+that we can make everything opaque by default (via Hint Constants Opaque). *)
+Create HintDb itree_auto discriminated.
+Global Hint Constants Opaque : itree_auto.
 
+(** ** Typeclasses for translating itrees from one event type to another  *)
+Class TranslateReSum {E E1 E2} (Hin : E1 -< E2) (HE1 : E -< E1) (HE2 : E -< E2) := {
+  translate_resum : ∀ T x, HE2 T x = Hin _ (HE1 T x);
+}.
+Global Hint Extern 5 (TranslateReSum _ _ _) => (constructor; constructor) : itree_auto.
+
+Record ITreeToTranslate {E1 E2 R} (i : itree E1 R) (H : E2 -< E1) (o : itree E2 R) := {
+    itree_to_translate : i ≅ translate (@resum _ _ _ _ H) o
+}.
+Global Hint Mode ITreeToTranslate + + + ! + - : itree_auto.
+
+Lemma trigger_to_translate R E E1 E2 (e : E _)
+  (Hin : E1 -< E2) (Hin2 : E -< E1) (Hin3 : E -< E2) :
+  TranslateReSum Hin Hin2 Hin3 →
+  ITreeToTranslate (R:=R) (ITree.trigger (subevent _ e)) Hin (ITree.trigger (subevent _ e)).
+Proof. move => [?]. constructor. rewrite translate_trigger_eq. by f_equiv. Qed.
+Global Hint Resolve trigger_to_translate : itree_auto.
+
+Lemma do_to_translate R A B E (t : itree E R) :
+  ITreeToTranslate (R:=R) (do (A:=A) (B:=B) t) _ t.
+Proof. constructor. done. Qed.
+Global Hint Resolve do_to_translate : itree_auto.
+
+(* TODO: make this an instance or add a normalize lemma for vis? *)
+Lemma vis_to_translate R S E E1 E2 (e : E _) k k'
+  (Hin : E1 -< E2) (Hin2 : E -< E1) (Hin3 : E -< E2) :
+  TranslateReSum Hin Hin2 Hin3 →
+  (∀ x : R, ITreeToTranslate (k x) Hin (k' x)) →
+  ITreeToTranslate (R:=S) (Vis (subevent _ e) k) Hin (Vis (subevent _ e) k').
+Proof.
+  move => [Heq] Hk. constructor. rewrite translate_vis /=.
+  rewrite -!bind_trigger. f_equiv; [by rewrite /subevent/resum Heq|].
+  move => ?. by apply Hk.
+Qed.
+
+(* Not an instance since we have [normalize_itree_interp_bind], but this
+lemma is useful for proving ITreeToTranslate for definitions. *)
+Lemma bind_to_translate R S E1 E2 (Hin : E1 -< E2) t1 t2 (k1 k2 : R → _) :
+  ITreeToTranslate (R:=R) t1 Hin t2 →
+  (∀ x, ITreeToTranslate (k1 x) Hin (k2 x)) →
+  ITreeToTranslate (R:=S) (ITree.bind t1 k1) Hin (ITree.bind t2 k2).
+Proof. intros [?] Hk. constructor. rewrite translate_bind. f_equiv; [done|]. intros ?. apply Hk. Qed.
+
+(* Not an instance since we have [normalize_itree_interp_Ret], but this
+lemma is useful for proving ITreeToTranslate for definitions. *)
+Lemma Ret_to_translate R E1 E2 (Hin : E1 -< E2) (x : R) :
+  ITreeToTranslate (Ret x) Hin (Ret x).
+Proof. constructor. by rewrite translate_ret. Qed.
+
+(** ** Typeclasses for normalizing itree [i] to itree [o]  *)
+(** The parameter [progress] determines whether the instance performed
+any simplification. The only instance with [false] for [progress]
+should be [normalize_itree_default]. *)
+Record NormalizeITree {E R} (progress : bool) (i : itree E R) (o : itree E R) := {
+    normalize_itree : i ≈ o
+}.
+Global Hint Mode NormalizeITree + + - ! - : itree_auto.
+
+Lemma normalize_itree_default {E R} (t : itree E R) :
+  NormalizeITree false t t.
+Proof. constructor. done. Qed.
+Global Hint Resolve normalize_itree_default | 1000 : itree_auto.
+
+Lemma normalize_itree_tau {E R} p (t t' : itree E R) :
+  NormalizeITree p t t' →
+  NormalizeITree true (Tau t) t'.
+Proof. move => [Heq]. constructor. by rewrite Heq tau_eutt. Qed.
+Global Hint Resolve normalize_itree_tau : itree_auto.
+
+Lemma normalize_itree_bind_bind {E R S T} p (t1 : itree E S) (t2 : S → itree E T) t3 (t' : itree E R) :
+  NormalizeITree p (ITree.bind t1 (λ x, ITree.bind (t2 x) t3)) t' →
+  NormalizeITree true (ITree.bind (ITree.bind t1 t2) t3) t'.
+Proof. move => [Heq]. constructor. by rewrite -Heq bind_bind. Qed.
+Global Hint Resolve normalize_itree_bind_bind : itree_auto.
+
+Lemma normalize_itree_bind_rec_l {E R S} p (t1 t1' : itree E S) t2 (t : itree E R) :
+  NormalizeITree true t1 t1' →
+  NormalizeITree p (ITree.bind t1' t2) t →
+  NormalizeITree true (ITree.bind t1 t2) t.
+Proof. move => [Heq1] [Heq2]. constructor. by rewrite -Heq2 Heq1. Qed.
+Global Hint Resolve normalize_itree_bind_rec_l | 50 : itree_auto.
+
+Lemma normalize_itree_bind_rec_r {E R S} (t1 : itree E S) (t2 t2' : S → itree E R) :
+  (∀ x, NormalizeITree true (t2 x) (t2' x)) →
+  NormalizeITree true (ITree.bind t1 t2) (ITree.bind t1 t2').
+Proof. move => Heq1. constructor. f_equiv => x. apply Heq1. Qed.
+Global Hint Resolve normalize_itree_bind_rec_r | 60 : itree_auto.
+
+Lemma normalize_itree_bind_ret {E R S} p x (t : S → itree E R) t' :
+  NormalizeITree p (t x) t' →
+  NormalizeITree true (ITree.bind (Ret x) t) t'.
+Proof. move => [Heq]. constructor. by rewrite -Heq bind_ret_l. Qed.
+Global Hint Resolve normalize_itree_bind_ret : itree_auto.
+
+Lemma normalize_itree_bind_ret_r {E R} p (t : itree E R) t' :
+  NormalizeITree p t t' →
+  NormalizeITree true (ITree.bind t (λ x, Ret x)) t'.
+Proof. move => [Heq]. constructor. by rewrite -Heq bind_ret_r. Qed.
+Global Hint Resolve normalize_itree_bind_ret_r | 1 : itree_auto.
+
+Lemma normalize_itree_interp_bind {E F R S} p1 p2 (f : E ~> itree F) (t1 t1' : itree E S) t2 (t' : itree _ R) :
+  NormalizeITree p1 t1 t1' →
+  NormalizeITree p2 (ITree.bind (interp f t1') (λ x, (interp f (t2 x)))) t' →
+  NormalizeITree true (interp f (ITree.bind t1 t2)) t'.
+Proof.
+  move => [Heq1] [Heq2]. constructor. by rewrite Heq1 -Heq2 interp_bind.
+Qed.
+Global Hint Resolve normalize_itree_interp_bind : itree_auto.
+
+Lemma normalize_itree_interp_Ret {E F R} (f : E ~> itree F) (x : R) :
+  NormalizeITree true (interp f (Ret x)) (Ret x).
+Proof. constructor. by rewrite interp_ret. Qed.
+Global Hint Resolve normalize_itree_interp_Ret : itree_auto.
+
+(* TODO: generalize to more interp functions? *)
+Lemma normalize_itree_interp_recursive_translate {E R A B} f (t : itree (callE A B +' E) R) t' :
+  ITreeToTranslate t _ t' →
+  NormalizeITree true (interp (recursive (A:=A) (B:=B) f) t) t'.
+Proof.
+  move => [Heq]. constructor.
+  by rewrite Heq /= interp_translate /recursive interp_trigger_h.
+Qed.
+Global Hint Resolve normalize_itree_interp_recursive_translate | 20 : itree_auto.
+
+(** ** Tactic for normalizing eutt using NormalizeITree *)
+Lemma tac_normalize_eutt {E R} p1 p2 (t1 t1' t2 t2' : itree E R) :
+  NormalizeITree p1 t1 t1' →
+  NormalizeITree p2 t2 t2' →
+  t1' ≈ t2' →
+  t1 ≈ t2.
+Proof. by move => [->] [->]. Qed.
+Lemma tac_normalize_eutt_l {E R} p1 (t1 t1' t2 : itree E R) :
+  NormalizeITree p1 t1 t1' →
+  t1' ≈ t2 →
+  t1 ≈ t2.
+Proof. by move => [->]. Qed.
+
+Ltac solve_normalize_itree :=
+  solve [typeclasses eauto with itree_auto].
+
+Ltac eutt_norm :=
+  lazymatch goal with
+  | |- ?t1 ≈ ?t2 =>
+      tryif is_evar t2 then
+        notypeclasses refine (tac_normalize_eutt_l _ _ _ _ _ _);
+            [solve_normalize_itree..|]
+        else
+          notypeclasses refine (tac_normalize_eutt _ _ _ _ _ _ _ _ _);
+          [solve_normalize_itree..|]
+  end.
+
+(** ** Tests for itree automation *)
+Module itree_auto_test.
+  Inductive testE : Type → Type :=
+  | test (n : nat) : testE nat.
+
+  Implicit Types (t : itree (callE nat nat +' testE) unit).
+
+  Goal ∀ t, Tau t ≈ t.
+    intros. eutt_norm. match goal with | |- t ≈ t => idtac end.
+  Abort.
+
+  Goal ∀ t, ((Tau (Ret tt));; t) ≈ t.
+    intros. eutt_norm. match goal with | |- t ≈ t => idtac end.
+  Abort.
+
+  Goal ∀ t, (interp (recursive (λ x : nat, Ret x)) (trigger (test 1));; t) ≈ t.
+    intros. eutt_norm. match goal with | |- (trigger (test 1);; t) ≈ t => idtac end.
+  Abort.
+
+  Goal ∀ t, ∃ t', Tau t ≈ t' ∧ t' = t'.
+    intros. eexists _. split. { eutt_norm. done. }
+    match goal with | |- t = t => idtac end.
+  Abort.
+End itree_auto_test.
