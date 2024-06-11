@@ -1,31 +1,86 @@
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
-From iris.itree Require Import wpi choice ub state handler itree.
+From iris.itree Require Import wpi choice ub state handler itree halt.
 Require Export isla.opsem.
+Require Import isla.spec_itree.
 
-(* TODO: It would be very nice to have demonic without sideconditions in decidability. *)
-Program Definition demonic {E} `{demonicE -< E} (A : Type) : itree E A :=
-  trigger (@EDemonic A _ _).
-Next Obligation. Admitted.
-Next Obligation. Admitted.
+Global Instance base_val_eq_decision : EqDecision base_val.
+Proof. solve_decision. Qed.
 
-Definition nb {E} `{demonicE -< E} {R} : itree E R :=
-  a ← demonic void; match a with end.
+Global Instance valu_eq_decision : EqDecision valu.
+Proof.
+  unfold EqDecision; intros.
+  unfold Decision.
+decide equality.
+all: try solve_trivial_decision.
+1: decide equality.
+Admitted.
 
-(* TODO: It would be very nice to have this assert without sideconditions on decidability. *)
-Program Definition assert {E} `{!ubE -< E} (P : Prop) : itree E unit :=
-  if @bool_decide P _ then ub else Ret ().
-Next Obligation. Admitted.
+Global Instance annot_eq_decision : EqDecision annot.
+Proof. solve_decision. Defined.
 
-(* TODO: switch to nbE and decision *)
-Definition assume {E} `{!demonicE -< E} (P : Prop) : itree E P :=
-  demonic P.
+Global Instance ty_eq_decision : EqDecision ty.
+Proof. solve_decision. Defined.
 
-(* TODO: define in terms of state? use a definition of wpi_translation *)
-Variant visibleE (EV : Type) : Type → Type :=
-  | EVisible (e : EV) : visibleE EV unit.
+Global Instance unop_eq_decision : EqDecision unop.
+Proof. solve_decision. Defined.
 
-Definition visible {EV} `{!visibleE EV -< E} (e : EV) : itree E unit :=
-  trigger (EVisible _ e).
+Global Instance bvarith_eq_decision : EqDecision bvarith.
+Proof. solve_decision. Defined.
+
+Global Instance bvcomp_eq_decision : EqDecision bvcomp.
+Proof. solve_decision. Defined.
+
+Global Instance binop_eq_decision : EqDecision binop.
+Proof. solve_decision. Defined.
+
+Global Instance bvmanyarith_eq_decision : EqDecision bvmanyarith.
+Proof. solve_decision. Defined.
+
+Global Instance manyop_eq_decision : EqDecision manyop.
+Proof. solve_decision. Defined.
+
+Global Instance accessor_eq_decision : EqDecision accessor.
+Proof. solve_decision. Defined.
+
+Global Instance assume_val_eq_decision : EqDecision assume_val.
+Proof. solve_decision. Defined.
+
+Global Instance exp_eq_decision : EqDecision exp.
+Proof.
+  unfold EqDecision; intros.
+  unfold Decision.
+decide equality.
+all: try solve_trivial_decision.
+1: decide equality.
+Admitted.
+
+Global Instance a_exp_eq_decision : EqDecision a_exp.
+Proof.
+  unfold EqDecision; intros.
+  unfold Decision.
+decide equality.
+all: try solve_trivial_decision.
+1: decide equality.
+Admitted.
+
+Global Instance smt_eq_decision : EqDecision smt.
+Proof. solve_decision. Defined.
+
+Global Instance event_eq_decision : EqDecision event.
+Proof. solve_decision. Defined.
+
+Global Instance isla_trace_eq_decision : EqDecision isla_trace.
+Proof.
+  unfold EqDecision; intros.
+  unfold Decision.
+decide equality.
+all: try solve_trivial_decision.
+1: decide equality.
+Admitted.
+
+
+Definition demonic {E} `{demonicE -< E} (A : Type) `{!EqDecision A} `{!Inhabited A} : itree E A :=
+  trigger (EDemonic A).
 
 (* TODO: Upstream these wrappers? *)
 Definition get_state {S} `{!stateE S -< E} : itree E S :=
@@ -34,17 +89,13 @@ Definition get_state {S} `{!stateE S -< E} : itree E S :=
 Definition set_state {S} `{!stateE S -< E} (s : S) : itree E unit :=
   trigger (ESetState s).
 
-Definition some_or_nb {E R} `{!demonicE -< E} (o : option R) : itree E R :=
-  (match o with | Some x => Ret x | None => nb end)%itree.
-Notation "x !" := (some_or_nb x) (at level 10, format "x !") : itree_scope.
-
 Record seq_state := {
    seq_local : seq_local_state;
    seq_global : seq_global_state;
 }.
 Global Instance eta_seq_state : Settable _ := settable! Build_seq_state <seq_local; seq_global>.
 
-Definition islarisE : Type → Type := demonicE +' visibleE seq_label +' stateE seq_state +' ubE.
+Definition islarisE : Type → Type := demonicE +' specE +' stateE seq_state +' haltE +' ubE.
 
 Definition base_val_to_bool (v : base_val) : option bool :=
   match v with
@@ -117,7 +168,7 @@ Definition compile_trace' (t : isla_trace) :
       else
         assert (bv_unsigned addr' + Z.of_N len ≤ 2 ^ 64);;
         assert (set_Forall (λ a, ¬ (bv_unsigned addr' ≤ bv_unsigned a < bv_unsigned addr' + Z.of_N len)) (dom s.(seq_global).(seq_mem)));;
-        visible (SReadMem addr' data');;
+        emit_label (SReadMem addr' data');;
         call es
   | WriteMem res kind addr data len tag ann :t: es =>
       s ← get_state;
@@ -131,7 +182,7 @@ Definition compile_trace' (t : isla_trace) :
       else
         assert (bv_unsigned addr' + Z.of_N len ≤ 2 ^ 64);;
         assert (set_Forall (λ a, ¬ (bv_unsigned addr' ≤ bv_unsigned a < bv_unsigned addr' + Z.of_N len)) (dom s.(seq_global).(seq_mem)));;
-        visible (SWriteMem addr' data');;
+        emit_label (SWriteMem addr' data');;
         call es
   | tcases ts =>
       assert (ts ≠ []);;
@@ -144,7 +195,7 @@ Definition compile_trace' (t : isla_trace) :
       pc ← (val_to_bits 64 vpc)?;
       match s.(seq_global).(seq_instrs) !! pc with
       | Some es' => call es'
-      | None => visible (SInstrTrap pc);; nb
+      | None => emit_label (SInstrTrap pc);; halt
       end
   | BranchAddress v ann :t: es => call es
   | Branch c desc ann :t: es => call es

@@ -611,6 +611,16 @@ Section wp_itree_mask.
     iIntros "HH". iApply wpi_vis'. iMod "HH". by iModIntro.
   Qed.
 
+  Lemma wpi_trigger M A E' Φ (e : E' A) `{!E' -< E} `{!inH H' H} :
+    (|={M, ∅}=> H' A e (λ a, |={∅, M}=> Φ a) (λ a, False )) -∗
+    WPi trigger e @ H; M {{ Φ }}.
+  Proof.
+    iIntros "HH". iApply wpi_vis. iMod "HH". iModIntro. rewrite is_inH.
+    iApply (ihandler_mono with "[] [] HH").
+    - iIntros (?) "?". by iApply wpi_ret.
+    - iIntros "!>" (?) "?". done.
+  Qed.
+
   (* Derived rules. *)
 
   Lemma wpi_frame_l {R} M Φ (t : itree E R) (P : iProp Σ) :

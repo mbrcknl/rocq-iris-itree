@@ -10,7 +10,7 @@ INSTALLDEFAULTROOT = iris
 src/axioms.v
 src/choice.v
 src/ub.v
-src/nb.v
+src/halt.v
 src/later.v
 src/handler.v
 src/itree.v
@@ -30,4 +30,5 @@ islaris/lifting.v
 islaris/opsem.v
 islaris/opsem_itree.v
 islaris/spec.v
+islaris/spec_itree.v
 islaris/isla_lang.v
