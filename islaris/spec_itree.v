@@ -54,13 +54,13 @@ Section wp_spec.
   Context {E : Type → Type} `{!islaG Σ}.
   Context {H : iHandler Σ E} `{!specE -< E} `{!inH specH H}.
 
-  Lemma wpi_emit_label {R} (k : itree E R) Pκs κ (M : coPset) (Φ : R → iProp Σ) :
+  Lemma wpi_emit_label Pκs κ (M : coPset) (Φ : unit → iProp Σ) :
     Pκs [κ] →
     spec_trace Pκs -∗
-    (spec_trace (λ κs, Pκs (κ::κs)) -∗ WPi k @ H; M {{ Φ }}) -∗
-    WPi emit_label κ;; k @ H; M {{ Φ }}.
+    (spec_trace (λ κs, Pκs (κ::κs)) -∗ Φ tt) -∗
+    WPi emit_label κ @ H; M {{ Φ }}.
   Proof using Type*.
-    iIntros (HPκs) "Hspec Hwp". iApply wpi_bind. iApply wpi_trigger => /=.
+    iIntros (HPκs) "Hspec Hwp". iApply wpi_trigger => /=.
     iApply fupd_mask_intro; first set_solver. iIntros "Hfupd".
     iExists _. iFrame. iSplit; [done|]. iIntros "Hspec".
     iMod "Hfupd". iModIntro. by iApply "Hwp".

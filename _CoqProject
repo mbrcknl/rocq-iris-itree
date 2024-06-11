@@ -27,6 +27,7 @@ islaris/base.v
 islaris/adequacy.v
 islaris/ghost_state.v
 islaris/lifting.v
+islaris/lifting_itree.v
 islaris/opsem.v
 islaris/opsem_itree.v
 islaris/spec.v
