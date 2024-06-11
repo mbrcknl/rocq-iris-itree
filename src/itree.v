@@ -325,6 +325,7 @@ Ltac solve_normalize_itree :=
   solve [typeclasses eauto with itree_auto].
 
 Ltac eutt_norm :=
+  rewrite -/(eutt _ _);
   lazymatch goal with
   | |- ?t1 ≈ ?t2 =>
       tryif is_evar t2 then
@@ -343,7 +344,7 @@ Module itree_auto_test.
   Implicit Types (t : itree (callE nat nat +' testE) unit).
 
   Goal ∀ t, Tau t ≈ t.
-    intros. eutt_norm. match goal with | |- t ≈ t => idtac end.
+    unfold eutt. intros. eutt_norm. match goal with | |- t ≈ t => idtac end.
   Abort.
 
   Goal ∀ t, ((Tau (Ret tt));; t) ≈ t.
