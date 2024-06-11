@@ -139,6 +139,8 @@ Definition step_ret {E} `{laterE -< E} (v : val) : itree E val :=
 Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   let yield := do yield in
   let yield_if_not_val e := do (yield_if_not_val e) in
+  let step := do step in
+  let step_if_not_val e := do (step_if_not_val e) in
   let store' l x := do (store' l x) in
   let store l x := do (store l x) in
   let load l := do (load l) in
@@ -154,27 +156,29 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       f ← compile_expr_yield e1;
       '(f_, x_, e) ← (val_to_RecV f)?;
       let body := subst' x_ x  (subst' f_ f e) in
-      yield_if_not_val body;;
       step_if_not_val body;;
+      yield_if_not_val body;;
       call body
   | UnOp op e =>
       v ← compile_expr_yield e;
-      (un_op_eval op v)?
+      v' ← (un_op_eval op v)?;
+      step_ret v'
   | BinOp op e1 e2 =>
       v2 ← compile_expr_yield e2;
       v1 ← compile_expr_yield e1;
-      (bin_op_eval op v1 v2)?
+      v ← (bin_op_eval op v1 v2)?;
+      step_ret v
   | If e0 e1 e2 =>
       v0 ← compile_expr_yield e0;
       b ← (val_to_bool v0)?;
       if b then
         (* if true then e1 else e2 ~> e1 (must yield here!) ~> ... *)
-        yield_if_not_val e1;;
         step_if_not_val e1;;
+        yield_if_not_val e1;;
         compile_expr' e1
       else
-        yield_if_not_val e2;;
         step_if_not_val e2;;
+        yield_if_not_val e2;;
         compile_expr' e2
   | Pair e1 e2 =>
       v2 ← compile_expr_yield e2;
@@ -199,12 +203,12 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       v0 ← (val_to_sum v0')?;
       match v0 with
       | inl v =>
-          yield ;;
           step ;;
+          yield ;;
           call (App e1 (Val v))
       | inr v =>
-          yield ;;
           step ;;
+          yield ;;
           call (App e2 (Val v))
       end
   | Fork e =>

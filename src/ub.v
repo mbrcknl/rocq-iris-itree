@@ -191,6 +191,13 @@ Section wp_ub.
   Context {E : Type → Type} `{H : iHandler Σ E} `{ubE -< E} `{inH Σ ubE E ubH H}.
   Context `{!invGS_gen hlc Σ}.
 
+  Lemma wpi_ub {R} M Φ :
+    WPi ub (R := R) @ H; M {{ Φ }} -∗
+    |={M}=> False.
+  Proof.
+    iIntros "Hwp". rewrite -wpi_vis' -(is_inH (H1 := ubH)) /=. by iMod "Hwp".
+  Qed.
+
   Lemma wpi_assert M P `{Decision P} Φ :
     P →
     Φ () -∗
