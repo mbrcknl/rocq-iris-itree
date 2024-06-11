@@ -121,6 +121,7 @@ Proof.
   rewrite compile_tp_cons /= compile_tp_cons /= compile_tp'_app //.
 Qed.
 
+Print reducible.
 Global Instance reducible_dec (e : expr) σ : Decision (reducible e σ).
 Admitted.
 Global Instance stuck_dec (e : expr) σ : Decision (stuck e σ).
@@ -465,10 +466,11 @@ Definition ctrace_terminates_in {E R} `{ubE -< E} (tr : ctrace E R) (tx : Termin
   is_postfix_ctrace (terminal_ctrace tx) tr.
 
 Definition tp_termination (tp : list expr) (σ : state) : option (Terminal val) :=
-  match tp with
-  | (Val v)::_ => Some (TermRet v)
-  | _ => if decide (thread_stuck tp σ) then Some TermUb else None
-  end.
+  if decide (thread_stuck tp σ) then Some TermUb else
+    match tp with
+    | (Val v)::_ => Some (TermRet v)
+    | _ => None
+    end.
 
 (* TODO: Factor this event type into its own definition. *)
 Definition trace_invariant_postfix tp' σ' (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
@@ -496,7 +498,7 @@ Proof.
   - destruct (decide _); last done. rewrite /ctrace_terminates_in. by etransitivity.
   - destruct (to_val e) as [v|] eqn:Hval.
     * apply of_to_val in Hval as <-.
-      rewrite /ctrace_terminates_in. by etransitivity.
+      rewrite /ctrace_terminates_in. destruct (decide _); by etransitivity.
     * destruct (decide _), e; rewrite /ctrace_terminates_in //; by etransitivity.
 Qed.
 
@@ -509,8 +511,9 @@ Proof.
   destruct tp.
   - destruct (decide _) as [Hstuck|]; last discriminate.
     done.
-  - destruct e eqn:Heq; first discriminate; rewrite -Heq in Hterm;
-    destruct (decide _) as [Hstuck|]; try discriminate; rewrite -Heq //.
+  - destruct (decide _).
+    * done.
+    * destruct e; discriminate.
 Qed.
 
 Lemma is_ctrace_ret tp σ v :
@@ -538,7 +541,7 @@ Proof.
   - destruct e; try destruct (decide (_)) as [Hstuck|]; try discriminate.
     injection Hterm as ->.
     split; last done.
-    rewrite /trace_invariant_postfix/=. constructor.
+    rewrite /trace_invariant_postfix/= /tp_termination decide_False //. constructor.
 Qed.
 
 Lemma UnOp_stuck op v σ :
