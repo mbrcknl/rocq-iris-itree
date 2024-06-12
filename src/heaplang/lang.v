@@ -390,11 +390,16 @@ Proof.
   - apply compile_expr_bind; first done. lia.
 Qed.
 
-Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
+Class heaplangHGpreS (Σ : gFunctors) := HeapLangHGpreS {
   heaplangH_ghost_varG :> ghost_mapG Σ loc (option val);
+}.
+Local Existing Instances heaplangH_ghost_varG.
+Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
+  heaplangH_inG : heaplangHGpreS Σ;
   heaplangH_heap_name : gname;
   heaplangH_inv_name : namespace;
 }.
+Local Existing Instances heaplangH_inG.
 
 Definition pointsto `{!heaplangHGS Σ} (l : loc) (v : val) (dq : dfrac) : iProp Σ :=
   l ↪[ heaplangH_heap_name ]{dq} (Some v).
@@ -679,3 +684,15 @@ Section heaplangH.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 End heaplangH.
+
+Lemma heaplangH_init `{!invGS_gen hlc Σ} `{!heaplangHGpreS Σ} σ :
+  ⊢ |={∅}=> ∃ _ : heaplangHGS Σ, heap_inv ∗ state_interp σ ∗ [∗ map] k↦v ∈ σ.(heap), k ↪[heaplangH_heap_name] v.
+Proof.
+  iDestruct (ghost_map_alloc (K := loc) (V := option val) (σ.(heap))) as "Hgmap".
+  iMod "Hgmap" as "[%γ [[Hauth' Hauth] Hfrag]]".
+  iDestruct (inv_alloc (nroot .@ "heaplangH") (∅) ((∃ σ, ghost_map_auth γ (1 / 2) σ.(heap))%I)) as "Hinv".
+  iSpecialize ("Hinv" with "[Hauth]"). { iNext. by iExists σ. }
+  iMod "Hinv". iModIntro.
+  iExists (HeapLangHGS Σ _ γ (nroot .@ "heaplangH")).
+  iFrame.
+Qed.
