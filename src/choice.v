@@ -57,6 +57,13 @@ Section wp_demonic.
     rewrite /demonicH. iIntros (a).
     iEval (rewrite -wpi_update). iMod "Hfupd". rewrite wpi_clear_mask //.
   Qed.
+
+  Lemma wpi_demonic_trigger {A} `{EqDecision A} `{Inhabited A} M (Φ : A → iProp Σ) :
+    (∀ a,  Φ a) -∗
+    WPi (trigger (EDemonic A)) @ H; M {{ Φ }}.
+  Proof.
+    iIntros "Hwp". iApply wpi_demonic. iIntros (?). iApply wpi_ret. iApply "Hwp".
+  Qed.
 End wp_demonic.
 
 Section demonic_adequacy.
