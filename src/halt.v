@@ -70,6 +70,28 @@ Section handler.
   Qed.
 End handler.
 
+Section wp_halt.
+  Context {E : Type → Type} `{!invGS_gen hlc Σ}.
+  Context {H : iHandler Σ E} `{!haltE -< E} `{!inH haltH H}.
+
+  Lemma wpi_halt {R} (Φ : R → iProp Σ) :
+    ⊢ WPi halt @ H; ⊤ {{ Φ }}.
+  Proof using Type*.
+    iApply wpi_vis => /=. rewrite -is_inH /=.
+    iApply fupd_mask_intro; first set_solver. iIntros "Hfupd".
+    by iMod "Hfupd".
+  Qed.
+
+  Lemma wpi_assume P `{!Decision P} (Φ : P → iProp Σ) :
+    (∀ HP:P, Φ HP) -∗
+    WPi assume P @ H; ⊤ {{ Φ }}.
+  Proof using Type*.
+    iIntros "HΦ". rewrite /assume. case_decide.
+    - iApply wpi_ret. iApply "HΦ".
+    - iApply wpi_halt.
+  Qed.
+End wp_halt.
+
 (** "Sandbox" an [itree] with halt events by replacing halt with returning [None]. *)
 Definition sandbox_halt {R E} (t : itree (haltE +' E) R) : itree E (option R) :=
   ITree.iter (λ (t : itree (haltE +' E) (option R)),

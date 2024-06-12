@@ -6,6 +6,7 @@ From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
 From iris.itree Require Import trace.
+From iris.itree Require Import exec.
 From ITree Require Import ITree.
 From Paco Require Import paco.
 From Paco Require Import paco3.
@@ -54,18 +55,61 @@ Section wp_spec.
   Context {E : Type → Type} `{!islaG Σ}.
   Context {H : iHandler Σ E} `{!specE -< E} `{!inH specH H}.
 
-  Lemma wpi_emit_label {R} (k : itree E R) Pκs κ (M : coPset) (Φ : R → iProp Σ) :
+  Lemma wpi_emit_label Pκs κ (M : coPset) (Φ : unit → iProp Σ) :
     Pκs [κ] →
     spec_trace Pκs -∗
-    (spec_trace (λ κs, Pκs (κ::κs)) -∗ WPi k @ H; M {{ Φ }}) -∗
-    WPi emit_label κ;; k @ H; M {{ Φ }}.
+    (spec_trace (λ κs, Pκs (κ::κs)) -∗ Φ tt) -∗
+    WPi emit_label κ @ H; M {{ Φ }}.
   Proof using Type*.
-    iIntros (HPκs) "Hspec Hwp". iApply wpi_bind. iApply wpi_trigger => /=.
+    iIntros (HPκs) "Hspec Hwp". iApply wpi_trigger => /=.
     iApply fupd_mask_intro; first set_solver. iIntros "Hfupd".
     iExists _. iFrame. iSplit; [done|]. iIntros "Hspec".
     iMod "Hfupd". iModIntro. by iApply "Hwp".
   Qed.
 End wp_spec.
+
+Section spec_ctx.
+  Context `{!islaG Σ}.
+  Context (Pκs : list seq_label → Prop).
+
+  Definition spec_ctx (κs : list seq_label) : iProp Σ :=
+    ∃ Pκs', ⌜Pκs' ⊆ λ κs', Pκs (κs ++ κs')⌝ ∗
+    spec_trace_raw Pκs'.
+
+  Lemma spec_ctx_cons κ κs (Pκs' : spec) :
+    Pκs' [κ] →
+    spec_ctx κs -∗
+    spec_trace Pκs' ==∗
+    ⌜Pκs (κs ++ [κ])⌝ ∗ spec_ctx (κs ++ [κ]) ∗ spec_trace (λ κs, Pκs' (κ::κs)).
+  Proof.
+    move => Hκ.
+    iDestruct 1 as (Pκs'' Hspec) "Hsc".
+    rewrite spec_trace_eq. iDestruct 1 as (Pκs''' HPκs''') "Hs".
+    iDestruct (spec_trace_raw_agree with "Hsc Hs") as %HPκs.
+    iMod (spec_trace_raw_update with "Hsc Hs") as "[Ht ?]".
+    iModIntro. iFrame. repeat iSplit; iPureIntro.
+    - spec_solver.
+    - apply reflexivity.
+    - move => ?. rewrite -app_assoc -cons_middle. spec_solver.
+  Qed.
+End spec_ctx.
+
+Program Definition specEH (Pκs : list seq_label → Prop) : eHandler specE :=
+  EHandler (list seq_label) (λ A e s,
+      match e with | EEmitLabel κ => λ C, Pκs (s ++ [κ]) → C tt (s ++ [κ]) end) _.
+Next Obligation. move => /= *. case_match; naive_solver. Qed.
+
+Global Program Instance specEH_adequate {Σ} `{!islaG Σ} Pκs :
+  HandlerAdequate (specH) (specEH Pκs) := {| handler_inv s := spec_ctx Pκs s |}.
+Next Obligation.
+  move => ????????? HP.
+  iIntros "Hp Hs". rewrite /specH/=. case_match => /=. simplify_eq/=.
+  iDestruct "Hp" as (??) "[Ht Hwp]".
+  iMod (spec_ctx_cons with "[$] [$]") as (?) "[??]"; [done|].
+  iModIntro. iFrame. iExists _. iSplit.
+  - iPureIntro. by apply HP.
+  - by iApply "Hwp".
+Qed.
 
 Section specH_adequacy.
   Context {E : Type → Type} `{!islaG Σ}.
@@ -152,32 +196,11 @@ Section specH_adequacy.
     split; rewrite Ht Ht' //.
   Qed.
 
-  Definition spec_ctx (κs : list seq_label) : iProp Σ :=
-    ∃ Pκs', ⌜Pκs' ⊆ λ κs', Pκs (κs ++ κs')⌝ ∗
-    spec_trace_raw Pκs'.
-
-  Lemma spec_ctx_cons κ κs (Pκs' : spec) :
-    Pκs' [κ] →
-    spec_ctx κs -∗
-    spec_trace Pκs' ==∗
-    ⌜Pκs (κs ++ [κ])⌝ ∗ spec_ctx (κs ++ [κ]) ∗ spec_trace (λ κs, Pκs' (κ::κs)).
-  Proof.
-    move => Hκ.
-    iDestruct 1 as (Pκs'' Hspec) "Hsc".
-    rewrite spec_trace_eq. iDestruct 1 as (Pκs''' HPκs''') "Hs".
-    iDestruct (spec_trace_raw_agree with "Hsc Hs") as %HPκs.
-    iMod (spec_trace_raw_update with "Hsc Hs") as "[Ht ?]".
-    iModIntro. iFrame. repeat iSplit; iPureIntro.
-    - spec_solver.
-    - apply reflexivity.
-    - move => ?. rewrite -app_assoc -cons_middle. spec_solver.
-  Qed.
-
   (** A technical version of adequacy, amenable to induction. See corollary below for a
   more meaningful statement. *)
   Theorem wpi_spec_ind κs t t' M Φ :
     assume_spec κs t t' →
-    spec_ctx κs -∗
+    spec_ctx Pκs κs -∗
     WPi t @ specH ⊕ H; ∅ {{ v, |={∅, M}=> Φ v }} -∗
     WPi t' @ H; ∅ {{ v, |={∅, M}=> Φ v }}.
   Proof using Type*.
@@ -185,7 +208,7 @@ Section specH_adequacy.
     pose (G := (λ (t : itree (specE +' E) R) (Φ : R -d> iPropO Σ),
       ∀ t' κs Ψ,
         ⌜assume_spec κs t t'⌝ -∗
-        spec_ctx κs -∗
+        spec_ctx Pκs κs -∗
         (∀ v, Φ v -∗ |={∅, M}=> Ψ v) -∗
         WPi t' @ H; ∅ {{ v, |={∅, M}=> Ψ v }}
     )%I).

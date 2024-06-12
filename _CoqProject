@@ -20,6 +20,7 @@ src/threadpool/handler.v
 src/threadpool/interleaving.v
 src/threadpool/ctrace.v
 src/wpi.v
+src/exec.v
 src/heaplang/lang.v
 src/heaplang/adequacy.v
 
@@ -27,6 +28,7 @@ islaris/base.v
 islaris/adequacy.v
 islaris/ghost_state.v
 islaris/lifting.v
+islaris/lifting_itree.v
 islaris/opsem.v
 islaris/opsem_itree.v
 islaris/spec.v

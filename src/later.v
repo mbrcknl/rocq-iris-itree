@@ -1,7 +1,7 @@
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic Require Import bi.
 From iris.proofmode Require Import proofmode.
-From iris.itree Require Import wpi trace handler.
+From iris.itree Require Import itree wpi trace handler.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
 From ITree Require Import ITree.
@@ -11,6 +11,12 @@ Variant laterE : Type → Type :=
 
 Definition step `{laterE -< E} : itree E () :=
   trigger ELater.
+
+Lemma step_to_translate {E1 E2} (HE1 : laterE -< E1) (HE2 : laterE -< E2) (Hin : E1 -< E2) :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate step Hin step.
+Proof. move => ?. rewrite /step. by apply trigger_to_translate. Qed.
+Global Hint Resolve step_to_translate : itree_auto.
 
 Global Instance AnswerEqDecision_laterE :
   AnswerEqDecision laterE.
@@ -83,4 +89,12 @@ Section wpi_later.
     iApply is_inH. simpl. iApply (lat_mono with "[Hfupd]"); last done.
     iIntros "HΦ". iApply wpi_ret. by iMod "Hfupd".
   Qed.
+
+  (* TODO: consistently use step vs trigger ELater and get rid of this
+  or the previous lemma *)
+  Lemma wpi_step M (Φ : () → iProp Σ) :
+    (lat m (|={M}=> Φ ())) -∗
+    WPi step @ H; M {{ Φ }}.
+  Proof. exact: wpi_later. Qed.
+
 End wpi_later.
