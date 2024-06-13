@@ -66,10 +66,10 @@ Section scheduler.
       | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
       end.
 
-  (* FOR RALF:
   Definition scheduler' : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
     cofix _scheduler tid tp :=
-      match tp !! tid with
+      (* Not using "!!" notation here as that leads to a Coq anomaly. *)
+      match list_lookup tid tp with
       | Some t =>
         match observe t with
         | RetF r  => Ret (inl r)
@@ -104,7 +104,6 @@ Section scheduler.
         end : (A → _) → _) k
       | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
       end.
-  *)
 
   Lemma unfold_scheduler (t : itree (threadpoolE +' E) R) tp :
     scheduler t tp = scheduler_ t tp.
