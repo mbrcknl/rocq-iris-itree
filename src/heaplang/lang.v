@@ -460,14 +460,13 @@ Section heaplangH.
     WPi compile_expr e @ heaplangH m; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
     WPi compile_expr (Fork e) @ heaplangH m; ⊤ {{ Φ }}.
   Proof.
-    iIntros "HΦ Hwp". rewrite /compile_expr. simpl_itree.
+    iIntros "HΦ Hwp". rewrite /compile_expr. wpi_norm/=.
     rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
-    - simpl_itree. iApply wpi_bind. iApply @wpi_later.
-      iApply lat_mono; last done. iIntros "HΦ". by iApply wpi_ret.
+    - wpi_norm. by iApply wpi_step_ret.
     - simpl_itree. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->).
       rewrite /yield_if_not_val. destruct (to_val _) eqn:Hval.
-      * rewrite /kill_thread. simpl_itree. rewrite bind_trigger. by iApply @wpi_kill.
+      * rewrite /kill_thread. wpi_norm. rewrite bind_trigger. by iApply @wpi_kill.
       * rewrite /kill_thread. iApply wpi_bind. iApply @wpi_yield.
         iApply wpi_bind. by iApply @wpi_kill.
   Qed.
@@ -500,9 +499,9 @@ Section heaplangH.
     WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hpos Hmask) "#Hinv Hwand".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    rewrite assert_True //. simpl_itree.
+    rewrite assert_True //. wpi_norm.
     iApply wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
@@ -535,7 +534,7 @@ Section heaplangH.
     iApply wpi_bind. iApply @wpi_get.
     iIntros (s) "Hauth".
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %Hlu.
-    iFrame. iApply wpi_ret. rewrite Hlu. simpl_itree. iApply wpi_ret. by iApply "Hwand".
+    iFrame. iApply wpi_ret. rewrite Hlu. iModIntro. wpi_norm. iApply wpi_ret. by iApply "Hwand".
   Qed.
 
   Lemma wpi_store' m M l v v' Φ :
@@ -553,7 +552,7 @@ Section heaplangH.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
     iFrame. iApply wpi_ret.
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %->.
-    simpl_itree. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    wpi_norm/=. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
     rewrite /state_interp/stateInterp_heaplang.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
@@ -583,7 +582,7 @@ Section heaplangH.
     WPi compile_expr (Load (Val $ LitV $ LitLoc l)) @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done. iIntros (v' ->) "Hpointsto".
     iApply wpi_step_ret. iApply (lat_mono with "[Hpointsto]"); last done.
     iIntros "Hwand". by iApply "Hwand".
@@ -597,7 +596,7 @@ Section heaplangH.
     WPi compile_expr (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
@@ -612,7 +611,7 @@ Section heaplangH.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto HΦ".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store' with "Hinv Hpointsto"); first done.
     iIntros (r) "_ _". by iApply wpi_step_ret.
   Qed.
@@ -625,7 +624,7 @@ Section heaplangH.
     WPi compile_expr (Xchg (Val $ LitV (LitLoc l)) (Val v')) @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
@@ -641,10 +640,10 @@ Section heaplangH.
     WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
-    rewrite /assert /= decide_True // decide_False //. simpl_itree.
+    rewrite /assert /= decide_True // decide_False //. wpi_norm/=.
     iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
@@ -659,10 +658,10 @@ Section heaplangH.
     WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
-    rewrite /assert /= decide_True // decide_True //. simpl_itree.
+    rewrite /assert /= decide_True // decide_True //. wpi_norm.
     iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
@@ -676,10 +675,10 @@ Section heaplangH.
     WPi compile_expr (FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2)) @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. simpl_itree.
+    rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
-    simpl_itree. iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
+    wpi_norm/=. iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
