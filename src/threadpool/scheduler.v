@@ -38,7 +38,7 @@ Section scheduler.
         | RetF r  => Ret (inl r)
         | TauF t' => Tau (_scheduler t' tp)
         | @VisF _ _ _ A (inl1 e) k =>
-          (match e with
+          (match e in threadpoolE A return (A → itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) with
           | EFork => λ k, Tau (_scheduler (k CurrentThread) (tp ++ [k NewThread]))
           | EYield => λ k, Tau (_scheduler (k ()) tp)
           | EKillThread => λ k,
@@ -46,7 +46,7 @@ Section scheduler.
               | [] => Ret (inr LastThreadKilled)
               | t' :: tp' => Tau (_scheduler t' tp')
               end
-          end : (A → _) → _) k
+          end) k
         | VisF (inr1 e) k => Vis e (λ a, _scheduler (k a) tp)
         end.
   Notation scheduler_ t tp :=
@@ -65,6 +65,46 @@ Section scheduler.
         end : (A → _) → _) k
       | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
       end.
+
+  (* FOR RALF:
+  Definition scheduler' : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
+    cofix _scheduler tid tp :=
+      match tp !! tid with
+      | Some t =>
+        match observe t with
+        | RetF r  => Ret (inl r)
+        | TauF t' => Tau (_scheduler tid (<[tid := t']>tp))
+        | @VisF _ _ _ A (inl1 e) k =>
+          (match e in threadpoolE A return (A → _) → _ with
+          | EFork => λ k, Tau (_scheduler tid (<[tid := k CurrentThread]>tp ++ [k NewThread]))
+          | EYield => λ k, Tau (_scheduler (match tid with S n => n | O => length tp - 1 end) (<[tid := k ()]>tp))
+          | EKillThread => λ k,
+              match tp with
+              | [] => Ret (inr LastThreadKilled)
+              | _ => Tau (_scheduler (match tid with S n => n | O => length tp - 1 end) (delete tid tp))
+              end
+          end) k
+        | VisF (inr1 e) k => Vis e (λ a, _scheduler tid (<[tid := k a]>tp))
+        end
+      | None => (* placeholder: *) Ret (inr LastThreadKilled)
+      end.
+  Notation scheduler_' t tp plan :=
+      match observe t with
+      | RetF r  => Ret (inl r)
+      | TauF t' => Tau (scheduler t' tp)
+      | @VisF _ _ _ A (inl1 e) k =>
+        (match e with
+        | EFork => λ k, Tau (scheduler (k CurrentThread) (tp ++ [k NewThread]))
+        | EYield => λ k, Tau (scheduler (k ()) tp)
+        | EKillThread => λ k,
+            match tp with
+            | [] => Ret (inr LastThreadKilled)
+            | t' :: tp' => Tau (scheduler t' tp')
+            end
+        end : (A → _) → _) k
+      | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
+      end.
+  *)
 
   Lemma unfold_scheduler (t : itree (threadpoolE +' E) R) tp :
     scheduler t tp = scheduler_ t tp.
