@@ -90,8 +90,8 @@ all: try solve_trivial_decision.
 Admitted.
 
 
-Definition demonic {E} `{demonicE -< E} (A : Type) `{!EqDecision A} `{!Inhabited A} : itree E A :=
-  trigger (EDemonic A).
+(* Definition demonic {E} `{demonicE -< E} (A : Type) `{!EqDecision A} `{!Inhabited A} : itree E A := *)
+(*   trigger (EDemonic A). *)
 
 (* TODO: Upstream these wrappers? *)
 Definition get_state {S} `{!stateE S -< E} : itree E S :=
@@ -209,14 +209,14 @@ Definition compile_trace' (t : isla_trace) :
   | Smt (DeclareConst x ty) ann :t: es =>
       v ← (match ty with
            | Ty_BitVec b =>
-               n ← demonic Z;
+               n ← trigger (EDemonic Z);
                Hwf ← assume (BvWf b n);
                Ret (Val_Bits (@BV b n Hwf))
            | Ty_Bool =>
-               b ← demonic bool;
+               b ← trigger (EDemonic bool);
                Ret (Val_Bool b)
            | Ty_Enum i =>
-               c ← demonic _;
+               c ← trigger (EDemonic _);
                Ret (Val_Enum c)
            | _ => ub
            end);
@@ -273,7 +273,7 @@ Definition compile_trace' (t : isla_trace) :
         call es
   | tcases ts =>
       assert (ts ≠ []);;
-      es ← demonic _;
+      es ← trigger (EDemonic _);
       assume (es ∈ ts);;
       call es
   | tnil =>
@@ -300,14 +300,14 @@ Definition compile_trace_direct_translation' (t : isla_trace) :
   later.step;;
   match t with
   | Smt (DeclareConst x (Ty_BitVec b)) ann :t: es =>
-      n ← demonic Z;
+      n ← trigger (EDemonic Z);
       Hwf ← assume (BvWf b n);
       call (subst_trace (Val_Bits (@BV b n Hwf)) x es)
   | Smt (DeclareConst x Ty_Bool) ann :t: es =>
-      b ← demonic bool;
+      b ← trigger (EDemonic bool);
       call (subst_trace (Val_Bool b) x es)
   | Smt (DeclareConst x (Ty_Enum i)) ann :t: es =>
-      c ← demonic _;
+      c ← trigger (EDemonic _);
       call (subst_trace (Val_Enum c) x es)
   | Smt (DefineConst x e) ann :t: es =>
       v ← eval_exp e?;
@@ -373,7 +373,7 @@ Definition compile_trace_direct_translation' (t : isla_trace) :
         call es
   | tcases ts =>
       assert (ts ≠ []);;
-      es ← demonic _;
+      es ← trigger (EDemonic _);
       assume (es ∈ ts);;
       call es
   | tnil =>

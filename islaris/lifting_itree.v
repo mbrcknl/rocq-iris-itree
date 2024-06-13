@@ -151,18 +151,18 @@ Section lifting.
   Proof.
     rewrite /ElimModal bi.intuitionistically_if_elim (bupd_fupd ⊤) fupd_frame_r bi.wand_elim_r.
     rewrite wp_asm_eq.
-  Admitted.
-    (* iIntros "_ Hs" (???) "?". iMod "Hs". by iApply "Hs". *)
-  (* Qed. *)
+    iIntros "_ Hs" (??) "????". iApply wpi_update.
+    by iApply ("Hs" with "[//] [$] [$] [$] [$]").
+  Qed.
 
   Global Instance elim_modal_fupd_wp_asm p P es :
     ElimModal True p false (|={⊤}=> P) P (WPasm es) (WPasm es).
   Proof.
     rewrite /ElimModal bi.intuitionistically_if_elim fupd_frame_r bi.wand_elim_r.
     rewrite wp_asm_eq.
-  Admitted.
-    (* iIntros "_ Hs" (???) "?". iMod "Hs". by iApply "Hs". *)
-  (* Qed. *)
+    iIntros "_ Hs" (??) "????". iApply wpi_update.
+    by iApply ("Hs" with "[//] [$] [$] [$] [$]").
+  Qed.
 
   Global Instance is_except_0_wp_asm es:
     IsExcept0 (WPasm es).
@@ -200,6 +200,16 @@ Section lifting.
   Proof.
     rewrite wp_event_eq. iIntros "Hwp HΦ" (t) "HΦ'".
     iApply "Hwp". iIntros "?". iApply "HΦ'". by iApply "HΦ".
+  Qed.
+
+  Lemma wp_readreg_mono r al Φ' Φ :
+    WPreadreg r @ al {{ Φ }} -∗
+    (∀ v, Φ v -∗ Φ' v) -∗
+    WPreadreg r @ al {{ Φ' }}.
+  Proof.
+    rewrite wpreadreg_eq. iIntros "Hr HΦ" (?) "?".
+    iDestruct ("Hr" with "[$]") as (????) "[$ ?]".
+    iExists _, _. do 2 (iSplit; [done|]). by iApply "HΦ".
   Qed.
 
   (** * Helper function (new)  *)
@@ -350,8 +360,10 @@ Section lifting.
     iIntros (?) "Hwp". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
     iApply wpi_bind. iApply wpi_assert; [done|].
-    rewrite /demonic. wpi_norm/=.
-  Admitted.
+    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    iApply wpi_bind. iApply @wpi_assume. iIntros (?).
+    rewrite interp_recursive_call. by iApply ("Hwp" with "[//] [//] [$] [$] [$] [$]").
+  Qed.
 
   (** * Registers  *)
   Lemma wp_read_reg r v vread ann es al:
@@ -362,7 +374,11 @@ Section lifting.
     iIntros (Heq) "Hread". setoid_rewrite wp_asm_unfold at 2. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro. rewrite Heq.
     iApply wpi_bind. iApply (wpi_read_reg with "[$] [$]").
-  Admitted.
+    iApply (wp_readreg_mono with "Hread"). iIntros (?) "Hwp ??/=". wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_assume. iIntros (?).
+    rewrite interp_recursive_call. rewrite wp_asm_unfold.
+    by iApply ("Hwp" with "[//] [//] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_assume_reg r v ann es al:
     WPreadreg r @ al {{ v', ⌜v = v'⌝ ∗ WPasm es }} -∗
@@ -371,7 +387,11 @@ Section lifting.
     iIntros "Hread". setoid_rewrite wp_asm_unfold at 2. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
     iApply wpi_bind. iApply (wpi_read_reg with "[$] [$]").
-  Admitted.
+    iApply (wp_readreg_mono with "Hread"). iIntros (?) "[% Hwp] ??/=". wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_assert; [done|].
+    rewrite interp_recursive_call. rewrite wp_asm_unfold.
+    by iApply ("Hwp" with "[//] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_write_reg_acc r v v' v'' vnew ann es al:
     read_accessor al v = Some vnew →
@@ -419,27 +439,15 @@ Section lifting.
   Proof.
     iIntros (??) "Hm Hcont". setoid_rewrite wp_asm_unfold. subst. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
+    rewrite bvn_to_bv_to_bvn/=/read_mem_checked. wpi_norm/=.
+    iDestruct (mem_mapsto_lookup with "[$] Hm") as %[len' [? Heq]].
+    have ? : len' = len by lia. subst.
+    iApply wpi_bind. iApply (wpi_get_state_isla with "[$]"). iIntros "?".
+    iApply wpi_bind. iApply wpi_assert; [done|]. rewrite Heq. wpi_norm/=.
     rewrite bvn_to_bv_to_bvn/=. wpi_norm/=.
-  (*   iIntros ([????]) "/= -> -> -> Hθ". *)
-  (*   iApply wp_lift_step; [done|]. *)
-  (*   iIntros (σ1 ????) "(Hctx&Hictx&Hmem)". *)
-  (*   iApply fupd_mask_intro; first set_solver. iIntros "HE". *)
-  (*   iDestruct (mem_mapsto_lookup with "Hmem Hm") as %[len' [??]]. *)
-  (*   have ? : len' = len by lia. subst. *)
-  (*   iSplit. { *)
-  (*     iPureIntro. eexists _, _, _, _. simpl. econstructor; [done | by econstructor |] => /=. *)
-  (*     eexists _, _, _. simplify_option_eq. naive_solver. *)
-  (*   } *)
-  (*   iIntros "!>" (????) "_". iMod "HE" as "_". iModIntro. *)
-  (*   inv_seq_step. *)
-  (*   revert select (∃ _, _) => -[?[?[?[?[?[??]]]]]]; *)
-  (*     simplify_option_eq; destruct_and!; destruct_or!; destruct_and?; simplify_eq. 2:{ *)
-  (*     iFrame. iSplitL; [|done]. by iApply wp_value. *)
-  (*   } *)
-  (*   iFrame. iSplit; [|done]. *)
-  (*   iApply ("Hcont" with "[] [Hm]"); done. *)
-  (* Qed. *)
-  Admitted.
+    iApply wpi_bind. iApply @wpi_assume. iIntros (?).
+    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [%] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_read_mem_array n len a a' vread vmem (i : nat) (l : list (bv n)) es ann kind tag q:
     n = (8 * len)%N →
@@ -465,30 +473,20 @@ Section lifting.
     (spec_trace (λ κs, Pκs (SReadMem a vread::κs)) -∗ WPasm es) -∗
     WPasm (ReadMem (RVal_Bits (@bv_to_bvn n vread)) kind (RVal_Bits (@bv_to_bvn 64 a)) len tag ann :t: es).
   Proof.
-    iIntros (???) "Hm Hspec Hcont". setoid_rewrite wp_asm_unfold. subst. iIntros (? ?) "????".
+    iIntros (???) "Hm Hspec Hcont". setoid_rewrite wp_asm_unfold. subst. iIntros (? ?) "??? Hmem".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    rewrite bvn_to_bv_to_bvn/=. wpi_norm/=.
-(*
-    iIntros ([????]) "/= -> -> -> Hθ".
-    iApply wp_lift_step; [done|].
-    iIntros (σ1 ????) "(Hctx&Hictx&Hmem)".
-    iApply fupd_mask_intro; first set_solver. iIntros "HE".
+    rewrite bvn_to_bv_to_bvn/=/read_mem_checked. wpi_norm/=.
     iDestruct (mmio_range_lookup with "Hmem Hm") as %Hread; [done|].
     rewrite N2Z.id in Hread.
     iDestruct (mmio_range_in_range with "Hm") as %?.
     iDestruct (mmio_range_Forall with "Hmem Hm") as %?.
-    iSplit. {
-      iPureIntro. eexists _, _, _, _. simpl. econstructor; [done | by econstructor |] => /=.
-      eexists _, _, (bv_0 _). simplify_option_eq. naive_solver.
-    }
-    iIntros "!>" (????) "_". iMod "HE" as "_".
-    inv_seq_step.
-    revert select (∃ _, _) => -[?[?[?[?[??]]]]]; simplify_option_eq; destruct_and!; simplify_eq.
-    iMod (spec_ctx_cons with "Hctx Hspec") as "[Hctx Hspec]"; [done|].
-    iFrame. iModIntro. iSplitL; [|done].
-    by iApply ("Hcont" with "Hspec").
-*)
-Admitted.
+    iApply wpi_bind. iApply (wpi_get_state_isla with "[$]"). iIntros "?".
+    iApply wpi_bind. iApply wpi_assert; [done|]. rewrite Hread. wpi_norm/=.
+    iApply wpi_bind. iApply wpi_assert; [naive_solver|].
+    iApply wpi_bind. iApply wpi_assert; [naive_solver|].
+    iApply wpi_bind. iApply (@wpi_emit_label with "[$]"); [done|]. iIntros "?".
+    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_write_mem n len a (vold vnew : bv n) es ann res kind tag:
     n = (8 * len)%N →
@@ -499,27 +497,18 @@ Admitted.
   Proof.
     iIntros (??) "Hm Hcont". subst. setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    rewrite bvn_to_bv_to_bvn/=. wpi_norm/=.
-    (*
-    iIntros ([????]) "/= -> -> -> Hθ".
-    iApply wp_lift_step; [done|].
-    iIntros (σ1 ????) "(Hctx&Hictx&Hmem)".
-    iApply fupd_mask_intro; first set_solver. iIntros "HE".
-    iDestruct (mem_mapsto_lookup with "Hmem Hm") as %[len' [??]].
+    rewrite bvn_to_bv_to_bvn/=/read_mem_checked. wpi_norm/=.
+    iDestruct (mem_mapsto_lookup with "[$] Hm") as %[len' [? Heq]].
     have ? : len' = len by lia. subst.
-    iSplit. {
-      iPureIntro. eexists _, _, _, _. simpl. econstructor; [done | by econstructor |]. simpl.
-      eexists _, _, _. simplify_option_eq. naive_solver.
-    }
-    iIntros "!>" (????) "_". iMod "HE" as "_".
-    inv_seq_step.
-    revert select (∃ _, _) => -[?[?[?[?[??]]]]]; simplify_option_eq; destruct_and!; simplify_eq.
-    iMod (mem_mapsto_update with "Hmem Hm") as (len' ?) "[Hmem Hm]".
-    rewrite Z_to_bv_bv_unsigned. have ? : len' = len by lia. subst. iFrame.
-    iModIntro. iSplitL; [|done].
-    by iApply ("Hcont" with "Hm").
-    *)
-  Admitted.
+    iApply wpi_bind. iApply (wpi_get_state_isla with "[$]"). iIntros "?".
+    iApply wpi_bind. iApply wpi_assert; [done|]. rewrite Heq. wpi_norm/=.
+    iApply wpi_bind. iApply (wpi_get_state_isla with "[$]"). iIntros "?".
+    iApply wpi_bind. iApply (wpi_set_state_isla with "[$]"). iIntros "?".
+    iApply wpi_update.
+    iMod (mem_mapsto_update with "[$] Hm") as (len' ?) "[Hmem Hm]". iModIntro.
+    rewrite Z_to_bv_bv_unsigned. have ? : len' = len by lia. subst.
+    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_write_mem_array n len a a' vnew (i : nat) (l : list (bv n)) es ann kind res tag:
     n = (8 * len)%N →
@@ -547,29 +536,18 @@ Admitted.
   Proof.
     iIntros (???) "Hm Hspec Hcont". subst. setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    rewrite bvn_to_bv_to_bvn/=. wpi_norm/=.
-    (*
-    iIntros (???) "Hm Hspec Hcont". subst. setoid_rewrite wp_asm_unfold.
-    iIntros ([????]) "/= -> -> -> Hθ".
-    iApply wp_lift_step; [done|].
-    iIntros (σ1 ????) "(Hctx&Hictx&Hmem)".
-    iApply fupd_mask_intro; first set_solver. iIntros "HE".
-    iDestruct (mmio_range_lookup with "Hmem Hm") as %Hread; [done|].
+    rewrite bvn_to_bv_to_bvn/=/read_mem_checked. wpi_norm/=.
+    iDestruct (mmio_range_lookup with "[$] Hm") as %Hread; [done|].
     rewrite N2Z.id in Hread.
     iDestruct (mmio_range_in_range with "Hm") as %?.
-    iDestruct (mmio_range_Forall with "Hmem Hm") as %?.
-    iSplit. {
-      iPureIntro. eexists _, _, _, _. simpl. econstructor; [done | by econstructor |]. simpl.
-      eexists ∅, _, _. simplify_option_eq. naive_solver.
-    }
-    iIntros "!>" (????) "_". iMod "HE" as "_".
-    inv_seq_step.
-    revert select (∃ _, _) => -[?[?[?[?[??]]]]]; simplify_option_eq; destruct_and!; simplify_eq.
-    iMod (spec_ctx_cons with "Hctx Hspec") as "[Hctx Hspec]"; [done|].
-    iFrame. iModIntro. iSplitL; [|done].
-    by iApply ("Hcont" with "Hspec").
-*)
-  Admitted.
+    iDestruct (mmio_range_Forall with "[$] Hm") as %?.
+    iApply wpi_bind. iApply (wpi_get_state_isla with "[$]"). iIntros "?".
+    iApply wpi_bind. iApply wpi_assert; [done|]. rewrite Hread. wpi_norm/=.
+    iApply wpi_bind. iApply wpi_assert; [naive_solver|].
+    iApply wpi_bind. iApply wpi_assert; [naive_solver|].
+    iApply wpi_bind. iApply (@wpi_emit_label with "[$]"); [done|]. iIntros "?".
+    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+  Qed.
 
   (** * Other lifting lemmas  *)
   Lemma wp_branch_address v es ann:
@@ -596,7 +574,10 @@ Admitted.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-  Admitted.
+    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    iApply wpi_bind. iApply @wpi_assume. iIntros (?).
+    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_declare_const_bool v es ann:
     (∀ (b : bool), WPasm (subst_trace (Val_Bool b) v es)) -∗
@@ -604,7 +585,9 @@ Admitted.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-  Admitted.
+    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_declare_const_enum v es i ann:
     (∀ c, WPasm (subst_trace (Val_Enum (c)) v es)) -∗
@@ -612,7 +595,9 @@ Admitted.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-  Admitted.
+    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+  Qed.
 
   Lemma wp_define_const n es ann e:
     WPexp e {{ v, WPasm (subst_trace v n es) }} -∗

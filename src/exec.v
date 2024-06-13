@@ -128,8 +128,45 @@ Section exec.
     intros t1 t2 Ht ?? -> ?? ->.
     by split; rewrite -Ht.
   Qed.
+
+  Lemma exec_dup t s C :
+    exec t s (λ t' s', exec t' s' C) →
+    exec t s C.
+  Proof.
+    revert t s. pcofix CIH.
+    move => t s He. punfold He.
+    inv He.
+    - rewrite -H -itree_eta_ in H0. by eapply paco3_mon.
+    - rewrite (itree_eta_ t) -H. pfold. apply ExecTau. pclearbot.
+      right. by apply CIH.
+    - rewrite (itree_eta_ t) -H. pfold. apply ExecVis.
+      apply: ehandler_mono; [|done]. move => /= ???. pclearbot.
+      right. by apply CIH.
+  Qed.
+
 End exec.
 Global Hint Resolve exec__mono : paco.
+
+Section exec.
+
+  Lemma exec_bind_post E R S EH (t : itree E S) s (k : S → itree E R) C :
+    exec EH t s (λ t' s', C (ITree.bind t' k) s) →
+    exec EH (ITree.bind t k) s C.
+  Proof.
+    revert t s. pcofix CIH.
+    move => t s He. punfold He.
+    inv He.
+    - rewrite -itree_eta_ in H. pfold. apply: ExecStop; [|done].
+      by rewrite -H -itree_eta_.
+    - rewrite (itree_eta_ t) -H. pfold. admit.
+    - rewrite (itree_eta_ t) -H. pfold. admit.
+  Admitted.
+
+  Lemma exec_bind E R S EH (t : itree E S) s (k : S → itree E R) C :
+    exec EH t s (λ t' s', exec EH (ITree.bind t' k) s C) →
+    exec EH (ITree.bind t k) s C.
+  Proof. move => ?. by apply exec_dup, exec_bind_post. Qed.
+End exec.
 
 Class HandlerAdequate {Σ E} (H : iHandler Σ E) (EH : eHandler E) `{!invGS_gen hlc Σ} := {
   handler_inv : EH.(eh_state) → iProp Σ;
