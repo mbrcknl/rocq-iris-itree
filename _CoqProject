@@ -18,6 +18,7 @@ src/state.v
 src/trace.v
 src/threadpool/handler.v
 src/threadpool/interleaving.v
+src/threadpool/scheduler.v
 src/threadpool/ctrace.v
 src/wpi.v
 src/exec.v
