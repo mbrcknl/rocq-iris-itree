@@ -33,11 +33,11 @@ Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
     end
   )%itree.
 Proof.
-  rewrite /compile_expr. eutt_norm. simpl_itree.
+  rewrite /compile_expr. eutt_norm/=. simpl. eutt_norm.
   rewrite -bind_trigger. f_equiv. intros [|].
-  - by simpl_itree.
-  - simpl_itree. f_equiv. intros v. rewrite /kill_thread.
-    f_equiv. intros _. rewrite -bind_trigger. f_equiv; first done. intros [].
+  - eutt_norm. rewrite /step_ret. by eutt_norm.
+  - eutt_norm. f_equiv. intros v. rewrite /kill_thread.
+    f_equiv. intros _. rewrite -!bind_trigger. eutt_norm. by f_equiv.
 Qed.
 
 Lemma trace_base_Fork {R} tid (tp : list (itree heaplangE R)) tr e k :
@@ -61,7 +61,7 @@ Lemma base_UnOp op v v' :
   compile_expr (UnOp op (Val v)) ≈ step_ret v'.
 Proof.
   intros Hop.
-  rewrite /compile_expr. simpl_itree. rewrite Hop. by simpl_itree.
+  rewrite /compile_expr. eutt_norm/=. rewrite Hop. by eutt_norm/=.
 Qed.
 
 Lemma base_BinOp op v1 v2 v3 :
@@ -69,15 +69,21 @@ Lemma base_BinOp op v1 v2 v3 :
   compile_expr (BinOp op (Val v1) (Val v2)) ≈ step_ret v3.
 Proof.
   intros Hop.
-  rewrite /compile_expr. simpl_itree. rewrite Hop. by simpl_itree.
+  rewrite /compile_expr. eutt_norm/=. rewrite Hop. by eutt_norm/=.
 Qed.
+
+Lemma normalize_itree_interp_trigger' {E F R} p (f : ∀ T : Type, E T → itree F T) (e : E R) t' :
+  NormalizeITree p (f R e) t' →
+  NormalizeITree true (interp f (ITree.trigger e)) t'.
+Proof. move => [Heq]. constructor. by setoid_rewrite interp_trigger. Qed.
+Global Hint Resolve normalize_itree_interp_trigger' : itree_auto.
 
 Lemma base_Beta f_ x_ e v :
   compile_expr (App (Val (RecV f_ x_ e)) (Val v))
   ≈ let e' := (subst' x_ v (subst' f_ (RecV f_ x_ e) e))
      in step_if_not_val e' ;; yield_if_not_val e' ;; compile_expr e'.
 Proof.
-  rewrite /compile_expr. by simpl_itree.
+  rewrite /compile_expr. eutt_norm/=. rewrite /call. by eutt_norm/=.
 Qed.
 
 Definition compile_tp' (tp : list expr) : list (itree heaplangE val) :=

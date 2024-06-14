@@ -298,6 +298,12 @@ Lemma normalize_itree_rec {E A B} p1 p2 (f : A → itree (callE A B +' E) B) (x 
 Proof. move => [Heq1] [Heq2]. constructor. rewrite rec_as_interp -Heq2 -Heq1 //. Qed.
 Global Hint Resolve normalize_itree_rec : itree_auto.
 
+Lemma normalize_itree_interp_trigger {E F R} p (f : ∀ T : Type, E T → itree F T) (e : E R) t' :
+  NormalizeITree p (f R e) t' →
+  NormalizeITree true (interp f (ITree.trigger e)) t'.
+Proof. move => [Heq]. constructor. by setoid_rewrite interp_trigger. Qed.
+Global Hint Resolve normalize_itree_interp_trigger : itree_auto.
+
 (* TODO: generalize to more interp functions? *)
 Lemma normalize_itree_interp_recursive_translate {E R A B} f (t : itree (callE A B +' E) R) t' :
   ITreeToTranslate t _ t' →
@@ -335,6 +341,8 @@ Ltac eutt_norm :=
           notypeclasses refine (tac_normalize_eutt _ _ _ _ _ _ _ _ _);
           [solve_normalize_itree..|]
   end.
+Tactic Notation "eutt_norm/=" :=
+  repeat (simpl; eutt_norm).
 
 (** ** Tests for itree automation *)
 Module itree_auto_test.
