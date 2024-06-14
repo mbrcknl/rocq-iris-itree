@@ -1763,9 +1763,9 @@ Proof.
   - iApply IHn. rewrite /= bind_vis -wpi_vis' /= wpi_clear_mask. by simpl_itree.
 Qed.
 
-Lemma model_wpi_later {R} `{!invGS_gen hlc Σ} M n (tx : Terminal R) (Φ : R → iProp Σ) :
-  WPi (model_terminal n tx) @ laterH Later ⊕ ubH ; M {{ Φ }} -∗
-  |={M}=> |={M}▷=>^n match tx with
+Lemma model_wpi_later' {R} `{!invGS_gen hlc Σ} n (tx : Terminal R) (Φ : R → iProp Σ) :
+  WPi (model_terminal n tx) @ laterH Later ⊕ ubH ; ∅ {{ Φ }} -∗
+  |={∅}=> |={∅}▷=>^n match tx with
   | TermUb => False
   | TermRet v => Φ v
   end.
@@ -1774,23 +1774,58 @@ Proof.
   - simpl. destruct tx.
     * rewrite -wpi_ret' //.
     * by iDestruct (wpi_ub with "Hwp") as "Hwp".
-  - iModIntro. simpl. iApply IHn. rewrite /= bind_vis -wpi_vis' /=. iMod "Hwp". simpl_itree.
-    (* TODO: Can't fill in this admitted proof because of a Coq crash. *)
-    iApply fupd_mask_intro; first admit. iIntros "Hfupd". iNext. simpl_itree.
-    iApply wpi_clear_mask. by iMod "Hfupd".
-Admitted.
+  - iModIntro. simpl. iApply IHn. rewrite /= bind_vis -wpi_vis' /=.
+    iMod "Hwp". iModIntro. iNext.
+    simpl_itree. iApply wpi_clear_mask. by iModIntro.
+Qed.
 
-Lemma execution_wpi' `{!invGS_gen hlc Σ} m n e σ tp' σ' κ tx Φ :
+Lemma model_wpi_later {R} `{!invGS_gen hlc Σ} M n (tx : Terminal R) (Φ : R → iProp Σ) :
+  WPi (model_terminal n tx) @ laterH Later ⊕ ubH ; M {{ Φ }} -∗
+  |={M, ∅}=> |={∅}▷=>^n match tx with
+  | TermUb => False
+  | TermRet v => |={∅, M}=> Φ v
+  end.
+Proof.
+  iIntros "Hwp".
+  iDestruct (wpi_clear_mask with "Hwp") as "Hwp".
+  iDestruct (model_wpi_later' with "Hwp") as "Hpost".
+  by iMod "Hpost".
+Qed.
+
+Lemma execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
+  language.nsteps n ([e], σ) κ (tp', σ') →
+  tp_termination tp' σ' tx →
+  state_interp σ -∗
+  WPi (v ← compile_expr e; yield_if_not_val e;; Ret v) @ heaplangH Identity ; ⊤ {{ Φ }} -∗
+  |={⊤}=> match tx with
+  | TermUb => False
+  | TermRet v => Φ v
+  end.
+Proof.
+  iIntros (Hstep Hstuck).
+  apply execution with (tx := tx) in Hstep as (t1&t2&t3&Hint&Hinst&Heval&Hterm); last done.
+  iIntros "Hstate Hwp".
+  (* TODO: Name these adequacy theorems consistently. *)
+  iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
+  iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
+  iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
+  destruct tx.
+  - destruct Hterm as [σ'' [n' ->]%terminates_in_model].
+    iDestruct (model_wpi with "Hwp") as "Hwp".
+    by iMod "Hwp" as "[_ HΦ]".
+  - apply terminates_in_model in Hterm as [n' ->].
+    by iDestruct (model_wpi with "Hwp") as "Hwp".
+Qed.
+
+Lemma execution_wpi_later' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
   ∃ n,
     state_interp σ -∗
-    WPi (v ← compile_expr e; yield_if_not_val e;; Ret v) @ heaplangH m ; ⊤ {{ Φ }} -∗
-    |={⊤}=> match (m, tx) with
-    | (Identity, TermUb) => False
-    | (Identity, TermRet v) => Φ v
-    | (Later, TermUb) => |={⊤}▷=>^n False
-    | (Later, TermRet v) => |={⊤}▷=>^n Φ v
+    WPi (v ← compile_expr e; yield_if_not_val e;; Ret v) @ heaplangH Later ; ⊤ {{ Φ }} -∗
+    |={⊤, ∅}=> |={∅}▷=>^n match tx with
+    | TermUb => False
+    | TermRet v => |={∅, ⊤}=> Φ v
     end.
 Proof.
   iIntros (Hstep Hstuck).
@@ -1803,12 +1838,10 @@ Proof.
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
     iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
     iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
-    rewrite Ht3. destruct m.
-    * iDestruct (model_wpi with "Hwp") as "Hwp".
-      by iMod "Hwp" as "[_ HΦ]".
-    * iDestruct (model_wpi_later with "Hwp") as "Hwp".
-      iMod "Hwp". iModIntro.
-      iApply step_fupdN_mono; last done. iIntros "[_ $]".
+    rewrite Ht3.
+    iDestruct (model_wpi_later with "Hwp") as "Hwp".
+    iMod "Hwp". iModIntro.
+    iApply step_fupdN_mono; last done. iIntros "[_ $]".
   - apply terminates_in_model in Hterm as [n' Ht3].
     exists n'.
     iIntros "Hstate Hwp".
@@ -1816,28 +1849,42 @@ Proof.
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
     iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
     iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
-    rewrite Ht3. destruct m.
-    * by iDestruct (model_wpi with "Hwp") as "Hwp".
-    * iDestruct (model_wpi_later with "Hwp") as "Hwp".
-      iMod "Hwp". iModIntro.
-      iApply step_fupdN_mono; last done. iIntros "$".
+    rewrite Ht3.
+    iDestruct (model_wpi_later with "Hwp") as "Hwp".
+    iMod "Hwp". iModIntro.
+    iApply step_fupdN_mono; last done. iIntros "$".
 Qed.
 
-Lemma ub_execution_wpi `{!invGS_gen hlc Σ} m n e σ tp' σ' κ tx Φ :
+Lemma compile_expr_execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
-  ∃ n,
-    state_interp σ -∗
-    WPi (compile_expr e) @ heaplangH m ; ⊤ {{ Φ }} -∗
-    |={⊤}=> match (m, tx) with
-    | (Identity, TermUb) => False
-    | (Identity, TermRet v) => Φ v
-    | (Later, TermUb) => |={⊤}▷=>^n False
-    | (Later, TermRet v) => |={⊤}▷=>^n Φ v
-    end.
+  state_interp σ -∗
+  WPi (compile_expr e) @ heaplangH Identity ; ⊤ {{ Φ }} -∗
+  |={⊤}=> match tx with
+  | TermUb => False
+  | TermRet v => Φ v
+  end.
+Proof.
+  iIntros (Hstep Hterm) "Hstate Hwp".
+  iApply (execution_wpi' with "Hstate"); eauto.
+  iApply wpi_bind. iApply wpi_wand; last done.
+  iIntros (r) "HΦ". iApply wpi_bind. rewrite /yield_if_not_val. destruct (to_val _).
+  - iApply wpi_ret. by iApply wpi_ret.
+  - iApply @wpi_yield. by iApply wpi_ret.
+Qed.
+
+Lemma compile_expr_execution_wpi_later `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
+  language.nsteps n ([e], σ) κ (tp', σ') →
+  tp_termination tp' σ' tx → ∃ n,
+  state_interp σ -∗
+  WPi (compile_expr e) @ heaplangH Later ; ⊤ {{ Φ }} -∗
+  |={⊤, ∅}=> |={∅}▷=>^n match tx with
+  | TermUb => False
+  | TermRet v => |={∅, ⊤}=> Φ v
+  end.
 Proof.
   iIntros (Hstep Hterm).
-  odestruct (execution_wpi' _ _ _ _ _ _ _ _ _ _ _) as [n' Hwp]; eauto.
+  odestruct (execution_wpi_later' _ _ _ _ _ _ _ _ _ _) as [n' Hwp]; eauto.
   exists n'. iIntros "Hstate Hwp". iApply (Hwp with "Hstate").
   iApply wpi_bind. iApply wpi_wand; last done.
   iIntros (r) "HΦ". iApply wpi_bind. rewrite /yield_if_not_val. destruct (to_val _).
@@ -1855,6 +1902,5 @@ Proof.
   iIntros (Hwp). constructor.
   - intros ? ? ? ?.
     apply erased_steps_nsteps in H as (n&κs&Hsteps).
-    eapply ub_execution_wpi in Hsteps.
 (* TODO: Ralf help me. (Hint: use [heaplangH_init]) *)
 Admitted.
