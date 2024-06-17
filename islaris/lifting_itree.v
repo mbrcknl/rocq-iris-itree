@@ -66,6 +66,16 @@ Class stateG Σ := StateG {
   state_link_name : gname;
 }.
 
+Class statePreG Σ := PreStateG {
+  state_pre_link_inG :: ghost_varG Σ seq_state;
+}.
+
+Definition stateΣ : gFunctors :=
+  #[ghost_varΣ seq_state].
+
+Global Instance subG_statePreG {Σ} : subG stateΣ Σ → statePreG Σ.
+Proof. solve_inG. Qed.
+
 Section state_link.
   Context `{!stateG Σ}.
 
