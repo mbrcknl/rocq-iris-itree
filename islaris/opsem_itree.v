@@ -90,8 +90,35 @@ all: try solve_trivial_decision.
 Admitted.
 
 
-(* Definition demonic {E} `{demonicE -< E} (A : Type) `{!EqDecision A} `{!Inhabited A} : itree E A := *)
-(*   trigger (EDemonic A). *)
+Definition base_val_to_bool (v : base_val) : option bool :=
+  match v with
+  | Val_Bool b => Some b
+  | _ => None
+  end.
+
+Definition val_to_bits (n : N) (v : valu) : option (bv n) :=
+  match v with
+  | RVal_Bits b => bvn_to_bv n b
+  | _ => None
+  end.
+
+Lemma bvn_to_bv_Some n bn b:
+  bvn_to_bv n bn = Some b ↔ bn = bv_to_bvn b.
+Proof.
+  rewrite /bvn_to_bv.
+  case_decide as Heq => //.
+  - destruct Heq, bn. naive_solver.
+  - destruct bn. naive_solver.
+Qed.
+
+Lemma val_to_bits_Some n b v:
+  val_to_bits n v = Some b ↔ v = RVal_Bits b.
+Proof.
+  split.
+  - case v => //. case => //= vb /bvn_to_bv_Some ->. done.
+  - move => -> /=. apply bvn_to_bv_to_bvn.
+Qed.
+
 
 (* TODO: Upstream these wrappers? *)
 Definition get_state {S} `{!stateE S -< E} : itree E S :=
@@ -119,18 +146,8 @@ Record seq_state := {
 Global Instance eta_seq_state : Settable _ := settable! Build_seq_state <seq_local; seq_global>.
 
 Definition islaE : Type → Type := demonicE +' specE +' stateE seq_state +' laterE +' haltE +' ubE.
+Global Hint Transparent islaE : itree_auto.
 
-Definition base_val_to_bool (v : base_val) : option bool :=
-  match v with
-  | Val_Bool b => Some b
-  | _ => None
-  end.
-
-Definition val_to_bits (n : N) (v : valu) : option (bv n) :=
-  match v with
-  | RVal_Bits b => bvn_to_bv n b
-  | _ => None
-  end.
 
 Definition read_reg {E} `{!stateE seq_state -< E} `{!ubE -< E} (r : string) (al : accessor_list) : itree E valu :=
   s ← get_state;
