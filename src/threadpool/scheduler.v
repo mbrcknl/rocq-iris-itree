@@ -32,41 +32,7 @@ Qed.
 Section scheduler.
   Context {E : Type → Type} {R : Type}.
 
-  Definition scheduler : itree (threadpoolE +' E) R → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
-    cofix _scheduler t tp :=
-        match observe t with
-        | RetF r  => Ret (inl r)
-        | TauF t' => Tau (_scheduler t' tp)
-        | @VisF _ _ _ A (inl1 e) k =>
-          (match e in threadpoolE A return (A → itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) with
-          | EFork => λ k, Tau (_scheduler (k CurrentThread) (tp ++ [k NewThread]))
-          | EYield => λ k, Tau (_scheduler (k ()) tp)
-          | EKillThread => λ k,
-              match tp with
-              | [] => Ret (inr LastThreadKilled)
-              | t' :: tp' => Tau (_scheduler t' tp')
-              end
-          end) k
-        | VisF (inr1 e) k => Vis e (λ a, _scheduler (k a) tp)
-        end.
-  Notation scheduler_ t tp :=
-      match observe t with
-      | RetF r  => Ret (inl r)
-      | TauF t' => Tau (scheduler t' tp)
-      | @VisF _ _ _ A (inl1 e) k =>
-        (match e with
-        | EFork => λ k, Tau (scheduler (k CurrentThread) (tp ++ [k NewThread]))
-        | EYield => λ k, Tau (scheduler (k ()) tp)
-        | EKillThread => λ k,
-            match tp with
-            | [] => Ret (inr LastThreadKilled)
-            | t' :: tp' => Tau (scheduler t' tp')
-            end
-        end : (A → _) → _) k
-      | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
-      end.
-
-  Definition scheduler' : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
+  Definition scheduler : nat → list (itree (threadpoolE +' E) R) → itree E (R + last_thread_killed) :=
     cofix _scheduler tid tp :=
       (* Not using "!!" notation here as that leads to a Coq anomaly. *)
       match list_lookup tid tp with
@@ -80,73 +46,85 @@ Section scheduler.
           | EYield => λ k, Tau (_scheduler (match tid with S n => n | O => length tp - 1 end) (<[tid := k ()]>tp))
           | EKillThread => λ k,
               match tp with
-              | [] => Ret (inr LastThreadKilled)
-              | _ => Tau (_scheduler (match tid with S n => n | O => length tp - 1 end) (delete tid tp))
+              | _::_::_ => Tau (_scheduler (match tid with S n => n | O => length tp - 2 end) (delete tid tp))
+              | _ => Ret (inr LastThreadKilled)
               end
           end) k
         | VisF (inr1 e) k => Vis e (λ a, _scheduler tid (<[tid := k a]>tp))
         end
       | None => (* placeholder: *) Ret (inr LastThreadKilled)
       end.
-  Notation scheduler_' t tp plan :=
+  Notation scheduler_ tid tp :=
+    match list_lookup tid tp with
+    | Some t =>
       match observe t with
       | RetF r  => Ret (inl r)
-      | TauF t' => Tau (scheduler t' tp)
+      | TauF t' => Tau (scheduler tid (<[tid := t']>tp))
       | @VisF _ _ _ A (inl1 e) k =>
-        (match e with
-        | EFork => λ k, Tau (scheduler (k CurrentThread) (tp ++ [k NewThread]))
-        | EYield => λ k, Tau (scheduler (k ()) tp)
+        (match e in threadpoolE A return (A → _) → _ with
+        | EFork => λ k, Tau (scheduler tid (<[tid := k CurrentThread]>tp ++ [k NewThread]))
+        | EYield => λ k, Tau (scheduler (match tid with S n => n | O => length tp - 1 end) (<[tid := k ()]>tp))
         | EKillThread => λ k,
             match tp with
-            | [] => Ret (inr LastThreadKilled)
-            | t' :: tp' => Tau (scheduler t' tp')
+            | _::_::_ => Tau (scheduler (match tid with S n => n | O => length tp - 2 end) (delete tid tp))
+            | _ => Ret (inr LastThreadKilled)
             end
-        end : (A → _) → _) k
-      | VisF (inr1 e) k => Vis e (λ a, scheduler (k a) tp)
-      end.
+        end) k
+      | VisF (inr1 e) k => Vis e (λ a, scheduler tid (<[tid := k a]>tp))
+      end
+    | None => (* placeholder: *) Ret (inr LastThreadKilled)
+    end.
 
-  Lemma unfold_scheduler (t : itree (threadpoolE +' E) R) tp :
-    scheduler t tp = scheduler_ t tp.
+  Lemma unfold_scheduler tid tp :
+    scheduler tid tp = scheduler_ tid tp.
   Proof.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
-  Lemma schedule_exists (t : itree (threadpoolE +' E) R) tid tp :
-    tp !! tid = Some t →
-    interleaves tid tp (scheduler t (delete tid tp)).
+  Lemma schedule_exists tid tp :
+    is_Some (tp !! tid) →
+    interleaves tid tp (scheduler tid tp).
   Proof.
     intros Hidx.
-    remember (scheduler t (delete tid tp)) as t'.
-    revert t tp tid Hidx t' Heqt'. pcofix CIH. intros t tp tid Hidx t' ->.
-    pfold. exists t. split; first done.
+    remember (scheduler tid tp) as t.
+    revert tp tid Hidx t Heqt. pcofix CIH. intros tp tid Hidx t ->.
+    pfold. destruct Hidx as [t' Hidx]. exists t'. split; first done.
     rewrite unfold_scheduler.
-    destruct (observe t) as [r'|t'|A e k].
+    rewrite /lookup in Hidx. rewrite Hidx.
+    destruct (observe t') as [r'|t''|A e k].
     - constructor.
-    - constructor. right. apply (CIH t').
+    - constructor. right. apply CIH; eauto.
       apply lookup_lt_Some in Hidx.
       rewrite list_lookup_insert //.
-      rewrite list_delete_insert //.
     - destruct e as [e|e]; first destruct e.
-      * constructor. right. apply (CIH (k CurrentThread)).
-        + simpl. apply lookup_lt_Some in Hidx.
-          rewrite lookup_app_l; last rewrite insert_length //.
-          rewrite list_lookup_insert; eauto.
-        + rewrite delete_app_l; last rewrite insert_length // -lookup_lt_is_Some //.
-          rewrite list_delete_insert //.
-      * apply Yield with (new_current_tid := tid). right.
-        apply (CIH (k ())).
-        + simpl. apply lookup_lt_Some in Hidx.
-          rewrite list_lookup_insert; eauto.
-        + rewrite /= list_delete_insert //.
+      * constructor. right. apply CIH; eauto.
+        simpl. apply lookup_lt_Some in Hidx.
+        rewrite lookup_app_l; last rewrite insert_length //.
+        rewrite list_lookup_insert; eauto.
+      * apply Yield with (new_current_tid :=
+          match tid with
+          | 0 => length tp - 1
+          | S n => n
+          end).
+        right. apply CIH; last done.
+        simpl. apply lookup_lt_Some in Hidx.
+        destruct tid; apply lookup_lt_is_Some_2; rewrite insert_length; lia.
       * apply singleton_or_more in Hidx as [[-> ->]|[Hlen Hidx]].
         + constructor.
-        + destruct (delete tid tp) as [|t' tp'] eqn:Heq.
-          ++ apply list_delete_empty in Heq. lia.
-          ++ apply KillThread with (new_current_tid := 0).
-             right. apply CIH with (t := t'); rewrite Heq //.
+        + destruct tp as [|t1 [|t2 tp']] eqn:Heq.
+          ++ discriminate.
+          ++ simpl in Hlen. lia.
+          ++ destruct tid.
+             +++ simpl. apply KillThread with (new_current_tid := length (t1 :: t2 :: tp') - 2).
+                 right. apply CIH; last done. apply lookup_lt_is_Some_2. simpl. lia.
+             +++ simpl. apply KillThread with (new_current_tid := tid).
+                 right. simpl. apply CIH; last done. apply lookup_lt_is_Some_2.
+                 rewrite /= length_delete // /=. simpl in Hidx. 
+                 apply mk_is_Some in Hidx. apply lookup_lt_is_Some_1 in Hidx.
+                 simpl in Hidx. lia.
       * constructor. intros a. right.
-        apply CIH with (t := k a).
+        apply CIH.
         + rewrite list_lookup_insert //. by apply lookup_lt_is_Some.
-        + by rewrite list_delete_insert.
+        + done.
   Qed.
 End scheduler.

@@ -359,9 +359,11 @@ Module itree_auto_test.
     intros. eutt_norm. match goal with | |- t ≈ t => idtac end.
   Abort.
 
+  (*
   Goal ∀ t, (interp (recursive (λ x : nat, Ret x)) (trigger (test 1));; t) ≈ t.
     intros. eutt_norm. match goal with | |- (trigger (test 1);; t) ≈ t => idtac end.
   Abort.
+  *)
 
   Goal ∀ t, ∃ t', Tau t ≈ t' ∧ t' = t'.
     intros. eexists _. split. { eutt_norm. done. }

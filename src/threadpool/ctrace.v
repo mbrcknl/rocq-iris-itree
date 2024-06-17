@@ -462,8 +462,7 @@ Section extend_ctrace.
         intros _. destruct Hext as [oka [Hidx' Hext]].
         rewrite list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
         by injection Hidx' as <-.
-      * exists (scheduler (k a') (delete tid tp)). split; last done.
-        replace (delete tid tp) with (delete tid (<[tid:=k a']> tp)); last apply list_delete_insert.
+      * exists (scheduler tid ((<[tid:=k a']> tp))). split; last done.
         apply schedule_exists. rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1.
     - exists (Vis e (λ a, match f a with end)). eexists. split; first done. destruct Heqot.
       by constructor.
@@ -480,7 +479,7 @@ Section extend_ctrace.
       rewrite lookup_app_l in Hidx'; last rewrite insert_length -lookup_lt_is_Some //.
       rewrite /= list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
       by injection Hidx' as <-.
-    - exists (scheduler t (delete tid tp)).
+    - exists (scheduler tid tp).
       eexists. split; first done. destruct Heqot. constructor.
       rewrite -itree_eta_. by apply schedule_exists.
     - unshelve epose (IH t' _ _) as Hext; eauto.
