@@ -100,40 +100,47 @@ Section exec.
   Definition exec : itree E R → EH.(eh_state) → (itree E R → EH.(eh_state) → Prop) → Prop :=
     paco3 exec_ bot3.
 
-  Global Instance exec_proper_unilateral :
-    Proper (eqit (=) true true ==> (=) ==> (=) ==> impl) exec.
-  Proof.
-    pcofix CIH.
-    intros t1 t2 Ht s ? <- C ? <- Hwpi.
-    pfold. rewrite /exec_.
-    punfold Ht. punfold Hwpi. rewrite /exec_ in Hwpi.
-    destruct Ht; pclearbot.
-    - inv Hwpi. by econstructor.
-    - inv Hwpi.
-      + econstructor; [|done]. pclearbot. admit.
-      + apply ExecTau. right. eapply CIH; [eassumption|done|done|]. by destruct H0.
-    - inv Hwpi.
-      + econstructor; [|done]. pclearbot. admit.
-      + simplify_K. apply ExecVis. apply: ehandler_mono; [|done].
-        move => ?? [?|//]. right. eapply CIH; [apply REL|done|done|done].
-    - inv Hwpi.
-      + econstructor; [|done]. pclearbot. admit.
-      + admit.
-    - apply ExecTau. admit.
-  Admitted.
-
-  Global Instance exec_proper :
-    Proper (eqit (=) true true ==> (=) ==> (=) ==> (↔)) exec.
-  Proof.
-    intros t1 t2 Ht ?? -> ?? ->.
-    by split; rewrite -Ht.
-  Qed.
-
   Global Instance exec__proper r:
     Proper (eqit (=) false false ==> (=) ==> (=) ==> (↔)) (exec_ r).
   Proof.
     (* TODO: prove without bisimulation_is_eq *)
     by move => t1 t2 /bisimulation_is_eq -> ?? -> ?? ->.
+  Qed.
+
+  Global Instance exec_proper_unilateral b1 b2 :
+    Proper (eqit (=) b1 b2 ==> (=) ==> (=) ==> impl) exec.
+  Proof.
+    intros t1 t2 Ht s ? <- C ? <- Hwpi.
+    have {}Ht: t1 ≈ t2. { apply: eqit_mon; [..|by apply Ht]; naive_solver. }
+    move: t1 t2 s Ht Hwpi.
+    pcofix CIH.
+    move => t1 t2 s Ht Hwpi.
+    punfold Ht. punfold Hwpi.
+    rewrite (itree_eta_ t1) in Hwpi. rewrite (itree_eta_ t2).
+    elim: Ht Hwpi => //.
+    - move => ??? Hwpi. inv Hwpi. pfold. by apply: ExecStop.
+    - move => ?? REL Hwpi. pclearbot. inv Hwpi.
+      + pfold. apply: ExecStop; [|done]. rewrite -H /= eutt_Tau. done.
+      + pfold. apply: ExecTau. right. eapply CIH; [done| ]. by destruct H0.
+    - move => ?? k1 k2 REL Hwpi.
+      inv Hwpi.
+      + pfold. apply: ExecStop; [|done]. symmetry. rewrite -H /=.
+        pfold. by econstructor.
+      + simplify_K. pfold. apply: ExecVis. apply: ehandler_mono; [|done].
+        move => /= ?? [?|//]. right. eapply CIH; [|done]. by edestruct REL.
+    - move => ???? IH Hwpi. apply IH. inv Hwpi.
+      + apply: ExecStop; [|done]. by rewrite /= -H /= tau_eutt -itree_eta_.
+      + destruct H0 => //. punfold H.
+    - move => ???? IH Hwpi. pfold. apply: ExecTau. left.
+      rewrite -itree_eta_ in IH. by apply IH.
+  Qed.
+
+  Global Instance exec_proper b1 b2 :
+    Proper (eqit (=) b1 b2 ==> (=) ==> (=) ==> (↔)) exec.
+  Proof.
+    intros t1 t2 Ht ?? -> ?? ->.
+    have {}Ht: t1 ≈ t2. { apply: eqit_mon; [..|by apply Ht]; naive_solver. }
+    by split; rewrite -Ht.
   Qed.
 
   Lemma exec_dup t s C :
@@ -220,10 +227,12 @@ Section wpi_adequate.
                  A.(handler_inv) s -∗
                  |={∅}=> ∃ t' s', ⌜C t' s'⌝ ∗ A.(handler_inv) s' ∗ WPi t' @ H;∅ {{Φ}})%I)).
     iIntros "Hwp".
-    iApply (wpi_iter G with "[] Hwp [//]"); clear. { solve_proper. }
+    iApply (wpi_ind G with "[] Hwp [//]"); clear. { solve_proper. }
     iIntros "!>" (t Φ) "Hwp". iIntros (s Hpure) "Hs".
     punfold Hpure. inv Hpure.
-    - iModIntro. iExists _, _. iFrame. iSplit; [done|]. rewrite -H0 -itree_eta_. (* TODO: needs stronger induction *) admit.
+    - iModIntro. iExists _, _. iFrame. iSplit; [done|]. rewrite -H0 -itree_eta_.
+      rewrite wpi_unfold. iApply (wpiF_mono with "[] Hwp").
+      by iIntros "!>" (??) "[_ $]".
     - pclearbot. destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]; simplify_eq/=.
       rewrite /wpiF/=. iMod "Hwp". iApply ("Hwp" with "[//] Hs").
     - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]. 1, 2: by simplify_eq/=.
@@ -232,7 +241,7 @@ Section wpi_adequate.
       iMod (handler_adequate with "Hwp Hs") as (??) "Hwp"; [done|].
       iDestruct "Hwp" as (?) "[Hs Hwp]". pclearbot.
       iApply ("Hwp" with "[//] Hs").
-  Admitted.
+  Qed.
 
 End wpi_adequate.
 

@@ -42,7 +42,7 @@ Lemma isla_exec_not_stuck Pκs ls t κs σ n C :
   exec (islaEH Pκs) (compile_trace t) (isla_estate κs ls σ (S n)) C.
 Proof.
   move => HC.
-  destruct ls as [????] => /=. destruct t as [|?|].
+  destruct ls as [????] => /=. destruct t as [|?|]; simplify_eq/=.
   - exec_norm/=. apply exec_bind. apply: exec_trigger => /=. eexists _. split; [done|].
     exec_norm/=. apply exec_bind. apply: exec_trigger => /=.
     exec_norm/=. apply exec_bind. apply: isla_exec_read_reg => /=. rewrite /read_accessor => ? vr ??.

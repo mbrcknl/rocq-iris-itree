@@ -6,25 +6,59 @@ Require Import isla.spec_itree.
 Global Hint Transparent sail_name accessor_list : itree_auto.
 
 
-  Lemma bvn_to_bv_to_bvn n (b : bv n) :
-    bvn_to_bv n b = Some b.
-  Proof.
-    rewrite /bvn_to_bv. case_decide as Heq => //. destruct (bv_to_bvn b) eqn:Heq2.
-    by simplify_K.
-  Qed.
+Lemma bvn_to_bv_Some n bn b:
+  bvn_to_bv n bn = Some b ↔ bn = bv_to_bvn b.
+Proof.
+  rewrite /bvn_to_bv.
+  case_decide as Heq => //.
+  - destruct Heq, bn. naive_solver.
+  - destruct bn. naive_solver.
+Qed.
+
+Lemma bvn_to_bv_to_bvn n (b : bv n) :
+  bvn_to_bv n b = Some b.
+Proof. by rewrite bvn_to_bv_Some. Qed.
 
 
 Global Instance base_val_eq_decision : EqDecision base_val.
 Proof. solve_decision. Qed.
 
-Global Instance valu_eq_decision : EqDecision valu.
-Proof.
-  unfold EqDecision; intros.
-  unfold Decision.
-decide equality.
-all: try solve_trivial_decision.
-1: decide equality.
-Admitted.
+Global Program Instance valu_eq_decision : EqDecision valu :=
+  fix go v1 v2 :=
+    match v1, v2 with
+    | RegVal_Base b, RegVal_Base b' => cast_if (decide (b = b'))
+    | RegVal_I z1 z2, RegVal_I z1' z2' =>
+        cast_if_and (decide (z1 = z1')) (decide (z2 = z2'))
+    | RegVal_String s, RegVal_String s' =>
+        cast_if (decide (s = s'))
+    | RegVal_Unit, RegVal_Unit => left _
+    | RegVal_Poison, RegVal_Poison => left _
+    | RegVal_Vector l, RegVal_Vector l' =>
+        (fix inner l1 l2 :=
+           match l1, l2 with
+           | [], [] => left _
+           | x::l1',y::l2' => cast_if_and (go x y) (inner l1' l2')
+           | _, _ => right _
+           end) l l'
+    | RegVal_List l, RegVal_List l' =>
+        (fix inner l1 l2 :=
+           match l1, l2 with
+           | [], [] => left _
+           | x::l1',y::l2' => cast_if_and (go x y) (inner l1' l2')
+           | _, _ => right _
+           end) l l'
+    | RegVal_Struct l, RegVal_Struct l' =>
+        (fix inner l1 l2 :=
+           match l1, l2 with
+           | [], [] => left _
+           | (x1, x2)::l1', (y1, y2)::l2' => cast_if_and3 (decide (x1 = y1)) (go x2 y2) (inner l1' l2')
+           | _, _ => right _
+           end) l l'
+    | RegVal_Constructor s v, RegVal_Constructor s' v' =>
+        cast_if_and (decide (s = s')) (go v v')
+    | _, _ => right _
+    end.
+Solve Obligations with naive_solver.
 
 Global Instance annot_eq_decision : EqDecision annot.
 Proof. solve_decision. Defined.
@@ -56,23 +90,49 @@ Proof. solve_decision. Defined.
 Global Instance assume_val_eq_decision : EqDecision assume_val.
 Proof. solve_decision. Defined.
 
-Global Instance exp_eq_decision : EqDecision exp.
-Proof.
-  unfold EqDecision; intros.
-  unfold Decision.
-decide equality.
-all: try solve_trivial_decision.
-1: decide equality.
-Admitted.
+Global Program Instance exp_eq_decision : EqDecision exp :=
+  fix go e1 e2 :=
+    match e1, e2 with
+    | Val v1 a1, Val v2 a2 => cast_if_and (decide (v1 = v2)) (decide (a1 = a2))
+    | Unop op1 e1 a1, Unop op2 e2 a2 => cast_if_and3 (decide (op1 = op2)) (go e1 e2) (decide (a1 = a2))
+    | Binop op1 e1 e1' a1, Binop op2 e2 e2' a2 =>
+        cast_if_and4 (decide (op1 = op2)) (go e1 e2) (go e1' e2') (decide (a1 = a2))
+    | Manyop op1 x1 a1, Manyop op2 x2 a2 =>
+        cast_if_and3 (decide (op1 = op2)) (decide (a1 = a2))
+          ((fix inner l1 l2 : {l1 = l2} + {l1 ≠ l2} :=
+           match l1, l2 with
+           | [], [] => left _
+           | x::l1',y::l2' =>
+               cast_if_and (go x y) (inner l1' l2')
+           | _, _ => right _
+           end) x1 x2)
+    | Ite e11 e21 e31 a1, Ite e12 e22 e32 a2 =>
+        cast_if_and4 (go e11 e12) (go e21 e22) (go e31 e32) (decide (a1 = a2))
+    | _, _ => right _
+    end.
+Solve Obligations with intros; destruct_all annot; naive_solver.
 
-Global Instance a_exp_eq_decision : EqDecision a_exp.
-Proof.
-  unfold EqDecision; intros.
-  unfold Decision.
-decide equality.
-all: try solve_trivial_decision.
-1: decide equality.
-Admitted.
+Global Program Instance a_exp_eq_decision : EqDecision a_exp :=
+  fix go e1 e2 :=
+    match e1, e2 with
+    | AExp_Val v1 a1, AExp_Val v2 a2 => cast_if_and (decide (v1 = v2)) (decide (a1 = a2))
+    | AExp_Unop op1 e1 a1, AExp_Unop op2 e2 a2 => cast_if_and3 (decide (op1 = op2)) (go e1 e2) (decide (a1 = a2))
+    | AExp_Binop op1 e1 e1' a1, AExp_Binop op2 e2 e2' a2 =>
+        cast_if_and4 (decide (op1 = op2)) (go e1 e2) (go e1' e2') (decide (a1 = a2))
+    | AExp_Manyop op1 x1 a1, AExp_Manyop op2 x2 a2 =>
+        cast_if_and3 (decide (op1 = op2)) (decide (a1 = a2))
+          ((fix inner l1 l2 : {l1 = l2} + {l1 ≠ l2} :=
+           match l1, l2 with
+           | [], [] => left _
+           | x::l1',y::l2' =>
+               cast_if_and (go x y) (inner l1' l2')
+           | _, _ => right _
+           end) x1 x2)
+    | AExp_Ite e11 e21 e31 a1, AExp_Ite e12 e22 e32 a2 =>
+        cast_if_and4 (go e11 e12) (go e21 e22) (go e31 e32) (decide (a1 = a2))
+    | _, _ => right _
+    end.
+Solve Obligations with intros; destruct_all annot; naive_solver.
 
 Global Instance smt_eq_decision : EqDecision smt.
 Proof. solve_decision. Defined.
@@ -80,14 +140,22 @@ Proof. solve_decision. Defined.
 Global Instance event_eq_decision : EqDecision event.
 Proof. solve_decision. Defined.
 
-Global Instance isla_trace_eq_decision : EqDecision isla_trace.
-Proof.
-  unfold EqDecision; intros.
-  unfold Decision.
-decide equality.
-all: try solve_trivial_decision.
-1: decide equality.
-Admitted.
+Global Program Instance isla_trace_eq_decision : EqDecision isla_trace :=
+  fix go t1 t2 :=
+    match t1, t2 with
+    | tnil, tnil => left _
+    | tcons e1 ts1, tcons e2 ts2 => cast_if_and (decide (e1 = e2)) (go ts1 ts2)
+    | tcases ts1, tcases ts2 =>
+        (fix inner l1 l2 :=
+           match l1, l2 with
+           | [], [] => left _
+           | x::l1',y::l2' =>
+               cast_if_and (go x y) (inner l1' l2')
+           | _, _ => right _
+           end) ts1 ts2
+    | _, _ => right _
+    end.
+Solve Obligations with intros; destruct_all annot; naive_solver.
 
 
 Definition base_val_to_bool (v : base_val) : option bool :=
@@ -101,15 +169,6 @@ Definition val_to_bits (n : N) (v : valu) : option (bv n) :=
   | RVal_Bits b => bvn_to_bv n b
   | _ => None
   end.
-
-Lemma bvn_to_bv_Some n bn b:
-  bvn_to_bv n bn = Some b ↔ bn = bv_to_bvn b.
-Proof.
-  rewrite /bvn_to_bv.
-  case_decide as Heq => //.
-  - destruct Heq, bn. naive_solver.
-  - destruct bn. naive_solver.
-Qed.
 
 Lemma val_to_bits_Some n b v:
   val_to_bits n v = Some b ↔ v = RVal_Bits b.
