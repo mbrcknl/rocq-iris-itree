@@ -23,6 +23,7 @@ src/threadpool/ctrace.v
 src/wpi.v
 src/exec.v
 src/heaplang/lang.v
+src/heaplang/decide.v
 src/heaplang/adequacy.v
 
 islaris/base.v

@@ -4,9 +4,9 @@ From iris Require Import invariants ghost_map.
 From iris.proofmode Require Import proofmode.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.program_logic Require Import language.
-From iris.itree Require Import later handler.
 From iris.itree.threadpool Require Import handler interleaving.
-From iris.itree.heaplang Require Import lang.
+From iris.itree.heaplang Require Import lang decide.
+From iris.itree Require Import later handler.
 From Paco Require Import paco.
 From Paco Require Import paco2.
 Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
@@ -127,19 +127,6 @@ Proof.
   rewrite compile_tp_cons /= compile_tp_cons /= compile_tp'_app //.
 Qed.
 
-Print reducible.
-Global Instance reducible_dec (e : expr) σ : Decision (reducible e σ).
-Admitted.
-Global Instance stuck_dec (e : expr) σ : Decision (stuck e σ).
-Proof.
-  destruct (decide (reducible e σ)) as [Hred|Hirr].
-  - right. destruct Hred as (κ&e'&σ'&efs&Hstep). intros [_ Hirr].
-    by apply Hirr in Hstep.
-  - destruct (to_val e) eqn:Hval.
-    * right. intros [Hval' _]. destruct e; discriminate.
-    * left. split; first done. intros κ e' σ' efs Hstep. apply Hirr.
-      by do 4 eexists.
-Qed.
 
 Lemma stuck_false (e : expr) σ κ e' σ' efs :
   stuck e σ →
