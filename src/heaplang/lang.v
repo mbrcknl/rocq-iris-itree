@@ -696,3 +696,16 @@ Proof.
   iExists (HeapLangHGS Σ _ γ (nroot .@ "heaplangH")).
   iFrame.
 Qed.
+
+Lemma heaplang_soundness n σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} P:
+  (∀ {HG : invGS Σ} {HS : heaplangHGS Σ},
+    ⊢ heap_inv -∗ state_interp σ -∗ £ n ={⊤,∅}=∗ ⌜P⌝) →
+  P.
+Proof.
+  move => Hwp.
+  eapply uPred.pure_soundness.
+  eapply (step_fupdN_soundness_lc _ 0 n) => ?/=.
+  iIntros "Hlc". iMod (fupd_mask_subseteq ∅) as "Hm"; [done|].
+  iMod heaplangH_init as (?) "[? [??]]".
+  iMod "Hm". iApply (Hwp with "[$] [$] [$]").
+Qed.

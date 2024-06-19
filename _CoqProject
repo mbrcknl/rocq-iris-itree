@@ -25,9 +25,11 @@ src/exec.v
 src/heaplang/lang.v
 src/heaplang/decide.v
 src/heaplang/adequacy.v
+src/heaplang/opsem_adequacy.v
 
 islaris/base.v
 islaris/adequacy.v
+islaris/adequacy_itree.v
 islaris/ghost_state.v
 islaris/lifting.v
 islaris/lifting_itree.v

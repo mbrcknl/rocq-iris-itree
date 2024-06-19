@@ -300,7 +300,7 @@ Global Hint Resolve normalize_itree_rec : itree_auto.
 
 Lemma normalize_itree_interp_trigger {E F R} p (f : ∀ T : Type, E T → itree F T) (e : E R) t' :
   NormalizeITree p (f R e) t' →
-  NormalizeITree true (interp f (ITree.trigger e)) t'.
+  NormalizeITree true (interp f (trigger e)) t'.
 Proof. move => [Heq]. constructor. by setoid_rewrite interp_trigger. Qed.
 Global Hint Resolve normalize_itree_interp_trigger : itree_auto.
 
