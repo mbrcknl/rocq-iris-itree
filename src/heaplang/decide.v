@@ -1,5 +1,5 @@
 From iris.prelude Require Import prelude.
-From iris.heap_lang Require Export lang locations.
+From iris.heap_lang Require Import lang locations.
 From iris.itree.heaplang Require Import lang.
 
 Lemma of_to_val_iff e v:

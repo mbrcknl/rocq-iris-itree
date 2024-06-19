@@ -12,6 +12,7 @@ From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
 
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' laterE +' ubE.
+Global Hint Transparent heaplangE : itree_auto.
 
 Definition step `{laterE -< E} : itree E () :=
   trigger ELater.
