@@ -421,6 +421,15 @@ Section heaplangH.
   Definition heap_inv : iProp Σ :=
     inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)).
 
+  Lemma wpi_yield_if_not_val m e Φ :
+    Φ tt -∗
+    WPi yield_if_not_val e @ heaplangH m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "HΦ". rewrite /yield_if_not_val. case_match.
+    - by iApply wpi_ret.
+    - by iApply @wpi_yield.
+  Qed.
+
   Lemma wpi_step_ret m M r Φ :
     lat m (Φ r) -∗
     WPi step_ret r @ heaplangH m; M {{ Φ }}.
@@ -451,9 +460,7 @@ Section heaplangH.
   Proof.
     iIntros (Hs Hlen) "Hwp". rewrite compile_expr_bind //. iApply wpi_bind.
     iApply wpi_wand; last done. iIntros (r) "Hwp".
-    iApply wpi_bind. rewrite /yield_if_not_val. destruct e.
-    1:by iApply wpi_ret.
-    all:by iApply @wpi_yield.
+    iApply wpi_bind. by iApply wpi_yield_if_not_val.
   Qed.
 
   Lemma wpi_Fork m e Φ :
@@ -466,10 +473,8 @@ Section heaplangH.
     - wpi_norm. by iApply wpi_step_ret.
     - simpl_itree. iApply wpi_bind.
       iApply wpi_wand; last done. iIntros (r ->).
-      rewrite /yield_if_not_val. destruct (to_val _) eqn:Hval.
-      * rewrite /kill_thread. wpi_norm. rewrite bind_trigger. by iApply @wpi_kill.
-      * rewrite /kill_thread. iApply wpi_bind. iApply @wpi_yield.
-        iApply wpi_bind. by iApply @wpi_kill.
+      iApply wpi_bind. iApply wpi_yield_if_not_val.
+      rewrite /kill_thread. wpi_norm. rewrite bind_trigger. by iApply @wpi_kill.
   Qed.
 
   Lemma big_sep_map_list_heap_array l n m v :
@@ -699,12 +704,12 @@ Qed.
 
 Lemma heaplang_soundness n σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} P:
   (∀ {HG : invGS Σ} {HS : heaplangHGS Σ},
-    ⊢ heap_inv -∗ state_interp σ -∗ £ n ={⊤,∅}=∗ ⌜P⌝) →
+    ⊢ heap_inv -∗ state_interp σ -∗ £ n ={⊤,∅}=∗ |={∅}▷=>^n ⌜P⌝) →
   P.
 Proof.
   move => Hwp.
   eapply uPred.pure_soundness.
-  eapply (step_fupdN_soundness_lc _ 0 n) => ?/=.
+  eapply (step_fupdN_soundness_lc _ n n) => ?/=.
   iIntros "Hlc". iMod (fupd_mask_subseteq ∅) as "Hm"; [done|].
   iMod heaplangH_init as (?) "[? [??]]".
   iMod "Hm". iApply (Hwp with "[$] [$] [$]").

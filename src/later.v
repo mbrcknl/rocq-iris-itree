@@ -151,8 +151,15 @@ Section adequacy.
     - iIntros "!>" (Φ A [[]|e] k) "HH"; iIntros (n Hlat) "Hlc".
       + iEval (rewrite later_ifn_unfold /later_ifn_loop/=).
         case_bool_decide; wpi_norm/=.
-        * iApply wpi_ret'. iMod "HH". admit.
-        * admit.
+        * iApply wpi_ret'. iModIntro. iPureIntro. naive_solver.
+        * iApply wpi_update. iMod "HH". destruct n; simplify_eq/=.
+          -- destruct lat; [naive_solver|] => /=. destruct n => //.
+             iDestruct "Hlc" as "[? ?]". iApply (lc_fupd_elim_later with "[$]").
+             iModIntro. iApply "HH".
+             { iPureIntro. rewrite /is_Some. naive_solver. }
+             have -> : (S n - 1) = n by lia. iFrame.
+          -- destruct lat; [|unfold is_Some in *; naive_solver] => /=.
+             iModIntro. by iApply "HH".
       + iEval (rewrite later_ifn_unfold /later_ifn_loop/=).
         rewrite /ITree.map. wpi_norm/=.
         iApply wpi_bind. iApply wpi_trigger. iMod "HH". iModIntro.
@@ -160,7 +167,7 @@ Section adequacy.
         iApply (ihandler_mono with "[Hlc]"); last done. 2: by iIntros "!>" (??).
         iIntros (a) "Hwp".
         iModIntro. by iApply "Hwp".
-  Admitted.
+  Qed.
 
   (* TODO: can we get this? *)
   Theorem later_adequacy (t : itree (laterE +' E) R) lat Φ n M `{!Sequential H} :
@@ -180,6 +187,6 @@ Section adequacy.
     iDestruct (later_adequacy_empty with "Hwp Hlc") as "Hwp"; [done|].
     iApply wpi_wand; last done. iIntros (r). destruct r.
     - eauto.
-    - admit.
+    - (* Where do we get the mask from? *)
   Abort.
 End adequacy.

@@ -314,6 +314,23 @@ Proof.
 Qed.
 Global Hint Resolve normalize_itree_interp_recursive_translate | 20 : itree_auto.
 
+Lemma normalize_itree_translate_Ret {E F R} h (x : R) :
+  NormalizeITree true (translate (E:=E) (F:=F) h (Ret x)) (Ret x).
+Proof. constructor. by rewrite translate_ret. Qed.
+Global Hint Resolve normalize_itree_translate_Ret : itree_auto.
+
+Lemma normalize_itree_translate_Tau {E F R} h (t : itree E R) t' p :
+  NormalizeITree p (translate h t) t' →
+  NormalizeITree true (translate (E:=E) (F:=F) h (Tau t)) t'.
+Proof. move => [Heq]. constructor. by rewrite -Heq translate_tau tau_eutt. Qed.
+Global Hint Resolve normalize_itree_translate_Tau : itree_auto.
+
+Lemma normalize_itree_translate_Vis {E F R} A e h (k : A →itree E R) t' p :
+  NormalizeITree p (Vis (h _ e) (λ x, translate h (k x))) t' →
+  NormalizeITree true (translate (E:=E) (F:=F) h (Vis e k)) t'.
+Proof. move => [Heq]. constructor. by rewrite -Heq translate_vis. Qed.
+Global Hint Resolve normalize_itree_translate_Vis : itree_auto.
+
 (** ** Tactic for normalizing eutt using NormalizeITree *)
 Lemma tac_normalize_eutt {E R} p1 p2 (t1 t1' t2 t2' : itree E R) :
   NormalizeITree p1 t1 t1' →

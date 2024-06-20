@@ -11,6 +11,10 @@ From iris.itree.threadpool Require Import handler interleaving.
 From iris.itree.heaplang Require Import lang.
 From Paco Require Import paco.
 From Paco Require Import paco2.
+
+Set Default Proof Using "Type*".
+
+Section adequacy.
 Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
 Instance state_EqDecision :
@@ -429,8 +433,8 @@ Qed.
 Variant Terminal (R : Type) :=
   | TermRet (r : R)
   | TermUb.
-Arguments TermRet {_}.
-Arguments TermUb {_}.
+Global Arguments TermRet {_}.
+Global Arguments TermUb {_}.
 Definition terminal_trace {E R} `{ubE -< E} (tx : Terminal R) : trace E R :=
   match tx with
   | TermRet r => TRet r
@@ -1774,17 +1778,20 @@ Proof.
   by iMod "Hpost".
 Qed.
 
-Lemma execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
+End adequacy.
+
+Lemma execution_wpi' n e σ tp' σ' κ tx:
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
-  state_interp σ -∗
+  (∀ hlc Σ (Hinv : invGS_gen hlc Σ) (Hhl : heaplangHGS Σ) Φ,
+      state_interp σ -∗
   WPi (v ← compile_expr e; yield_if_not_val e;; Ret v) @ heaplangH Identity ; ⊤ {{ Φ }} -∗
   |={⊤}=> match tx with
   | TermUb => False
   | TermRet v => Φ v
-  end.
+  end).
 Proof.
-  iIntros (Hstep Hstuck).
+  iIntros (Hstep Hstuck ? ? ? ? ?).
   apply execution with (tx := tx) in Hstep as (t1&t2&t3&Hint&Hinst&Heval&Hterm); last done.
   iIntros "Hstate Hwp".
   (* TODO: Name these adequacy theorems consistently. *)
@@ -1799,23 +1806,24 @@ Proof.
     by iDestruct (model_wpi with "Hwp") as "Hwp".
 Qed.
 
-Lemma execution_wpi_later' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
+Lemma execution_wpi_later' n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
   ∃ n,
+    (∀ hlc Σ (Hinv : invGS_gen hlc Σ) (Hhl : heaplangHGS Σ) Φ,
     state_interp σ -∗
     WPi (v ← compile_expr e; yield_if_not_val e;; Ret v) @ heaplangH Later ; ⊤ {{ Φ }} -∗
     |={⊤, ∅}=> |={∅}▷=>^n match tx with
     | TermUb => False
     | TermRet v => |={∅, ⊤}=> Φ v
-    end.
+    end).
 Proof.
   iIntros (Hstep Hstuck).
   apply execution with (tx := tx) in Hstep as (t1&t2&t3&Hint&Hinst&Heval&Hterm); last done.
   destruct tx.
   - destruct Hterm as [σ'' [n' Ht3]%terminates_in_model].
     exists n'.
-    iIntros "Hstate Hwp".
+    iIntros (? ? ? ? ?) "Hstate Hwp".
     (* TODO: Name these adequacy theorems consistently. *)
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
     iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
@@ -1826,7 +1834,7 @@ Proof.
     iApply step_fupdN_mono; last done. iIntros "[_ $]".
   - apply terminates_in_model in Hterm as [n' Ht3].
     exists n'.
-    iIntros "Hstate Hwp".
+    iIntros (? ? ? ? ?) "Hstate Hwp".
     (* TODO: Name these adequacy theorems consistently. *)
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
     iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
@@ -1837,17 +1845,18 @@ Proof.
     iApply step_fupdN_mono; last done. iIntros "$".
 Qed.
 
-Lemma compile_expr_execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
+Lemma compile_expr_execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
+  (∀ hlc Σ (Hinv : invGS_gen hlc Σ) (Hhl : heaplangHGS Σ) Φ,
   state_interp σ -∗
   WPi (compile_expr e) @ heaplangH Identity ; ⊤ {{ Φ }} -∗
   |={⊤}=> match tx with
   | TermUb => False
   | TermRet v => Φ v
-  end.
+  end).
 Proof.
-  iIntros (Hstep Hterm) "Hstate Hwp".
+  iIntros (Hstep Hterm ? ? ? ? ?) "Hstate Hwp".
   iApply (execution_wpi' with "Hstate"); eauto.
   iApply wpi_bind. iApply wpi_wand; last done.
   iIntros (r) "HΦ". iApply wpi_bind. rewrite /yield_if_not_val. destruct (to_val _).
@@ -1855,35 +1864,52 @@ Proof.
   - iApply @wpi_yield. by iApply wpi_ret.
 Qed.
 
-Lemma compile_expr_execution_wpi_later `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx Φ :
+Lemma compile_expr_execution_wpi_later n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
   ∃ n,
+  (∀ hlc Σ (Hinv : invGS_gen hlc Σ) (Hhl : heaplangHGS Σ) Φ,
   state_interp σ -∗
   WPi (compile_expr e) @ heaplangH Later ; ⊤ {{ Φ }} -∗
   |={⊤, ∅}=> |={∅}▷=>^n match tx with
   | TermUb => False
   | TermRet v => |={∅, ⊤}=> Φ v
-  end.
+  end).
 Proof.
   iIntros (Hstep Hterm).
-  odestruct (execution_wpi_later' _ _ _ _ _ _ _ _ _ _) as [n' Hwp]; eauto.
-  exists n'. iIntros "Hstate Hwp". iApply (Hwp with "Hstate").
+  odestruct (execution_wpi_later' _ _ _ _ _ _ _ _ _) as [n' Hwp]; eauto.
+  exists n'. iIntros (? ? ? ? ?) "Hstate Hwp". iApply (Hwp with "Hstate").
   iApply wpi_bind. iApply wpi_wand; last done.
-  iIntros (r) "HΦ". iApply wpi_bind. rewrite /yield_if_not_val. destruct (to_val _).
-  - iApply wpi_ret. by iApply wpi_ret.
-  - iApply @wpi_yield. by iApply wpi_ret.
+  iIntros (r) "HΦ". iApply wpi_bind. iApply wpi_yield_if_not_val.
+  by iApply wpi_ret.
 Qed.
 
 From iris.program_logic Require Import adequacy.
-From iris.base_logic Require Import upred.
 
-Theorem heap_adequacy Σ e σ φ :
-  (∀ `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}, ⊢ heap_inv -∗ WPi (compile_expr e) @ heaplangH Identity; ⊤ {{ v, ⌜φ v⌝ }}) →
+Theorem heap_adequacy Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
+  (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ heap_inv -∗ WPi (compile_expr e) @ heaplangH Later; ⊤ {{ v, ⌜φ v⌝ }}) →
   adequate NotStuck e σ (λ v _, φ v).
 Proof.
-  iIntros (Hwp). constructor.
-  - intros ? ? ? ?.
-    apply erased_steps_nsteps in H as (n&κs&Hsteps).
-(* TODO: Ralf help me. (Hint: use [heaplangH_init]) *)
-Admitted.
+  move => Hwp. apply adequate_alt => t2 σ2 /erased_steps_nsteps[n [κs Hsteps]].
+  constructor.
+  - move => ? ? ?.
+    odestruct (compile_expr_execution_wpi_later _) as [n' Had]; [done| |].
+    { subst. by constructor. }
+    apply: (heaplang_soundness n').
+    iIntros (? ?) "Hinv ??". iMod (Had with "[$] [Hinv]") as "Had".
+    { by iApply Hwp. }
+    (* TODO: find a less hacky way to do this *)
+    destruct n'.
+    + simpl. iMod "Had". iApply fupd_mask_intro; [done|]. by iIntros "?".
+    + iModIntro. iApply step_fupdN_S_fupd. iApply (step_fupdN_wand with "Had").
+      iIntros ">$". iApply fupd_mask_intro; [done|]. by iIntros "?".
+  - move => e2 _ /elem_of_list_lookup [? He2].
+    destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
+    exfalso.
+    odestruct (compile_expr_execution_wpi_later _) as [n' Had]; [done| |].
+    { apply tp_termination_TermUb. eexists _, _. done. }
+    apply: (heaplang_soundness n').
+    iIntros (? ?) "Hinv ??". iMod (Had with "[$] [Hinv]") as "Had".
+    { by iApply Hwp. }
+    iModIntro. iApply (step_fupdN_wand with "Had"). by iIntros (?).
+Qed.
