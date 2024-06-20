@@ -421,61 +421,6 @@ Section heaplangH.
   Definition heap_inv : iProp Σ :=
     inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)).
 
-  Lemma wpi_yield_if_not_val m e Φ :
-    Φ tt -∗
-    WPi yield_if_not_val e @ heaplangH m; ⊤ {{ Φ }}.
-  Proof.
-    iIntros "HΦ". rewrite /yield_if_not_val. case_match.
-    - by iApply wpi_ret.
-    - by iApply @wpi_yield.
-  Qed.
-
-  Lemma wpi_step_ret m M r Φ :
-    lat m (Φ r) -∗
-    WPi step_ret r @ heaplangH m; M {{ Φ }}.
-  Proof.
-    iIntros "HΦ". iApply wpi_bind. iApply @wpi_later. iApply lat_mono; last done.
-    iIntros "HΦ". by iApply wpi_ret.
-  Qed.
-
-  (*
-  (* TODO: Create abstraction for WPi for heaplang. This should handle the invariant. *)
-
-  Definition wp_heaplang (e : expr) (M : coPset) (Φ : val → iProp Σ) : iProp Σ :=
-    heap_inv -∗
-    WPi compile_expr e @ heaplangH; M {{ Φ }}.
-
-  From iris.bi Require Import weakestpre.
-  Global Instance wp_heaplang_wp `{!invGS_gen hlc Σ} :
-    Wp (iProp Σ) expr val () := λ _ M e Φ, wp_heaplang e M Φ.
- *)
-  Lemma wpi_bind_K m K e Φ :
-    Forall supported_subset_ectx K →
-    (* TODO: Remove this assumption. *)
-    length K > 0 →
-    WPi compile_expr e @ heaplangH m; ⊤ {{ v,
-      WPi compile_expr (fill K (Val v)) @ heaplangH m; ⊤ {{ Φ }}
-    }} -∗
-    WPi compile_expr (fill K e) @ heaplangH m; ⊤ {{ Φ }}.
-  Proof.
-    iIntros (Hs Hlen) "Hwp". rewrite compile_expr_bind //. iApply wpi_bind.
-    iApply wpi_wand; last done. iIntros (r) "Hwp".
-    iApply wpi_bind. by iApply wpi_yield_if_not_val.
-  Qed.
-
-  Lemma wpi_Fork m e Φ :
-    lat m (Φ (LitV LitUnit)) -∗
-    WPi compile_expr e @ heaplangH m; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
-    WPi compile_expr (Fork e) @ heaplangH m; ⊤ {{ Φ }}.
-  Proof.
-    iIntros "HΦ Hwp". rewrite /compile_expr. wpi_norm/=.
-    rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
-    - wpi_norm. by iApply wpi_step_ret.
-    - simpl_itree. iApply wpi_bind.
-      iApply wpi_wand; last done. iIntros (r ->).
-      iApply wpi_bind. iApply wpi_yield_if_not_val.
-      rewrite /kill_thread. wpi_norm. rewrite bind_trigger. by iApply @wpi_kill.
-  Qed.
 
   Lemma big_sep_map_list_heap_array l n m v :
     ([∗ map] k↦v0 ∈ heap_array (l +ₗ Z.of_nat m) (replicate n v), k ↪[heaplangH_heap_name] v0) -∗
@@ -494,39 +439,21 @@ Section heaplangH.
       done.
   Qed.
 
-  Lemma wpi_AllocN m M v n Φ :
-    (0 < n)%Z →
-    ↑heaplangH_inv_name ⊆ M →
-    heap_inv -∗
-    lat m (∀ l,
-       ([∗ list] i ∈ seq 0 (Z.to_nat n), (l +ₗ (i : nat)) ↦ v) -∗
-       Φ (LitV (LitLoc l))
-    ) -∗
-    WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH m; M {{ Φ }}.
+  Lemma wpi_yield_if_not_val m e Φ :
+    Φ tt -∗
+    WPi yield_if_not_val e @ heaplangH m; ⊤ {{ Φ }}.
   Proof.
-    iIntros (Hpos Hmask) "#Hinv Hwand".
-    rewrite /compile_expr. wpi_norm/=.
-    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    rewrite assert_True //. wpi_norm.
-    iApply wpi_bind. iApply @wpi_get.
-    iIntros (σ) "Hauth' !>".
-    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
-    iFrame. iApply wpi_ret.
-    iApply wpi_bind. simpl. iApply @wpi_demonic. iIntros (l). iApply wpi_ret.
-    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
-    rewrite /state_interp/stateInterp_heaplang.
-    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
-    iCombine "Hauth Hauth'" as "Hauth".
-    iDestruct (ghost_map_insert_big (heap_array (`l) (replicate (Z.to_nat n) v)) with "Hauth") as "Hauth".
-    { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
-      rewrite replicate_length in Hlt.
-      pose (bool_decide_unpack _ Hl) as Hl'. apply Hl'; first done. lia.
-    }
-    iMod "Hauth" as "[Hauth Hfrag]". iDestruct "Hauth" as "[Hauth Hauth']". iFrame.
-    iApply wpi_ret. iApply wpi_step_ret. iModIntro.
-    iApply (lat_mono with "[Hauth Hfrag]"); last done. iIntros "Hpost".
-    iSplitL "Hauth". { by iExists (state_init_heap (`l) n v σ). }
-    iApply "Hpost". iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
+    iIntros "HΦ". rewrite /yield_if_not_val. case_match.
+    - by iApply wpi_ret.
+    - by iApply @wpi_yield.
+  Qed.
+
+  Lemma wpi_step_ret m M r Φ :
+    lat m (Φ r) -∗
+    WPi step_ret r @ heaplangH m; M {{ Φ }}.
+  Proof.
+    iIntros "HΦ". iApply wpi_bind. iApply @wpi_later. iApply lat_mono; last done.
+    iIntros "HΦ". by iApply wpi_ret.
   Qed.
 
   Lemma wpi_load m M l v dq Φ :
@@ -580,6 +507,92 @@ Section heaplangH.
     iApply (wpi_store' with "Hinv Hpointsto"); first done.
     iIntros (r ->) "Hpointsto". by iApply "Hwand".
   Qed.
+End heaplangH.
+
+lock Definition wp_heaplang `{!invGS_gen hlc Σ} `{!heaplangHGS Σ} :
+  Wp (iProp Σ) expr val later_modality := λ m M e Φ,
+    (heap_inv -∗ WPi compile_expr e @ heaplangH m; M {{ Φ }})%I.
+Global Existing Instance wp_heaplang.
+
+Section wp.
+  Context `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
+
+  Lemma wp_heaplang_eq e m M Φ :
+    WP e @ m; M {{ Φ }} ⊣⊢
+    (heap_inv -∗ WPi compile_expr e @ heaplangH m; M {{ Φ }}).
+  Proof. by rewrite unlock. Qed.
+
+  Lemma wp_bind_K m K e Φ :
+    Forall supported_subset_ectx K →
+    WP e @ m; ⊤ {{ v,
+      WP fill K (Val v) @ m; ⊤ {{ Φ }}
+    }} -∗
+    WP fill K e @ m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros (Hs) "Hwp". rewrite !wp_heaplang_eq.
+    iIntros "#Hinv". iSpecialize ("Hwp" with "Hinv").
+    destruct (decide (length K = 0)).
+    - destruct K => //=. iApply wpi_update_post. iApply wpi_wand; last done.
+      iIntros (r) "Hwp". rewrite wp_heaplang_eq compile_expr_val -wpi_ret'.
+      by iApply "Hwp".
+    - rewrite compile_expr_bind //. 2: lia. iApply wpi_bind.
+      iApply wpi_wand; last done. iIntros (r) "Hwp".
+      iApply wpi_bind. iApply wpi_yield_if_not_val.
+      rewrite wp_heaplang_eq. by iApply "Hwp".
+  Qed.
+
+  Lemma wp_Fork m e Φ :
+    lat m (Φ (LitV LitUnit)) -∗
+    WP e @ m; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
+    WP Fork e @ m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "HΦ Hwp". rewrite !wp_heaplang_eq. iIntros "#Hinv".
+    iSpecialize ("Hwp" with "Hinv").
+    rewrite /compile_expr. wpi_norm/=.
+    rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
+    - wpi_norm. by iApply wpi_step_ret.
+    - wpi_norm. rewrite rec_as_interp. iApply wpi_bind.
+      iApply wpi_wand; last done. iIntros (r ->).
+      iApply wpi_bind. iApply wpi_yield_if_not_val.
+      simpl_itree. wpi_norm. rewrite bind_trigger. by iApply @wpi_kill.
+  Qed.
+
+  (* TODO: adapt the following lemmas to use WP instead of WPi *)
+  Lemma wpi_AllocN m M v n Φ :
+    (0 < n)%Z →
+    ↑heaplangH_inv_name ⊆ M →
+    heap_inv -∗
+    lat m (∀ l,
+       ([∗ list] i ∈ seq 0 (Z.to_nat n), (l +ₗ (i : nat)) ↦ v) -∗
+       Φ (LitV (LitLoc l))
+    ) -∗
+    WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH m; M {{ Φ }}.
+  Proof.
+    iIntros (Hpos Hmask) "#Hinv Hwand".
+    rewrite /compile_expr. wpi_norm/=.
+    iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
+    rewrite assert_True //. wpi_norm.
+    iApply wpi_bind. iApply @wpi_get.
+    iIntros (σ) "Hauth' !>".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
+    iFrame. iApply wpi_ret.
+    iApply wpi_bind. simpl. iApply @wpi_demonic. iIntros (l). iApply wpi_ret.
+    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "Hauth'".
+    rewrite /state_interp/stateInterp_heaplang.
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iCombine "Hauth Hauth'" as "Hauth".
+    iDestruct (ghost_map_insert_big (heap_array (`l) (replicate (Z.to_nat n) v)) with "Hauth") as "Hauth".
+    { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
+      rewrite replicate_length in Hlt.
+      pose (bool_decide_unpack _ Hl) as Hl'. apply Hl'; first done. lia.
+    }
+    iMod "Hauth" as "[Hauth Hfrag]". iDestruct "Hauth" as "[Hauth Hauth']". iFrame.
+    iApply wpi_ret. iApply wpi_step_ret. iModIntro.
+    iApply (lat_mono with "[Hauth Hfrag]"); last done. iIntros "Hpost".
+    iSplitL "Hauth". { by iExists (state_init_heap (`l) n v σ). }
+    iApply "Hpost". iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
+  Qed.
+
 
   Lemma wpi_Load m M l v dq Φ :
     ↑heaplangH_inv_name ⊆ M →
@@ -688,7 +701,7 @@ Section heaplangH.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
-End heaplangH.
+End wp.
 
 Lemma heaplangH_init `{!invGS_gen hlc Σ} `{!heaplangHGpreS Σ} σ :
   ⊢ |={∅}=> ∃ _ : heaplangHGS Σ, heap_inv ∗ state_interp σ ∗ [∗ map] k↦v ∈ σ.(heap), k ↪[heaplangH_heap_name] v.

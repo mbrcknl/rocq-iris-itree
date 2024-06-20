@@ -51,7 +51,8 @@ Section adequacy.
     (lat = Later ↔ is_Some n) →
     state_interp σ -∗
     £ (default 0 n) -∗
-    WPi compile_expr e @ heaplangH lat; ⊤ {{ Φ }} -∗
+    heap_inv -∗
+    WP e @ lat; ⊤ {{ Φ }} -∗
     |={⊤, ∅}=> ∃ v, ⌜te ≈ Ret v⌝ ∗
       match v with
       | None => False
@@ -60,9 +61,9 @@ Section adequacy.
           match r with | inl v => Φ v | inr _ => True end
       end.
   Proof.
-    iIntros (? ?) "Hs Hlc Hwp".
+    iIntros (? ?) "Hs Hlc Hinv Hwp".
     iApply (heaplang_adequacy_irel with "Hs Hlc"); [done..|].
-    iApply wpi_bind. iApply wpi_wand; [|done]. iIntros (?) "?".
-    iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
+    iApply wpi_bind. iApply wpi_wand. 2: { rewrite wp_heaplang_eq. by iApply "Hwp". }
+    iIntros (?) "?". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
   Qed.
 End adequacy.

@@ -1845,7 +1845,7 @@ Proof.
     iApply step_fupdN_mono; last done. iIntros "$".
 Qed.
 
-Lemma compile_expr_execution_wpi' `{!invGS_gen hlc Σ} n e σ tp' σ' κ tx :
+Lemma compile_expr_execution_wpi' n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
   (∀ hlc Σ (Hinv : invGS_gen hlc Σ) (Hhl : heaplangHGS Σ) Φ,
@@ -1886,8 +1886,9 @@ Qed.
 
 From iris.program_logic Require Import adequacy.
 
-Theorem heap_adequacy Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
-  (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ heap_inv -∗ WPi (compile_expr e) @ heaplangH Later; ⊤ {{ v, ⌜φ v⌝ }}) →
+(* TODO: deduplicate these proofs *)
+Theorem heap_adequacy_later Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
+  (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Later; ⊤ {{ v, ⌜φ v⌝ }}) →
   adequate NotStuck e σ (λ v _, φ v).
 Proof.
   move => Hwp. apply adequate_alt => t2 σ2 /erased_steps_nsteps[n [κs Hsteps]].
@@ -1897,7 +1898,7 @@ Proof.
     { subst. by constructor. }
     apply: (heaplang_soundness n').
     iIntros (? ?) "Hinv ??". iMod (Had with "[$] [Hinv]") as "Had".
-    { by iApply Hwp. }
+    { iPoseProof Hwp as "Hwp". rewrite wp_heaplang_eq. by iApply "Hwp". }
     (* TODO: find a less hacky way to do this *)
     destruct n'.
     + simpl. iMod "Had". iApply fupd_mask_intro; [done|]. by iIntros "?".
@@ -1910,6 +1911,30 @@ Proof.
     { apply tp_termination_TermUb. eexists _, _. done. }
     apply: (heaplang_soundness n').
     iIntros (? ?) "Hinv ??". iMod (Had with "[$] [Hinv]") as "Had".
-    { by iApply Hwp. }
+    { iPoseProof Hwp as "Hwp". rewrite wp_heaplang_eq. by iApply "Hwp". }
     iModIntro. iApply (step_fupdN_wand with "Had"). by iIntros (?).
+Qed.
+
+Theorem heap_adequacy_no_later Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
+  (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Identity; ⊤ {{ v, ⌜φ v⌝ }}) →
+  adequate NotStuck e σ (λ v _, φ v).
+Proof.
+  move => Hwp. apply adequate_alt => t2 σ2 /erased_steps_nsteps[n [κs Hsteps]].
+  constructor.
+  - move => ? ? ?.
+    apply: (heaplang_soundness 0).
+    iIntros (? ?) "Hinv ?? /=".
+    iMod (compile_expr_execution_wpi' with "[$] [Hinv]") as "?"; [done|..].
+    { subst. by constructor. }
+    { iPoseProof Hwp as "Hwp". rewrite wp_heaplang_eq. by iApply "Hwp". }
+    iApply fupd_mask_intro; [done|]. by iIntros "?".
+  - move => e2 _ /elem_of_list_lookup [? He2].
+    destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
+    exfalso.
+    apply: (heaplang_soundness 0).
+    iIntros (? ?) "Hinv ?? /=".
+    iMod (compile_expr_execution_wpi' with "[$] [Hinv]") as "?"; [done|..].
+    { apply tp_termination_TermUb. eexists _, _. done. }
+    { iPoseProof Hwp as "Hwp". rewrite wp_heaplang_eq. by iApply "Hwp". }
+    done.
 Qed.
