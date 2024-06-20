@@ -3,6 +3,7 @@ From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop fancy_updates.
 From iris.itree Require Import wpi itree handler.
 
+(* TODO: rename to emptyE *)
 Inductive voidE : Type → Type :=.
 
 Section handler.
