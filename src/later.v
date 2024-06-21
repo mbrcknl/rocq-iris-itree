@@ -137,7 +137,7 @@ Section adequacy.
     WPi later_ifn n t @ H; ∅ {{ r,
       match r with
       | inl r => Φ r
-      | inr _ => ⌜lat = Later⌝
+      | inr LaterExhausted => ⌜lat = Later⌝
       end
     }}.
   Proof.
@@ -177,7 +177,7 @@ Section adequacy.
     WPi later_ifn n t @ H; M {{ r,
       match r with
       | inl r => Φ r
-      | inr _ => ⌜lat = Later⌝
+      | inr LaterExhausted => ⌜lat = Later⌝
       end
     }}.
   Proof.

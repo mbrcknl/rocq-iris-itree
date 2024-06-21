@@ -14,6 +14,8 @@ Definition heaplang_irel {R} (t : itree heaplangE R) (σ : state) (n : option na
     te ≈ ub_ifn (insert_voidE (later_ifn n t3)).
 
 Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
+  (* TODO: Can remove the itree here? How would we represent diverging
+  programs when not using later? *)
   (exec: itree voidE (option ((state * (val + last_thread_killed)) + later_exhausted))) : Prop :=
   heaplang_irel (v ← compile_expr e ; yield_if_not_val e ;; Ret v) σ n exec.
 
@@ -29,7 +31,7 @@ Section adequacy.
     |={⊤, ∅}=> ∃ v, ⌜te ≈ Ret v⌝ ∗
       match v with
       | None => False
-      | Some (inr _) => ⌜lat = Later⌝
+      | Some (inr LaterExhausted) => ⌜lat = Later⌝
       | Some (inl σr) => |={∅, ⊤}=> let (σ, r) := σr in state_interp σ ∗
           match r with | inl v => Φ v | inr _ => True end
       end.
@@ -56,7 +58,7 @@ Section adequacy.
     |={⊤, ∅}=> ∃ v, ⌜te ≈ Ret v⌝ ∗
       match v with
       | None => False
-      | Some (inr _) => ⌜lat = Later⌝
+      | Some (inr LaterExhausted) => ⌜lat = Later⌝
       | Some (inl σr) => |={∅, ⊤}=> let (σ, r) := σr in state_interp σ ∗
           match r with | inl v => Φ v | inr _ => True end
       end.

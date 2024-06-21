@@ -1915,6 +1915,7 @@ Proof.
     iModIntro. iApply (step_fupdN_wand with "Had"). by iIntros (?).
 Qed.
 
+(* TODO: prove this via weakening *)
 Theorem heap_adequacy_no_later Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
   (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Identity; ⊤ {{ v, ⌜φ v⌝ }}) →
   adequate NotStuck e σ (λ v _, φ v).
