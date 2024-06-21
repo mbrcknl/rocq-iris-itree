@@ -94,66 +94,66 @@ Section stateH_adequacy.
   (** The evaluation relation, prior to taking the fixpoint. This relation relates
   an [itree (stateE S +' E) R] to its evaluated [itree E (S * R)] where the
   final state is put in the first component of its return value. *)
-  Variant evalF
-    (eval : S → itree (stateE S +' E) R → itree E (S * R) → Prop)
+  Variant state_irelF
+    (state_irel : S → itree (stateE S +' E) R → itree E (S * R) → Prop)
     : S
     → itree' (stateE S +' E) R
     → itree' E (S * R)
     → Prop :=
   (** Forwarding what doesn't affect the state. *)
   | ForwardRet s r :
-    evalF eval s (RetF r) (RetF (s, r))
+    state_irelF state_irel s (RetF r) (RetF (s, r))
   | ForwardTau s t t' :
-    eval s t t' →
-    evalF eval s (TauF t) (TauF t')
+    state_irel s t t' →
+    state_irelF state_irel s (TauF t) (TauF t')
   | ForwardVis s A e k k' :
-    (∀ a : A, eval s (k a) (k' a)) →
-    evalF eval s (VisF (inr1 e) k) (VisF e k')
+    (∀ a : A, state_irel s (k a) (k' a)) →
+    state_irelF state_irel s (VisF (inr1 e) k) (VisF e k')
   (** Setting the state from [s] to [s']. *)
   | SetState s s' k t :
-    eval s' (k tt) t →
-    evalF eval s (VisF (inl1 (ESetState s')) k) (TauF t)
+    state_irel s' (k tt) t →
+    state_irelF state_irel s (VisF (inl1 (ESetState s')) k) (TauF t)
   (** Getting the state [s]. *)
   | GetState s k t :
-    eval s (k s) t →
-    evalF eval s (VisF (inl1 EGetState) k) (TauF t).
-  Hint Constructors evalF : iris_itree.
-  Definition eval_
-    (eval : S → itree (stateE S +' E) R → itree E (S * R) → Prop)
+    state_irel s (k s) t →
+    state_irelF state_irel s (VisF (inl1 EGetState) k) (TauF t).
+  Hint Constructors state_irelF : iris_itree.
+  Definition state_irel_
+    (state_irel : S → itree (stateE S +' E) R → itree E (S * R) → Prop)
     : S
     → itree (stateE S +' E) R
     → itree E (S * R)
     → Prop :=
-    λ s t t', evalF eval s (observe t) (observe t').
+    λ s t t', state_irelF state_irel s (observe t) (observe t').
 
   (* TODO: Lemma relating this relation to interp in itree library. *)
 
-  Lemma evalF_mono eval eval' s t t' :
-    eval <3= eval' →
-    evalF eval  s t t' →
-    evalF eval' s t t'.
+  Lemma state_irelF_mono state_irel state_irel' s t t' :
+    state_irel <3= state_irel' →
+    state_irelF state_irel  s t t' →
+    state_irelF state_irel' s t t'.
   Proof.
-    intros Hleq HevalF. destruct HevalF; eauto with iris_itree.
+    intros Hleq Hstate_irelF. destruct Hstate_irelF; eauto with iris_itree.
   Qed.
-  Lemma eval__mono :
-    monotone3 eval_.
+  Lemma state_irel__mono :
+    monotone3 state_irel_.
   Proof.
-    rewrite /monotone3 /eval_. intros. by eapply evalF_mono; last done.
+    rewrite /monotone3 /state_irel_. intros. by eapply state_irelF_mono; last done.
   Qed.
-  Hint Resolve eval__mono : paco.
+  Hint Resolve state_irel__mono : paco.
 
-  (** The evaluation relation. See comment above. *)
-  Definition eval :
+  (** The state_ireluation relation. See comment above. *)
+  Definition state_irel :
     S → itree (stateE S +' E) R → itree E (S * R) → Prop :=
-    paco3 eval_ bot3.
+    paco3 state_irel_ bot3.
 
-  Global Instance eval_proper_unilateral :
-    Proper ((=) ==> eqit (=) false false ==> eqit (=) false false ==> impl) eval.
+  Global Instance state_irel_proper_unilateral :
+    Proper ((=) ==> eqit (=) false false ==> eqit (=) false false ==> impl) state_irel.
   Proof.
     pcofix CIH.
     intros s s' <- t1 t2 Ht t1' t2' Ht' Heval.
-    pfold. rewrite /eval_.
-    punfold Ht. punfold Ht'. punfold Heval. rewrite /eval_ in Heval.
+    pfold. rewrite /state_irel_.
+    punfold Ht. punfold Ht'. punfold Heval. rewrite /state_irel_ in Heval.
     destruct Ht, Ht'; try discriminate; try inversion Heval.
     - simplify_eq. inversion Heval. constructor.
     - constructor. pclearbot. simplify_eq. right. eapply CIH; first reflexivity.
@@ -175,8 +175,8 @@ Section stateH_adequacy.
       * apply REL.
       * apply REL0.
   Qed.
-  Global Instance eval_proper :
-    Proper (pointwise_relation S (eqit (=) false false ==> eqit (=) false false ==> (↔))%signature) eval.
+  Global Instance state_irel_proper :
+    Proper (pointwise_relation S (eqit (=) false false ==> eqit (=) false false ==> (↔))%signature) state_irel.
   Proof.
     intros s t1 t2 Ht t1' t2' Ht'.
     split; rewrite Ht Ht' //.
@@ -185,7 +185,7 @@ Section stateH_adequacy.
   (** A technical version of adequacy, amenable to induction. See corollary below for a
   more meaningful statement. *)
   Theorem wpi_state' s t t' M Φ :
-    eval s t t' →
+    state_irel s t t' →
     state_interp s -∗
     WPi t @ stateH S ⊕ H; ∅ {{ v, |={∅, M}=> Φ v }} -∗
     WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Φ v }}.
@@ -193,7 +193,7 @@ Section stateH_adequacy.
     iIntros "%Heval Hstate Hwp".
     pose (G := (λ (t : itree (stateE S +' E) R) (Φ : R -d> iPropO Σ),
       ∀ t' s Ψ,
-        ⌜eval s t t'⌝ →
+        ⌜state_irel s t t'⌝ →
         state_interp s -∗
         (∀ v, Φ v -∗ |={∅, M}=> Ψ v) -∗
         WPi t' @ H; ∅ {{ x, |={∅, M}=> let (s, v) := x in state_interp s ∗ Ψ v }}
@@ -228,7 +228,7 @@ Section stateH_adequacy.
   weakest precondition an [itree (stateE S +' E) R] then you get the weakest
   precondition its evaluated [itree E (S * R)]. *)
   Theorem wpi_state s t t' M Φ :
-    eval s t t' →
+    state_irel s t t' →
     state_interp s -∗
     WPi t @ stateH S ⊕ H; M {{ v, Φ v }} -∗
     WPi t' @ H; M {{ x, let (s, v) := x in state_interp s ∗ Φ v }}.
@@ -238,52 +238,52 @@ Section stateH_adequacy.
   Qed.
 End stateH_adequacy.
 
-Section eval_function.
+Section state_ifn.
   Context {S R : Type} {E : Type → Type}.
 
-  Definition eval_fn : S → itree (stateE S +' E) R → itree E (S * R) :=
-    cofix _eval_fn s t :=
+  Definition state_ifn : S → itree (stateE S +' E) R → itree E (S * R) :=
+    cofix _state_ifn s t :=
         match observe t with
         | RetF r  => Ret (s, r)
-        | TauF t' => Tau (_eval_fn s t')
+        | TauF t' => Tau (_state_ifn s t')
         | @VisF _ _ _ A (inl1 e) k =>
           (match e with
-          | EGetState => λ k, Tau (_eval_fn s (k s))
-          | ESetState s' => λ k, Tau (_eval_fn s' (k ()))
+          | EGetState => λ k, Tau (_state_ifn s (k s))
+          | ESetState s' => λ k, Tau (_state_ifn s' (k ()))
           end : (A → _) → _) k
-        | VisF (inr1 e) k => Vis e (λ a, _eval_fn s (k a))
+        | VisF (inr1 e) k => Vis e (λ a, _state_ifn s (k a))
         end.
-  Notation eval_fn_ s t :=
+  Notation state_ifn_ s t :=
       match observe t with
       | RetF r  => Ret (s, r)
-      | TauF t' => Tau (eval_fn s t')
+      | TauF t' => Tau (state_ifn s t')
       | @VisF _ _ _ A (inl1 e) k =>
         (match e with
-        | EGetState => λ k, Tau (eval_fn s (k s))
-        | ESetState s' => λ k, Tau (eval_fn s' (k ()))
+        | EGetState => λ k, Tau (state_ifn s (k s))
+        | ESetState s' => λ k, Tau (state_ifn s' (k ()))
         end : (A → _) → _) k
-      | VisF (inr1 e) k => Vis e (λ a, eval_fn s (k a))
+      | VisF (inr1 e) k => Vis e (λ a, state_ifn s (k a))
       end.
 
-  Lemma unfold_eval_fn s t :
-    eval_fn s t = eval_fn_ s t.
+  Lemma unfold_state_ifn s t :
+    state_ifn s t = state_ifn_ s t.
   Proof.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
-  Lemma eval_fn_rel s t :
-    eval s t (eval_fn s t).
+  Lemma state_ifn_rel s t :
+    state_irel s t (state_ifn s t).
   Proof.
-    remember (eval_fn s t) as t'.
+    remember (state_ifn s t) as t'.
     revert s t t' Heqt'. pcofix CIH. pfold. intros s t t' ->.
-    rewrite unfold_eval_fn /eval_.
+    rewrite unfold_state_ifn /state_irel_.
     destruct (observe t) as [r'|t'|A e k].
     - constructor.
     - constructor. right. by apply (CIH s t').
     - destruct e as [e|e]; first destruct e as [|s'];
       constructor; right; by apply CIH.
   Qed.
-End eval_function.
+End state_ifn.
 
 Section state_trace.
   Context {S R : Type} `{EqDecision S} {E : Type → Type}.
@@ -302,14 +302,14 @@ Section state_trace.
     | TCut => Some TCut
     end.
 
-  Lemma eval_trace' (tr : trace (stateE S +' E) R) tr' t s :
+  Lemma state_trace' (tr : trace (stateE S +' E) R) tr' t s :
     is_trace tr t →
     interp_tr_state s tr = Some tr' →
-    is_trace tr' (eval_fn s t).
+    is_trace tr' (state_ifn s t).
   Proof.
-    intros Htr. revert s tr'. setoid_rewrite unfold_eval_fn. induction Htr.
+    intros Htr. revert s tr'. setoid_rewrite unfold_state_ifn. induction Htr.
     - intros s tr' [=<-]. constructor.
-    - intros s tr'' Hst. setoid_rewrite <- unfold_eval_fn in IHHtr.
+    - intros s tr'' Hst. setoid_rewrite <- unfold_state_ifn in IHHtr.
       destruct e as [e|e]; first destruct e as [|s'].
       * simpl in Hst.
         destruct (decide (a = s)) as [->|]; last discriminate.
@@ -326,16 +326,16 @@ Section state_trace.
       * injection Hst as <-. by constructor.
     - intros s tr' Hst. injection Hst as <-. constructor.
     - intros s tr' Hst. constructor.
-      setoid_rewrite <- unfold_eval_fn in IHHtr. by apply IHHtr.
+      setoid_rewrite <- unfold_state_ifn in IHHtr. by apply IHHtr.
   Qed.
 
-  Theorem eval_trace (tr : trace (stateE S +' E) R) tr' t s :
+  Theorem state_trace (tr : trace (stateE S +' E) R) tr' t s :
     is_trace tr t →
     interp_tr_state s tr = Some tr' →
-    ∃ t', eval s t t' ∧ is_trace tr' t'.
+    ∃ t', state_irel s t t' ∧ is_trace tr' t'.
   Proof.
-    intros Htr Hst. exists (eval_fn s t).
-    split; first apply eval_fn_rel.
-    by eapply eval_trace'.
+    intros Htr Hst. exists (state_ifn s t).
+    split; first apply state_ifn_rel.
+    by eapply state_trace'.
   Qed.
 End state_trace.

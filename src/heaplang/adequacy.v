@@ -8,10 +8,10 @@ From iris.itree.heaplang Require Import lang.
 Definition heaplang_irel {R} (t : itree heaplangE R) (σ : state) (n : option nat)
   (te : itree voidE (option ((state * (R + last_thread_killed)) + later_exhausted))) : Prop :=
   ∃ t1 t2 t3,
-    interleaves 0 [t] t1 ∧
-    demonic_instantiates t1 t2 ∧
-    eval σ t2 t3 ∧
-    te ≈ sandbox (insert_voidE (later_ifn n t3)).
+    threadpool_irel t t1 ∧
+    demonic_irel t1 t2 ∧
+    state_irel σ t2 t3 ∧
+    te ≈ ub_ifn (insert_voidE (later_ifn n t3)).
 
 Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
   (exec: itree voidE (option ((state * (val + last_thread_killed)) + later_exhausted))) : Prop :=

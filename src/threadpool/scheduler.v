@@ -81,7 +81,7 @@ Section scheduler.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
-  Lemma schedule_exists tid tp :
+  Lemma scheduler_interleaves tid tp :
     is_Some (tp !! tid) →
     interleaves tid tp (scheduler tid tp).
   Proof.
@@ -127,4 +127,11 @@ Section scheduler.
         + rewrite list_lookup_insert //. by apply lookup_lt_is_Some.
         + done.
   Qed.
+
+  Definition threadpool_ifn (t : itree (threadpoolE +' E) R) : itree E (R + last_thread_killed) :=
+    scheduler 0 [t].
+
+  Lemma threadpool_ifn_irel t :
+    threadpool_irel t (threadpool_ifn t).
+  Proof. by apply scheduler_interleaves. Qed.
 End scheduler.

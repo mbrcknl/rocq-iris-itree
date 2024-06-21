@@ -26,7 +26,7 @@ Section interleaving.
   [itree E R] to refine an itree [itree (threadpoolE +' E) R] that can emit
   events [threadpoolE] regarding concurrency. *)
 
-  (** The recuirsion template for the interleaving relation, without enforcing
+  (** The recursion template for the interleaving relation, without enforcing
   [tp !! tid = Some t]. *)
   Variant interleavesF
     (** The recursive instance of the interleaving relation (doing bound
@@ -186,6 +186,10 @@ Section interleaving.
     rewrite Hidx' in Hidx. injection Hidx as Hidx. rewrite Hidx in Hinter.
     inversion Hinter. subst. pclearbot. simplify_K. exists k'. by simplify_obs.
   Qed.
+
+  (* The interpretation relation for threadpools. *)
+  Definition threadpool_irel (t : itree (threadpoolE +' E) R) (t' : itree E (R + last_thread_killed)) : Prop :=
+    interleaves 0 [t] t'.
 End interleaving.
 
 (* Our objective is to prove the threadpool adequacy theorem [threadpool_adequacy].
@@ -1551,7 +1555,7 @@ Section threadpool_adequacy.
     (concurrent : itree (threadpoolE +' E) R)
     (interleaving : itree E (R + last_thread_killed))
     (Φ : R → iProp Σ) :
-    interleaves 0 [concurrent] interleaving →
+    threadpool_irel concurrent interleaving →
     WPi concurrent @ threadpoolH ⊕ H; ⊤ {{ Φ }} -∗
     WPi interleaving @ H; ⊤
       {{ r, match r with

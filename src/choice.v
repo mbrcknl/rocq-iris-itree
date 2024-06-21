@@ -69,60 +69,60 @@ End wp_demonic.
 Section demonic_adequacy.
   Context {E : Type → Type} `{H : iHandler Σ E} {R : Type} `{!invGS_gen hlc Σ}.
 
-  Variant demonic_instantiatesF
-    (demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop)
+  Variant demonic_irelF
+    (demonic_irel : itree (demonicE +' E) R → itree E R → Prop)
     : itree' (demonicE +' E) R → itree' E R → Prop :=
   | DInstantiate A `{EqDecision A} `{Inhabited A} (a : A) k t :
-    demonic_instantiates (k a) t →
-    demonic_instantiatesF demonic_instantiates (VisF (inl1 (EDemonic A)) k) (TauF t)
+    demonic_irel (k a) t →
+    demonic_irelF demonic_irel (VisF (inl1 (EDemonic A)) k) (TauF t)
   | DReturns r :
-    demonic_instantiatesF demonic_instantiates (RetF r) (RetF r)
+    demonic_irelF demonic_irel (RetF r) (RetF r)
   | DSteps t_next t_next' :
-    demonic_instantiates t_next t_next' →
-    demonic_instantiatesF demonic_instantiates (TauF t_next) (TauF t_next')
+    demonic_irel t_next t_next' →
+    demonic_irelF demonic_irel (TauF t_next) (TauF t_next')
   | DEmits A (e : E A) k k' :
-    (∀ a, demonic_instantiates (k a) (k' a)) →
-    demonic_instantiatesF demonic_instantiates (VisF (inr1 e) k) (VisF e k').
-  Hint Constructors demonic_instantiatesF : iris_itree.
-  Definition demonic_instantiates_
-    (demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop)
+    (∀ a, demonic_irel (k a) (k' a)) →
+    demonic_irelF demonic_irel (VisF (inr1 e) k) (VisF e k').
+  Hint Constructors demonic_irelF : iris_itree.
+  Definition demonic_irel_
+    (demonic_irel : itree (demonicE +' E) R → itree E R → Prop)
     : itree (demonicE +' E) R → itree E R → Prop :=
-    λ t t', demonic_instantiatesF demonic_instantiates (observe t) (observe t').
+    λ t t', demonic_irelF demonic_irel (observe t) (observe t').
 
-  Lemma demonic_instantiatesF_mono demonic_instantiates demonic_instantiates' t t' :
-    demonic_instantiates <2= demonic_instantiates' →
-    demonic_instantiatesF demonic_instantiates t t' →
-    demonic_instantiatesF demonic_instantiates' t t'.
+  Lemma demonic_irelF_mono demonic_irel demonic_irel' t t' :
+    demonic_irel <2= demonic_irel' →
+    demonic_irelF demonic_irel t t' →
+    demonic_irelF demonic_irel' t t'.
   Proof.
     intros Hleq HinterleavesF. destruct HinterleavesF; eauto with iris_itree.
   Qed.
-  Lemma demonic_instantiates__mono :
-    monotone2 demonic_instantiates_.
+  Lemma demonic_irel__mono :
+    monotone2 demonic_irel_.
   Proof.
-    rewrite /monotone3 /demonic_instantiates_. intros ??????. by eapply demonic_instantiatesF_mono.
+    rewrite /monotone3 /demonic_irel_. intros ??????. by eapply demonic_irelF_mono.
   Qed.
-  Hint Resolve demonic_instantiates__mono : paco.
+  Hint Resolve demonic_irel__mono : paco.
 
-  Definition demonic_instantiates : itree (demonicE +' E) R → itree E R → Prop :=
-    paco2 demonic_instantiates_ bot2.
+  Definition demonic_irel : itree (demonicE +' E) R → itree E R → Prop :=
+    paco2 demonic_irel_ bot2.
 
-  Lemma demonic_instantiates_unfold (t : itree (demonicE +' E) R) t' :
-    demonic_instantiates t t' ↔
-    demonic_instantiatesF
-      (upaco2 (λ demonic_instantiates t t', demonic_instantiatesF demonic_instantiates (observe t) (observe t')) bot2) (observe t) (observe t').
+  Lemma demonic_irel_unfold (t : itree (demonicE +' E) R) t' :
+    demonic_irel t t' ↔
+    demonic_irelF
+      (upaco2 (λ demonic_irel t t', demonic_irelF demonic_irel (observe t) (observe t')) bot2) (observe t) (observe t').
   Proof.
     split.
-    - intros Hinst. rewrite /demonic_instantiates in Hinst. punfold Hinst.
-    - intros Hinst. pfold. rewrite /demonic_instantiates_ //.
+    - intros Hinst. rewrite /demonic_irel in Hinst. punfold Hinst.
+    - intros Hinst. pfold. rewrite /demonic_irel_ //.
   Qed.
 
-  Global Instance instantiates_proper_unilateral :
-    Proper (eqit (=) false false ==> eqit (=) false false ==> impl) demonic_instantiates.
+  Global Instance demonic_irel_proper_unilateral :
+    Proper (eqit (=) false false ==> eqit (=) false false ==> impl) demonic_irel.
   Proof.
     pcofix CIH.
     intros t1 t2 Ht t1' t2' Ht' Hinst.
-    pfold. rewrite /demonic_instantiates_.
-    punfold Ht. punfold Ht'. punfold Hinst. rewrite /demonic_instantiates_ in Hinst.
+    pfold. rewrite /demonic_irel_.
+    punfold Ht. punfold Ht'. punfold Hinst. rewrite /demonic_irel_ in Hinst.
     destruct Ht, Ht'; try discriminate; try inversion Hinst.
     - simplify_eq. inversion Hinst. constructor.
     - constructor. pclearbot. simplify_eq. right. eapply CIH.
@@ -138,22 +138,22 @@ Section demonic_adequacy.
       * apply REL.
       * apply REL0.
   Qed.
-  Global Instance instantiates_proper :
-    Proper ((eqit (=) false false) ==> (eqit (=) false false) ==> (↔)) demonic_instantiates.
+  Global Instance demonic_irel_proper :
+    Proper ((eqit (=) false false) ==> (eqit (=) false false) ==> (↔)) demonic_irel.
   Proof.
     intros t1 t2 Ht t1' t2' Ht'.
     split; rewrite Ht Ht' //.
   Qed.
 
   Theorem demonicH_adequate' (t : itree (demonicE +' E) R) (t' : itree E R) Φ :
-    demonic_instantiates t t' →
+    demonic_irel t t' →
     WPi t @ demonicH ⊕ H; ∅ {{ Φ }} -∗
     WPi t' @ H; ∅ {{ Φ }}.
   Proof.
     iIntros (Hinstant) "Hwp".
     (* TODO: A lot of these explicitly spelled out [G]'s can be replaced by
     appropriate [iRevert]s. See [threadpool.v]. *)
-    pose (G := λ (t : leibnizO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_instantiates t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I).
+    pose (G := λ (t : leibnizO (itree (demonicE +' E) R)) (Φ : leibnizO R -d> iPropO Σ), (∀ t', ⌜demonic_irel t t'⌝ → WPi t' @ H; ∅ {{ Φ }})%I).
     iApply (wpi_iter' (H := demonicH ⊕ H) G with "[] [] [] Hwp [//]"); first solve_proper; clear.
     - iModIntro. iIntros (Φ r) "HΦ". iIntros (t Hinst). punfold Hinst. inversion Hinst.
       simplify_obs. rewrite -wpi_ret' //.
@@ -172,7 +172,7 @@ Section demonic_adequacy.
   Qed.
 
   Theorem demonicH_adequate (t : itree (demonicE +' E) R) (t' : itree E R) M Φ :
-    demonic_instantiates t t' →
+    demonic_irel t t' →
     WPi t @ demonicH ⊕ H; M {{ Φ }} -∗
     WPi t' @ H; M {{ Φ }}.
   Proof.
@@ -183,43 +183,43 @@ Section demonic_adequacy.
   Qed.
 End demonic_adequacy.
 
-Section demonic_instance.
+Section demonic_ifn.
   Context {E : Type → Type} {R : Type} `{AnswerEqDecision E}.
 
-  Definition demonic_instance : itree (demonicE +' E) R → itree E R :=
-    cofix _demonic_instance t :=
+  Definition demonic_ifn : itree (demonicE +' E) R → itree E R :=
+    cofix _demonic_ifn t :=
         match observe t with
         | RetF r  => Ret r
-        | TauF t' => Tau (_demonic_instance t')
+        | TauF t' => Tau (_demonic_ifn t')
         | @VisF _ _ _ A (inl1 e) k =>
           (match e with
-          | EDemonic _ => λ k, Tau (_demonic_instance (k inhabitant))
+          | EDemonic _ => λ k, Tau (_demonic_ifn (k inhabitant))
           end : (A → _) → _) k
-        | VisF (inr1 e) k => Vis e (λ a, _demonic_instance (k a))
+        | VisF (inr1 e) k => Vis e (λ a, _demonic_ifn (k a))
         end.
-  Notation demonic_instance_ t :=
+  Notation demonic_ifn_ t :=
       match observe t with
       | RetF r  => Ret r
-      | TauF t' => Tau (demonic_instance t')
+      | TauF t' => Tau (demonic_ifn t')
       | @VisF _ _ _ A (inl1 e) k =>
         (match e with
-        | EDemonic _ => λ k, Tau (demonic_instance (k inhabitant))
+        | EDemonic _ => λ k, Tau (demonic_ifn (k inhabitant))
         end : (A → _) → _) k
-      | VisF (inr1 e) k => Vis e (λ a, demonic_instance (k a))
+      | VisF (inr1 e) k => Vis e (λ a, demonic_ifn (k a))
       end.
 
-  Lemma unfold_demonic_instance t :
-    demonic_instance t = demonic_instance_ t.
+  Lemma unfold_demonic_ifn t :
+    demonic_ifn t = demonic_ifn_ t.
   Proof.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
-  Lemma instantiation_exists t :
-    demonic_instantiates t (demonic_instance t).
+  Lemma demonic_ifn_irel t :
+    demonic_irel t (demonic_ifn t).
   Proof.
-    remember (demonic_instance t) as t'.
+    remember (demonic_ifn t) as t'.
     revert t t' Heqt'. pcofix CIH. pfold. intros t t' ->.
-    rewrite unfold_demonic_instance /demonic_instantiates_.
+    rewrite unfold_demonic_ifn /demonic_irel_.
     destruct (observe t) as [r'|t'|A e k].
     - constructor.
     - constructor. right. by apply (CIH t').
@@ -227,11 +227,15 @@ Section demonic_instance.
       * econstructor. right. by apply (CIH (k inhabitant)).
       * constructor. right. by apply (CIH (k a)).
   Qed.
+End demonic_ifn.
 
-  Lemma unfold_demonic_instantiates_under tr (t : itree (demonicE +' E) R) :
-    (∃ t', demonic_instantiatesF
-      (upaco2 (λ demonic_instantiates t t', demonic_instantiatesF demonic_instantiates (observe t) (observe t')) bot2) (observe t) (observe t') ∧ is_trace (interp_tr tr) t') →
-    ∃ t' : itree E R, demonic_instantiates t t' ∧ is_trace (interp_tr (E := demonicE) tr) t'.
+Section demonic_state.
+  Context {E : Type → Type} {R : Type} `{AnswerEqDecision E}.
+
+  Lemma unfold_demonic_irel_under tr (t : itree (demonicE +' E) R) :
+    (∃ t', demonic_irelF
+      (upaco2 (λ demonic_irel t t', demonic_irelF demonic_irel (observe t) (observe t')) bot2) (observe t) (observe t') ∧ is_trace (interp_tr tr) t') →
+    ∃ t' : itree E R, demonic_irel t t' ∧ is_trace (interp_tr (E := demonicE) tr) t'.
   Proof.
     intros [t' [Hpaco Htr]].
     exists t'. split.
@@ -239,23 +243,23 @@ Section demonic_instance.
     - done.
   Qed.
 
-  Lemma instantiation_extending_trace `{AnswerEqDecision E} tr (t : itree (demonicE +' E) R) :
+  Lemma demonic_trace `{AnswerEqDecision E} tr (t : itree (demonicE +' E) R) :
     is_trace tr t →
-    ∃ t', demonic_instantiates t t' ∧ is_trace (interp_tr tr) t'.
+    ∃ t', demonic_irel t t' ∧ is_trace (interp_tr tr) t'.
   Proof.
-    intros Htr. apply unfold_demonic_instantiates_under. induction Htr as [r|tr' A e a k Htr [t' [Hinst Htr']]| |ot' | tr' t'' Htr [t' [Hinst Htr']]].
+    intros Htr. apply unfold_demonic_irel_under. induction Htr as [r|tr' A e a k Htr [t' [Hinst Htr']]| |ot' | tr' t'' Htr [t' [Hinst Htr']]].
     - exists (Ret r). split; constructor.
     - destruct e as [e|e]; first destruct e.
       * exists (Tau t'). split.
         + apply DInstantiate with (a := a). left. by pfold.
         + simpl. constructor. done.
       * specialize (H A e).
-        exists (Vis e (λ a', if decide (a = a') then t' else demonic_instance (k a'))).
+        exists (Vis e (λ a', if decide (a = a') then t' else demonic_ifn (k a'))).
         split.
         + constructor. intros a'. left.
           destruct (decide _).
           ++ subst. by pfold.
-          ++ apply instantiation_exists.
+          ++ apply demonic_ifn_irel.
         + apply is_trace_Vis. destruct (decide _); first done. contradiction.
     - destruct e as [e|e]. { destruct e as [A Heq Hinh]. destruct Hinh. contradiction. }
       exists (Vis e (λ a, match f a with end)).
@@ -263,14 +267,14 @@ Section demonic_instance.
       * constructor. intros a. destruct (f a) as [].
       * by constructor.
     - destruct (unobserve ot') as [t' ->].
-      exists (demonic_instance t').
+      exists (demonic_ifn t').
       * split.
-        + rewrite -demonic_instantiates_unfold.
-          apply instantiation_exists.
+        + rewrite -demonic_irel_unfold.
+          apply demonic_ifn_irel.
         + constructor.
     - exists (Tau t').
       * split.
         + constructor. left. by pfold.
         + by constructor.
   Qed.
-End demonic_instance.
+End demonic_state.

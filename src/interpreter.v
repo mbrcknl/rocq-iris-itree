@@ -46,6 +46,6 @@ Proof.
   apply: uPred.pure_soundness.
   eapply fupd_soundness_gen with (n := 0); first apply _.
   intros Hinv. iIntros "_". iDestruct Hwp as "Hwp".
-  iDestruct (wpi_soundness' with "Hwp") as "HΦ".
+  iDestruct (exec_soundness' with "Hwp") as "HΦ".
   iMod "HΦ". iMod "HΦ". by iModIntro.
 Qed.

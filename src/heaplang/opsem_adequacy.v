@@ -1700,9 +1700,9 @@ Lemma execution n e σ tp' σ' κ tx :
   ∃ t1 t2 t3,
     (* TODO: consisting naming for interpretion relations *)
     (* TODO: abstraction for this composite relation *)
-    interleaves (R := val) 0 [v ← compile_expr e ; yield_if_not_val e ;; Ret v]%itree t1 ∧
-    demonic_instantiates t1 t2 ∧
-    eval σ t2 t3 ∧
+    threadpool_irel (R := val) (v ← compile_expr e ; yield_if_not_val e ;; Ret v)%itree t1 ∧
+    demonic_irel t1 t2 ∧
+    state_irel σ t2 t3 ∧
     (* TODO: use UB adequacy *)
     match tx with
     | TermUb => terminates_in t3 TermUb
@@ -1715,11 +1715,11 @@ Proof.
   destruct (interp_tr_state σ (interp_tr (sequencify tr))) as [tr'|] eqn:Heq;
     rewrite Heq // in Hstinv.
   rewrite /trace_invariant_postfix in Htinv.
-  apply interleaving_extending_trace in Htr as (t1&Hint&Htr).
+  apply threadpool_trace in Htr as (t1&Hint&Htr).
   exists t1.
-  eapply instantiation_extending_trace in Htr as (t2&Hinst&Htr).
+  eapply demonic_trace in Htr as (t2&Hinst&Htr).
   exists t2.
-  eapply eval_trace with (s := σ) in Htr as (t3&Heval&Htr); last done.
+  eapply state_trace with (s := σ) in Htr as (t3&Heval&Htr); last done.
   exists t3.
   split.
   { destruct (interleaves_lookup _ _ _ Hint) as [t Hidx].

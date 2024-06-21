@@ -463,7 +463,7 @@ Section extend_ctrace.
         rewrite list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
         by injection Hidx' as <-.
       * exists (scheduler tid ((<[tid:=k a']> tp))). split; last done.
-        apply schedule_exists. rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1.
+        apply scheduler_interleaves. rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1.
     - exists (Vis e (λ a, match f a with end)). eexists. split; first done. destruct Heqot.
       by constructor.
     - destruct (IH t' Hidx' eq_refl) as [t_int [t'' [Hidx'' Hext]]]. exists (Tau t_int).
@@ -481,7 +481,7 @@ Section extend_ctrace.
       by injection Hidx' as <-.
     - exists (scheduler tid tp).
       eexists. split; first done. destruct Heqot. constructor.
-      rewrite -itree_eta_. by apply schedule_exists.
+      rewrite -itree_eta_. by apply scheduler_interleaves.
     - unshelve epose (IH t' _ _) as Hext; eauto.
       { apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
       destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
@@ -515,7 +515,7 @@ Section extend_ctrace.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
   Qed.
 
-  Theorem interleaving_extending_trace `{AnswerEqDecision E} (tr : ctrace E R) tid tp :
+  Theorem threadpool_trace `{AnswerEqDecision E} (tr : ctrace E R) tid tp :
     is_ctrace tr tid tp →
     ∃ t_int, interleaves tid tp t_int ∧ is_trace (sequencify tr) t_int.
   Proof.
@@ -525,7 +525,6 @@ Section extend_ctrace.
     - by apply extends_ctrace_is_trace with (tid := tid) (tp := tp).
   Qed.
 End extend_ctrace.
-
 
 Lemma tac_normalize_ctrace_insert {E R} p (t t' : itree (threadpoolE +' E) R) tid tr tid' ts :
   NormalizeITree p t t' →

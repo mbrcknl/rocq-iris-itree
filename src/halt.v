@@ -93,7 +93,7 @@ Section wp_halt.
 End wp_halt.
 
 (** "Sandbox" an [itree] with halt events by replacing halt with returning [None]. *)
-Definition sandbox_halt {R E} (t : itree (haltE +' E) R) : itree E (option R) :=
+Definition halt_ifn {R E} (t : itree (haltE +' E) R) : itree E (option R) :=
   ITree.iter (λ (t : itree (haltE +' E) (option R)),
     match observe t with
     | RetF r => Ret (inr r)
@@ -102,37 +102,37 @@ Definition sandbox_halt {R E} (t : itree (haltE +' E) R) : itree E (option R) :=
     | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
     end) (ITree.map Some t).
 
-Lemma sandbox_halt_ret {E R} (r : R) :
-  sandbox_halt (Ret r) ≅ (Ret (Some r) : itree E (option R)).
+Lemma halt_ifn_ret {E R} (r : R) :
+  halt_ifn (Ret r) ≅ (Ret (Some r) : itree E (option R)).
 Proof.
-  rewrite /sandbox_halt.
+  rewrite /halt_ifn.
   pose (Heq := map_ret (E:=haltE +' E) Some r).
   apply bisimulation_is_eq in Heq as ->.
   rewrite unfold_iter bind_ret_l //.
 Qed.
 
-Lemma sandbox_halt_tau {E R} (t : itree (haltE +' E) R) :
-  sandbox_halt (Tau t) ≅ Tau (sandbox_halt t).
+Lemma halt_ifn_tau {E R} (t : itree (haltE +' E) R) :
+  halt_ifn (Tau t) ≅ Tau (halt_ifn t).
 Proof.
-  rewrite /sandbox_halt.
+  rewrite /halt_ifn.
   pose (Heq := map_tau (E:=haltE +' E) (Some : R -> option R) t).
   apply bisimulation_is_eq in Heq as ->.
   rewrite unfold_iter bind_ret_l //.
 Qed.
 
-Lemma sandbox_halt_halt {E R} (k : ∅ → itree (haltE +' E) R) :
-  sandbox_halt (Vis (inl1 EHalt) k) ≅ Ret None.
+Lemma halt_ifn_halt {E R} (k : ∅ → itree (haltE +' E) R) :
+  halt_ifn (Vis (inl1 EHalt) k) ≅ Ret None.
 Proof.
-  rewrite /sandbox_halt.
+  rewrite /halt_ifn.
   pose (Heq := map_vis (E:=haltE +' E) (Some : R -> option R) (inl1 EHalt) k).
   apply bisimulation_is_eq in Heq.
   rewrite Heq unfold_iter bind_ret_l //.
 Qed.
 
-Lemma sandbox_halt_vis {E R A} (e : E A) (k : A → itree (haltE +' E) R) :
-  sandbox_halt (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (sandbox_halt (k a))).
+Lemma halt_ifn_vis {E R A} (e : E A) (k : A → itree (haltE +' E) R) :
+  halt_ifn (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (halt_ifn (k a))).
 Proof.
-  rewrite /sandbox_halt.
+  rewrite /halt_ifn.
   pose (Heq := map_vis (E:=haltE +' E) (Some : R -> option R) (inr1 e) k).
   apply bisimulation_is_eq in Heq as ->.
   rewrite unfold_iter /= bind_bind bind_vis. f_equiv. f_equiv. intros a.
@@ -142,14 +142,14 @@ Qed.
 Section halt_adequacy.
   Context {R : Type} {E : Type → Type}.
   Context `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
-  (** This sequentiality assumption is necessary because [sandbox_halt]
+  (** This sequentiality assumption is necessary because [halt_ifn]
   introduces [Ret] (with non [False] post-conditions) even in branches not
   corresponding to the main thread. *)
   Context `{!Sequential H}.
 
   Theorem halt_adequacy' (t : itree (haltE +' E) R) Φ :
     WPi t @ haltH ⊕ H; ∅ {{ Φ }} -∗
-    WPi sandbox_halt t @ H; ∅ {{ r,
+    WPi halt_ifn t @ H; ∅ {{ r,
       match r with
       | Some r => Φ r
       | None => |={∅, ⊤}=> True
@@ -157,11 +157,11 @@ Section halt_adequacy.
     }}.
   Proof.
     iRevert (t Φ). iApply wpi_iter'; first solve_proper.
-    - iIntros "!>" (Φ t) "Hwp". by iEval (rewrite sandbox_halt_ret -wpi_ret').
-    - iIntros "!>" (Φ t) "Hwp". rewrite sandbox_halt_tau -wpi_tau. by iApply wpi_update.
+    - iIntros "!>" (Φ t) "Hwp". by iEval (rewrite halt_ifn_ret -wpi_ret').
+    - iIntros "!>" (Φ t) "Hwp". rewrite halt_ifn_tau -wpi_tau. by iApply wpi_update.
     - iIntros "!>" (Φ A [[]|e] k) "HH".
-      * simpl. rewrite sandbox_halt_halt. by iApply wpi_ret'.
-      * simpl. rewrite sandbox_halt_vis. iApply wpi_vis.
+      * simpl. rewrite halt_ifn_halt. by iApply wpi_ret'.
+      * simpl. rewrite halt_ifn_vis. iApply wpi_vis.
         iDestruct (is_seq with "HH") as "HH".
         iApply ihandler_mono; last done.
         + iIntros (a) "Hwp". rewrite wpi_tau. by iApply wpi_update_post.
@@ -170,7 +170,7 @@ Section halt_adequacy.
 
   Corollary halt_adequacy (t : itree (haltE +' E) R) Φ :
     WPi t @ haltH ⊕ H; ⊤ {{ Φ }} -∗
-    WPi sandbox_halt t @ H; ⊤ {{ r,
+    WPi halt_ifn t @ H; ⊤ {{ r,
       match r with
       | Some r => Φ r
       | None => True
@@ -182,5 +182,4 @@ Section halt_adequacy.
     iApply (wpi_wand with "[] [Hwp]"). 2: by iApply halt_adequacy'.
     iIntros (?) "Hp". by case_match.
   Qed.
-
 End halt_adequacy.
