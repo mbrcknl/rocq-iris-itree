@@ -94,13 +94,13 @@ Section spec_ctx.
   Qed.
 End spec_ctx.
 
-Program Definition specEH (Pκs : list seq_label → Prop) : eHandler specE :=
-  EHandler (list seq_label) (λ A e s,
+Program Definition specEH (Pκs : list seq_label → Prop) : seHandler specE :=
+  SEHandler (list seq_label) (λ A e s,
       match e with | EEmitLabel κ => λ C, Pκs (s ++ [κ]) → C tt (s ++ [κ]) end) _.
 Next Obligation. move => /= *. case_match; naive_solver. Qed.
 
 Global Program Instance specEH_adequate {Σ} `{!islaG Σ} Pκs :
-  HandlerAdequate (specH) (specEH Pκs) := {| handler_inv s := spec_ctx Pκs s |}.
+  seHandlerAdequate (specH) (specEH Pκs) := {| sehandler_inv s := spec_ctx Pκs s |}.
 Next Obligation.
   move => ????????? HP.
   iIntros "Hp Hs". rewrite /specH/=. case_match => /=. simplify_eq/=.
