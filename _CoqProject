@@ -28,6 +28,7 @@ src/heaplang/lang.v
 src/heaplang/decide.v
 src/heaplang/adequacy.v
 src/heaplang/opsem_adequacy.v
+src/heaplang/interpreter.v
 
 islaris/base.v
 islaris/adequacy.v
