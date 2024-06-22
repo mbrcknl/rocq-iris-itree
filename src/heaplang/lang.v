@@ -113,7 +113,7 @@ Proof.
   apply bool_decide_pack.
   intros i Hlower Hupper.
   apply not_elem_of_dom. by apply Loc.fresh_fresh.
-Qed.
+Defined.
 Instance free_locations_EqDecision n σ :
   EqDecision (free_locations n σ).
 Proof.
@@ -123,14 +123,14 @@ Proof.
   - right. intros Heq. apply Hneq. by apply dsig_eq.
 Qed.
 
-lock Definition store' `{!stateE state -< E} `{ubE -< E} (l : loc) (x : option val) : itree E val :=
+Definition store' `{!stateE state -< E} `{ubE -< E} (l : loc) (x : option val) : itree E val :=
   σ ← trigger EGetState;
   v ← some_some_or_ub (σ.(heap) !! l);
   trigger (ESetState (state_upd_heap (<[l:=x]>) σ));;
   Ret v.
-lock Definition store `{!stateE state -< E} `{ubE -< E} (l : loc) (x : val) : itree E val :=
+Definition store `{!stateE state -< E} `{ubE -< E} (l : loc) (x : val) : itree E val :=
   store' l (Some x).
-lock Definition load `{!stateE state -< E} `{ubE -< E} (l : loc) : itree E val :=
+Definition load `{!stateE state -< E} `{ubE -< E} (l : loc) : itree E val :=
   σ ← trigger EGetState;
   some_some_or_ub (σ.(heap) !! l).
 
@@ -462,7 +462,6 @@ Section heaplangH.
     WPi load l @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    unshelve erewrite (_ : load l = _). 2:rewrite unlock //.
     iApply wpi_bind. iApply @wpi_get.
     iIntros (s) "Hauth".
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %Hlu.
@@ -478,7 +477,6 @@ Section heaplangH.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto Hwand".
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
-    unshelve erewrite (_ : store' l v' = _). 2:rewrite unlock //.
     iApply @wpi_bind. iApply @wpi_get.
     iIntros (σ) "Hauth' !>".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
@@ -502,7 +500,6 @@ Section heaplangH.
     WPi store l v' @ heaplangH m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "#Hinv Hpointsto Hwand".
-    unshelve erewrite (_ : store l v' = _). 2:rewrite unlock //.
     iApply (wpi_store' with "Hinv Hpointsto"); first done.
     iIntros (r ->) "Hpointsto". by iApply "Hwand".
   Qed.

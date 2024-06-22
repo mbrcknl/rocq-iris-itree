@@ -4,6 +4,7 @@ From iris.proofmode Require Import proofmode.
 From iris.itree Require Import wpi ub itree choice state later handler void interpreter.
 From iris.itree.threadpool Require Import handler interleaving scheduler.
 From iris.itree.heaplang Require Import lang adequacy.
+From iris.heap_lang Require Import proofmode notation.
 
 Definition heaplang_ifn {R} (σ : state) (n : option nat) (t : itree heaplangE R) :
   itree voidE ((state * (R + last_thread_killed)) + later_exhausted + ub_crash) :=
@@ -31,6 +32,11 @@ Definition heaplang_interpreter σ (n : nat) (e : expr) : (state * (val + last_t
   | Some (inl (inl r)) => inl (inl r)
   | Some (inr UbCrash) => inl (inr UbCrash)
   end.
+
+Compute heaplang_interpreter inhabitant 99 (ref #1).
+Compute heaplang_interpreter inhabitant 99 (let: "x" := ref #1 in !"x").
+Compute heaplang_interpreter inhabitant 99 (let: "x" := ref #1 in "x" <- !"x";; !"x").
+Compute heaplang_interpreter inhabitant 99 (let: "x" := ref #1 in !"x").
 
 Lemma heaplang_interpreter_adequacy `{!invGS Σ} `{!heaplangHGS Σ} m e σ n Φ :
   state_interp σ -∗

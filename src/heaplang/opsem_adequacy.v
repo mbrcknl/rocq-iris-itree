@@ -605,8 +605,7 @@ Lemma is_ctrace_store' σ l x v tid tp tr k :
   is_ctrace (ctrace_store' l x σ tr) tid tp.
 Proof.
   intros Hl Htp Htr.
-  rewrite unlock in Htp.
-  eapply is_ctrace_insert; first done. { eutt_norm. reflexivity. }
+  eapply is_ctrace_insert; first done. { rewrite /store'. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
   { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
   rewrite list_insert_insert Hl /=. simpl_itree.
@@ -621,7 +620,6 @@ Lemma is_ctrace_store σ l x v tid tp tr k :
   is_ctrace (ctrace_store l x σ tr) tid tp.
 Proof.
   intros Hl Htp Htr.
-  rewrite unlock in Htp.
   by eapply is_ctrace_store'.
 Qed.
 Lemma is_ctrace_load σ l v tid tp tr k :
@@ -631,8 +629,7 @@ Lemma is_ctrace_load σ l v tid tp tr k :
   is_ctrace (ctrace_load σ tr) tid tp.
 Proof.
   intros Hl Htp Htr.
-  rewrite unlock in Htp.
-  eapply is_ctrace_insert; first done. { eutt_norm. reflexivity. }
+  eapply is_ctrace_insert; first done. { rewrite /load. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
   { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
   rewrite list_insert_insert Hl /=. by simpl_itree.
@@ -644,8 +641,7 @@ Lemma is_ctrace_store'_ub σ l x tid tp k :
   is_ctrace (ctrace_store'_ub σ) tid tp.
 Proof.
   intros Hl Htp.
-  rewrite unlock in Htp.
-  eapply is_ctrace_insert; first done. { eutt_norm. reflexivity. }
+  eapply is_ctrace_insert; first done. { rewrite /store'. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
   { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
   destruct Hl as [Hl|Hl].
@@ -662,8 +658,7 @@ Lemma is_ctrace_store_ub σ l x tid tp k :
   is_ctrace (ctrace_store_ub σ) tid tp.
 Proof.
   intros Hl Htp.
-  rewrite unlock in Htp.
-  eapply is_ctrace_insert; first done. { eutt_norm. reflexivity. }
+  eapply is_ctrace_insert; first done. { rewrite /store. eutt_norm. reflexivity. }
   eapply is_ctrace_store'_ub; first done.
   { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
 Qed.
@@ -673,8 +668,7 @@ Lemma is_ctrace_load_ub σ l tid tp k :
   is_ctrace (ctrace_store_ub σ) tid tp.
 Proof.
   intros Hl Htp.
-  rewrite unlock in Htp.
-  eapply is_ctrace_insert; first done. { eutt_norm. reflexivity. }
+  eapply is_ctrace_insert; first done. { rewrite /load. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
   { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
   destruct Hl as [Hl|Hl].
