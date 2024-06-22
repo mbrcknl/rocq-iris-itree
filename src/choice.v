@@ -145,7 +145,7 @@ Section demonic_adequacy.
     split; rewrite Ht Ht' //.
   Qed.
 
-  Theorem demonicH_adequate' (t : itree (demonicE +' E) R) (t' : itree E R) Φ :
+  Theorem demonic_adequacy_empty (t : itree (demonicE +' E) R) (t' : itree E R) Φ :
     demonic_irel t t' →
     WPi t @ demonicH ⊕ H; ∅ {{ Φ }} -∗
     WPi t' @ H; ∅ {{ Φ }}.
@@ -171,13 +171,13 @@ Section demonic_adequacy.
           pclearbot. iApply "Hwp". iPureIntro. apply H1.
   Qed.
 
-  Theorem demonicH_adequate (t : itree (demonicE +' E) R) (t' : itree E R) M Φ :
+  Theorem demonic_adequacy (t : itree (demonicE +' E) R) (t' : itree E R) M Φ :
     demonic_irel t t' →
     WPi t @ demonicH ⊕ H; M {{ Φ }} -∗
     WPi t' @ H; M {{ Φ }}.
   Proof.
     iIntros (Hinstant) "Hwp". rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
-    iApply demonicH_adequate'.
+    iApply demonic_adequacy_empty.
     - pclearbot. apply Hinstant.
     - done.
   Qed.

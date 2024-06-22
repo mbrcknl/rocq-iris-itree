@@ -1796,8 +1796,8 @@ Proof.
   iIntros "Hstate Hwp".
   (* TODO: Name these adequacy theorems consistently. *)
   iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
-  iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
-  iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
+  iDestruct (demonic_adequacy with "Hwp") as "Hwp"; first apply Hinst.
+  iDestruct (state_adequacy with "Hstate Hwp") as "Hwp"; first apply Heval.
   destruct tx.
   - destruct Hterm as [σ'' [n' ->]%terminates_in_model].
     iDestruct (model_wpi with "Hwp") as "Hwp".
@@ -1826,8 +1826,8 @@ Proof.
     iIntros (? ? ? ? ?) "Hstate Hwp".
     (* TODO: Name these adequacy theorems consistently. *)
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
-    iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
-    iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
+    iDestruct (demonic_adequacy with "Hwp") as "Hwp"; first apply Hinst.
+    iDestruct (state_adequacy with "Hstate Hwp") as "Hwp"; first apply Heval.
     rewrite Ht3.
     iDestruct (model_wpi_later with "Hwp") as "Hwp".
     iMod "Hwp". iModIntro.
@@ -1837,8 +1837,8 @@ Proof.
     iIntros (? ? ? ? ?) "Hstate Hwp".
     (* TODO: Name these adequacy theorems consistently. *)
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; first apply Hint.
-    iDestruct (demonicH_adequate with "Hwp") as "Hwp"; first apply Hinst.
-    iDestruct (wpi_state with "Hstate Hwp") as "Hwp"; first apply Heval.
+    iDestruct (demonic_adequacy with "Hwp") as "Hwp"; first apply Hinst.
+    iDestruct (state_adequacy with "Hstate Hwp") as "Hwp"; first apply Heval.
     rewrite Ht3.
     iDestruct (model_wpi_later with "Hwp") as "Hwp".
     iMod "Hwp". iModIntro.

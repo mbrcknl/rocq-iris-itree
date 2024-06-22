@@ -421,7 +421,6 @@ Section heaplangH.
   Definition heap_inv : iProp Σ :=
     inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)).
 
-
   Lemma big_sep_map_list_heap_array l n m v :
     ([∗ map] k↦v0 ∈ heap_array (l +ₗ Z.of_nat m) (replicate n v), k ↪[heaplangH_heap_name] v0) -∗
     [∗ list] i ∈ seq m n, (l +ₗ Z.of_nat i) ↦ v.

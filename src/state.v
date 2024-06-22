@@ -184,7 +184,7 @@ Section stateH_adequacy.
 
   (** A technical version of adequacy, amenable to induction. See corollary below for a
   more meaningful statement. *)
-  Theorem wpi_state' s t t' M Φ :
+  Theorem state_adequacy_empty s t t' M Φ :
     state_irel s t t' →
     state_interp s -∗
     WPi t @ stateH S ⊕ H; ∅ {{ v, |={∅, M}=> Φ v }} -∗
@@ -227,14 +227,14 @@ Section stateH_adequacy.
   (** Adequacy for [stateH S ⊕ H]. This says that if you can prove the
   weakest precondition an [itree (stateE S +' E) R] then you get the weakest
   precondition its evaluated [itree E (S * R)]. *)
-  Theorem wpi_state s t t' M Φ :
+  Theorem state_adequacy s t t' M Φ :
     state_irel s t t' →
     state_interp s -∗
     WPi t @ stateH S ⊕ H; M {{ v, Φ v }} -∗
     WPi t' @ H; M {{ x, let (s, v) := x in state_interp s ∗ Φ v }}.
   Proof.
     iIntros (Heval) "Hstate Hwp". rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
-    by iApply (wpi_state' with "Hstate").
+    by iApply (state_adequacy_empty with "Hstate").
   Qed.
 End stateH_adequacy.
 
@@ -271,7 +271,7 @@ Section state_ifn.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
-  Lemma state_ifn_rel s t :
+  Lemma state_ifn_irel s t :
     state_irel s t (state_ifn s t).
   Proof.
     remember (state_ifn s t) as t'.
@@ -335,7 +335,7 @@ Section state_trace.
     ∃ t', state_irel s t t' ∧ is_trace tr' t'.
   Proof.
     intros Htr Hst. exists (state_ifn s t).
-    split; first apply state_ifn_rel.
+    split; first apply state_ifn_irel.
     by eapply state_trace'.
   Qed.
 End state_trace.

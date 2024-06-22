@@ -72,22 +72,24 @@ Section handler.
   Qed.
 End handler.
 
+Variant ub_crash := UbCrash.
+
 (** "Sandbox" an [itree] with UB events by replacing UB with returning [None]
 ("crashing safely"). *)
-Definition ub_ifn {R E} (t : itree (ubE +' E) R) : itree E (option R) :=
-  ITree.iter (λ (t : itree (ubE +' E) (option R)),
+Definition ub_ifn {R E} (t : itree (ubE +' E) R) : itree E (R + ub_crash) :=
+  ITree.iter (λ (t : itree (ubE +' E) (R + ub_crash)),
     match observe t with
     | RetF r => Ret (inr r)
     | TauF t => Ret (inl t)
-    | VisF (inl1 EUb) k => Ret (inr None)
+    | VisF (inl1 EUb) k => Ret (inr (inr UbCrash))
     | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
-    end) (ITree.map Some t).
+    end) (ITree.map inl t).
 
 Lemma ub_ifn_ret {E R} (r : R) :
-  ub_ifn (Ret r) ≅ (Ret (Some r) : itree E (option R)).
+  ub_ifn (Ret r) ≅ (Ret (inl r) : itree E (R + ub_crash)).
 Proof.
   rewrite /ub_ifn.
-  pose (Heq := map_ret (E:=ubE +' E) Some r).
+  pose (Heq := map_ret (E:=ubE +' E) (inl (B := ub_crash)) r).
   apply bisimulation_is_eq in Heq as ->.
   rewrite unfold_iter bind_ret_l //.
 Qed.
@@ -96,16 +98,16 @@ Lemma ub_ifn_tau {E R} (t : itree (ubE +' E) R) :
   ub_ifn (Tau t) ≅ Tau (ub_ifn t).
 Proof.
   rewrite /ub_ifn.
-  pose (Heq := map_tau (E:=ubE +' E) (Some : R -> option R) t).
+  pose (Heq := map_tau (E:=ubE +' E) (inl (B := ub_crash)) t).
   apply bisimulation_is_eq in Heq as ->.
   rewrite unfold_iter bind_ret_l //.
 Qed.
 
 Lemma ub_ifn_ub {E R} (k : ∅ → itree (ubE +' E) R) :
-  ub_ifn (Vis (inl1 EUb) k) ≅ Ret None.
+  ub_ifn (Vis (inl1 EUb) k) ≅ Ret (inr UbCrash).
 Proof.
   rewrite /ub_ifn.
-  pose (Heq := map_vis (E:=ubE +' E) (Some : R -> option R) (inl1 EUb) k).
+  pose (Heq := map_vis (E:=ubE +' E) (inl (B := ub_crash)) (inl1 EUb) k).
   apply bisimulation_is_eq in Heq.
   rewrite Heq unfold_iter bind_ret_l //.
 Qed.
@@ -114,7 +116,7 @@ Lemma ub_ifn_vis {E R A} (e : E A) (k : A → itree (ubE +' E) R) :
   ub_ifn (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (ub_ifn (k a))).
 Proof.
   rewrite /ub_ifn.
-  pose (Heq := map_vis (E:=ubE +' E) (Some : R -> option R) (inr1 e) k).
+  pose (Heq := map_vis (E:=ubE +' E) (inl (B := ub_crash)) (inr1 e) k).
   apply bisimulation_is_eq in Heq as ->.
   rewrite unfold_iter /= bind_bind bind_vis. f_equiv. f_equiv. intros a.
   rewrite !bind_ret_l //.
@@ -130,8 +132,8 @@ Section ub_adequacy.
     WPi t @ ubH ⊕ H; ∅ {{ Φ }} -∗
     WPi ub_ifn t @ H; ∅ {{ r,
       match r with
-      | Some r => Φ r
-      | None => False
+      | inl r => Φ r
+      | inr UbCrash => False
       end
     }}.
   Proof.
@@ -145,7 +147,7 @@ Section ub_adequacy.
         + iIntros (a) "Hwp". rewrite wpi_tau. by iApply wpi_update_post.
         + iIntros "!>" (a) "Hwp". rewrite -wpi_tau. iApply wpi_clear_mask.
           iMod "Hwp". iModIntro. iApply wpi_wand; last done.
-          iIntros (r). destruct r; by iIntros "Hfalse".
+          iIntros (r). destruct r as [r|[]]; by iIntros "Hfalse".
   Qed.
 
   (** Adequacy theorem for UB. *)
@@ -153,8 +155,8 @@ Section ub_adequacy.
     WPi t @ ubH ⊕ H; M {{ Φ }} -∗
     WPi ub_ifn t @ H; M {{ r,
       match r with
-      | Some r => Φ r
-      | None => False
+      | inl r => Φ r
+      | inr UbCrash => False
       end
     }}.
   Proof.
@@ -162,7 +164,7 @@ Section ub_adequacy.
     rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
     iMod "Hwp". iModIntro.
     iPoseProof ub_adequacy' as "Had". iSpecialize ("Had" with "Hwp").
-    iApply wpi_wand; last done. iIntros (r). destruct r.
+    iApply wpi_wand; last done. iIntros (r). destruct r as [r|[]].
     - eauto.
     - by iIntros "Hfalse".
   Qed.

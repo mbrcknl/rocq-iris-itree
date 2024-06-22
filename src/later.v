@@ -131,13 +131,13 @@ Section adequacy.
   Context `{!invGS Σ} {H : iHandler Σ E}.
 
   Theorem later_adequacy_empty (t : itree (laterE +' E) R) lat Φ n `{!Sequential H}:
-    (lat = Later ↔ is_Some n) →
+    (lat = Later → is_Some n) →
     WPi t @ laterH lat ⊕ H; ∅ {{ Φ }} -∗
     £ (default 0 n) -∗
     WPi later_ifn n t @ H; ∅ {{ r,
       match r with
       | inl r => Φ r
-      | inr LaterExhausted => ⌜lat = Later⌝
+      | inr LaterExhausted => ⌜is_Some n⌝
       end
     }}.
   Proof.
@@ -153,11 +153,16 @@ Section adequacy.
         case_bool_decide; wpi_norm/=.
         * iApply wpi_ret'. iModIntro. iPureIntro. naive_solver.
         * iApply wpi_update. iMod "HH". destruct n; simplify_eq/=.
-          -- destruct lat; [naive_solver|] => /=. destruct n => //.
-             iDestruct "Hlc" as "[? ?]". iApply (lc_fupd_elim_later with "[$]").
-             iModIntro. iApply "HH".
-             { iPureIntro. rewrite /is_Some. naive_solver. }
-             have -> : (S n - 1) = n by lia. iFrame.
+          -- destruct lat.
+             ++ iApply wpi_wand; last iApply "HH".
+                ** iIntros (r) "H". destruct r; first done. by destruct l.
+                ** iIntros ([=]).
+                ** simpl. iModIntro. iApply lc_weaken; last done. lia.
+              ++ destruct n => //.
+                 iDestruct "Hlc" as "[? ?]". iApply (lc_fupd_elim_later with "[$]").
+                 iModIntro. simpl. replace (n - 0) with n by lia.
+                 iApply wpi_wand; last iApply "HH"; eauto.
+                 iIntros (r) "H". destruct r; first done. by destruct l.
           -- destruct lat; [|unfold is_Some in *; naive_solver] => /=.
              iModIntro. by iApply "HH".
       + iEval (rewrite later_ifn_unfold /later_ifn_loop/=).
@@ -171,13 +176,13 @@ Section adequacy.
 
   (* TODO: can we get this? *)
   Theorem later_adequacy (t : itree (laterE +' E) R) lat Φ n M `{!Sequential H} :
-    (lat = Later ↔ is_Some n) →
+    (lat = Later → is_Some n) →
     WPi t @ laterH lat ⊕ H; M {{ Φ }} -∗
     £ (default 0 n) -∗
     WPi later_ifn n t @ H; M {{ r,
       match r with
       | inl r => Φ r
-      | inr LaterExhausted => ⌜lat = Later⌝
+      | inr LaterExhausted => ⌜is_Some n⌝
       end
     }}.
   Proof.
