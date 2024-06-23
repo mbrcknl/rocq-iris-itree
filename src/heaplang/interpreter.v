@@ -51,14 +51,15 @@ Proof.
   { eauto. }
   { done. }
   iMod "Heval" as "[%v [%Heval HΦ]]".
-  rewrite /heaplang_interpreter. destruct (exec fuel (heaplang_eval_itree σ later_fuel e)) eqn:Heq.
-  * apply exec_eutt with (t' := (Ret v)) in Heq as [n' Heq]; last done.
-    destruct n'; first done. injection Heq as <-.
+  apply exec_ret in Heval as [n Heq].
+  rewrite /heaplang_interpreter. destruct (exec fuel (heaplang_eval_itree σ later_fuel e)) eqn:Heq'.
+  * apply exec_agree with (m := fuel) (r1 := s) in Heq as ->.
     destruct v.
     + destruct s.
       -- iMod "HΦ". destruct p as [σ0 [v|[]]]; iApply fupd_mask_intro; eauto.
       -- by destruct l.
     + by destruct u.
+    + done.
   * destruct v; eauto.
 Qed.
 
@@ -80,7 +81,7 @@ Proof.
   { intros. discriminate. }
   { done. }
   iMod "Heval" as "[%v [%Heval HΦ]]".
-  symmetry in Heval. apply exec_eutt with (r := v) (n := 1) in Heval as [fuel Heq]; last done.
+  apply exec_ret in Heval as [fuel Heq].
   iModIntro. iExists fuel. iIntros (fuel' Hlt).
   rewrite /heaplang_interpreter (exec_stable fuel' fuel) // Heq //.
 Qed.
@@ -97,10 +98,3 @@ Proof.
   iDestruct Hwp as "Hwp".
   by iDestruct (heaplang_interpreter_adequacy_termination e σ with "Hstate Hinv Hwp") as "Hφ".
 Qed.
-
-From iris.heap_lang Require Import proofmode notation.
-
-Compute heaplang_interpreter inhabitant 99 (ref #1).
-Compute heaplang_interpreter inhabitant 99 (let: "x" := ref #1 in !"x").
-Compute heaplang_interpreter inhabitant 99 (let: "x" := ref #1 in "x" <- !"x";; !"x").
-Compute heaplang_interpreter inhabitant 99 (let: "x" := ref #1 in !"x").
