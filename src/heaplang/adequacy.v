@@ -17,7 +17,7 @@ Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
   (* TODO: Can remove the itree here? How would we represent diverging
   programs when not using later? *)
   (exec: itree voidE ((state * (val + last_thread_killed)) + later_exhausted + ub_crash)) : Prop :=
-  heaplang_irel σ n (v ← compile_expr e ; yield_if_not_val e ;; Ret v) exec.
+  heaplang_irel σ n (compile_expr_yield e) exec.
 
 Section adequacy.
   Context {Σ} `{!invGS Σ} `{!heaplangHGS Σ}.

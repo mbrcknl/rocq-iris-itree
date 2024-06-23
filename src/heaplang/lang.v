@@ -277,6 +277,14 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
 
 Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
 
+Definition compile_expr_yield (e : expr) : itree heaplangE val :=
+  v ← compile_expr e ; yield_if_not_val e ;; Ret v.
+Arguments compile_expr_yield !_.
+
+Definition compile_expr_kill {R} (e : expr) : itree heaplangE R :=
+  compile_expr_yield e ;; kill_thread.
+Arguments compile_expr_kill !_.
+
 Lemma compile_expr_val (v : val) :
   compile_expr (Val v) ≈ Ret v.
 Proof. rewrite /compile_expr/compile_expr'. by eutt_norm. Qed.

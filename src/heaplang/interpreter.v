@@ -22,7 +22,7 @@ Qed.
 Variant timeout := Timeout.
 
 Definition heaplang_eval_itree σ later_fuel e :=
-  heaplang_ifn σ later_fuel (v ← compile_expr e ; yield_if_not_val e ;; Ret v).
+  heaplang_ifn σ later_fuel (compile_expr_yield e).
 
 Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : expr) : (state * (val + last_thread_killed)) + later_exhausted + ub_crash + timeout :=
   match exec fuel (heaplang_eval_itree σ later_fuel e) with
