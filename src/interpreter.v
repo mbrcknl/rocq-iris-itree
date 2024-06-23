@@ -20,7 +20,16 @@ Lemma exec_stable {R} n m (t : itree voidE R) :
   n ≥ m →
   is_Some (exec m t) →
   exec n t = exec m t.
-Admitted.
+Proof.
+  intros Hlt Hterm.
+  induction n as [|n IH]. { destruct m; first done. lia. }
+  destruct (decide (S n = m)) as [Heq|Hneq].
+  - rewrite -Heq //.
+  - rewrite -IH; last lia. rewrite -IH in Hterm; last lia.
+    clear IH Hlt Hneq m. revert t Hterm. induction n.
+    * intros t Hterm. apply is_Some_None in Hterm as [].
+    * intros t Hterm. simpl. simpl in Hterm. destruct (observe t) eqn:Heq; eauto.
+Qed.
 
 Lemma exec_eutt {R} n (t t' : itree voidE R) r :
   t ≈ t' →
