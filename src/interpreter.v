@@ -16,6 +16,12 @@ Fixpoint exec {R} (fuel : nat) (t : itree voidE R) : option R :=
     end
   end.
 
+Lemma exec_stable {R} n m (t : itree voidE R) :
+  n ≥ m →
+  is_Some (exec m t) →
+  exec n t = exec m t.
+Admitted.
+
 Lemma exec_eutt {R} n (t t' : itree voidE R) r :
   t ≈ t' →
   exec n t = Some r →
