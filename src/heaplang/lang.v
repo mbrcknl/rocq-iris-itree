@@ -558,15 +558,14 @@ Section wp.
   Lemma wpi_AllocN m M v n Φ :
     (0 < n)%Z →
     ↑heaplangH_inv_name ⊆ M →
-    heap_inv -∗
     lat m (∀ l,
        ([∗ list] i ∈ seq 0 (Z.to_nat n), (l +ₗ (i : nat)) ↦ v) -∗
        Φ (LitV (LitLoc l))
     ) -∗
-    WPi compile_expr (AllocN (Val (LitV (LitInt n))) (Val v)) @ heaplangH m; M {{ Φ }}.
+    WP AllocN (Val (LitV (LitInt n))) (Val v) @ m; M {{ Φ }}.
   Proof.
-    iIntros (Hpos Hmask) "#Hinv Hwand".
-    rewrite /compile_expr. wpi_norm/=.
+    iIntros (Hpos Hmask) "Hwand".
+    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     rewrite assert_True //. wpi_norm.
     iApply wpi_bind. iApply @wpi_get.
@@ -595,10 +594,10 @@ Section wp.
     ↑heaplangH_inv_name ⊆ M →
     l ↦{dq} v -∗
     lat m (l ↦{dq} v -∗ Φ v) -∗
-    WPi compile_expr (Load (Val $ LitV $ LitLoc l)) @ heaplangH m; M {{ Φ }}.
+    WP Load (Val $ LitV $ LitLoc l) @ m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    rewrite /compile_expr. wpi_norm/=.
+    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done. iIntros (v' ->) "Hpointsto".
     iApply wpi_step_ret. iApply (lat_mono with "[Hpointsto]"); last done.
     iIntros "Hwand". by iApply "Hwand".
@@ -606,13 +605,12 @@ Section wp.
 
   Lemma wpi_Store m M l v v' Φ :
     ↑heaplangH_inv_name ⊆ M →
-    heap_inv -∗
     l ↦ v -∗
     lat m (∀ r, ⌜r = LitV (LitUnit)⌝ -∗ l ↦ v' -∗ Φ r) -∗
-    WPi compile_expr (Store (Val $ LitV $ LitLoc l) (Val v')) @ heaplangH m; M {{ Φ }}.
+    WP Store (Val $ LitV $ LitLoc l) (Val v') @ m; M {{ Φ }}.
   Proof.
-    iIntros (Hmask) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. wpi_norm/=.
+    iIntros (Hmask) "Hpointsto Hwand".
+    rewrite !wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
@@ -620,27 +618,25 @@ Section wp.
 
   Lemma wpi_Free m M l v Φ :
     ↑heaplangH_inv_name ⊆ M →
-    heap_inv -∗
     l ↦ v -∗
     lat m (Φ (LitV LitUnit)) -∗
-    WPi compile_expr (Free (Val $ LitV $ LitLoc l)) @ heaplangH m; M {{ Φ }}.
+    WP Free (Val $ LitV $ LitLoc l) @ m; M {{ Φ }}.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
-    iIntros (Hmask) "#Hinv Hpointsto HΦ".
-    rewrite /compile_expr. wpi_norm/=.
+    iIntros (Hmask) "Hpointsto HΦ".
+    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store' with "Hinv Hpointsto"); first done.
     iIntros (r) "_ _". by iApply wpi_step_ret.
   Qed.
 
   Lemma wp_Xchg m M l v v' Φ :
     ↑heaplangH_inv_name ⊆ M →
-    heap_inv -∗
     l ↦ v -∗
     lat m (l ↦ v' -∗ Φ v) -∗
-    WPi compile_expr (Xchg (Val $ LitV (LitLoc l)) (Val v')) @ heaplangH m; M {{ Φ }}.
+    WP Xchg (Val $ LitV (LitLoc l)) (Val v') @ m; M {{ Φ }}.
   Proof.
-    iIntros (Hmask) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. wpi_norm/=.
+    iIntros (Hmask) "Hpointsto Hwand".
+    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
@@ -650,13 +646,12 @@ Section wp.
     ↑heaplangH_inv_name ⊆ M →
     v' ≠ v1 →
     vals_compare_safe v' v1 →
-    heap_inv -∗
     l ↦{dq} v' -∗
     lat m (l ↦{dq} v' -∗ Φ (PairV v' (LitV $ LitBool false))) -∗
-    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH m; M {{ Φ }}.
+    WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; M {{ Φ }}.
   Proof.
-    iIntros (Hmask Hneq Hcmp) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. wpi_norm/=.
+    iIntros (Hmask Hneq Hcmp) "Hpointsto Hwand".
+    rewrite wp_heaplang_eq  /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
     rewrite /assert /= decide_True // decide_False //. wpi_norm/=.
@@ -668,13 +663,12 @@ Section wp.
     ↑heaplangH_inv_name ⊆ M →
     v' = v1 →
     vals_compare_safe v' v1 →
-    heap_inv -∗
     l ↦ v' -∗
     lat m (l ↦ v2 -∗ Φ (PairV v' (LitV $ LitBool true))) -∗
-    WPi compile_expr (CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2)) @ heaplangH m; M {{ Φ }}.
+    WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; M {{ Φ }}.
   Proof.
-    iIntros (Hmask Hneq Hcmp) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. wpi_norm/=.
+    iIntros (Hmask Hneq Hcmp) "Hpointsto Hwand".
+    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
     rewrite /assert /= decide_True // decide_True //. wpi_norm.
@@ -685,13 +679,12 @@ Section wp.
 
   Lemma wpi_FAA m M l i1 i2 Φ :
     ↑heaplangH_inv_name ⊆ M →
-    heap_inv -∗
     l ↦ LitV (LitInt i1) -∗
     lat m (l ↦ LitV (LitInt (i1 + i2)) -∗ Φ (LitV (LitInt i1))) -∗
-    WPi compile_expr (FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2)) @ heaplangH m; M {{ Φ }}.
+    WP FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2) @ m; M {{ Φ }}.
   Proof.
-    iIntros (Hmask) "#Hinv Hpointsto Hwand".
-    rewrite /compile_expr. wpi_norm/=.
+    iIntros (Hmask) "Hpointsto Hwand".
+    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
     wpi_norm/=. iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
