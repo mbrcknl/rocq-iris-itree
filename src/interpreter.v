@@ -84,7 +84,7 @@ Lemma exec_soundness' `{!invGS_gen hlc Σ} {R} M (t : itree voidE R) Φ :
   |={M, ∅}=> |={∅, M}=> ⌜∃ n, ∃ r, exec n t = Some r ∧ Φ r⌝.
 Proof.
   iIntros "Hwp".
-  iMod (voidE_terminates with "Hwp") as "[%v [%Heutt HΦ]]".
+  iMod (void_adequacy with "Hwp") as "[%v [%Heutt HΦ]]".
   iModIntro. iMod "HΦ". iModIntro. iDestruct "HΦ" as "%HΦ".
   iPureIntro.
   apply exec_ret in Heutt as [n Hexec].

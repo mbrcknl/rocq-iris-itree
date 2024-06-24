@@ -23,8 +23,10 @@ Section interleaving.
   Context {E : Type → Type} {R : Type}.
 
   (** The interleaving relation. This relation encodes what it means for an
-  [itree E R] to refine an itree [itree (threadpoolE +' E) R] that can emit
-  events [threadpoolE] regarding concurrency. *)
+  [t' : itree E R] to refine an itree [t : itree (threadpoolE +' E) R] that can
+  emit events [threadpoolE] regarding concurrency. You can think of [t'] as
+  specifying a scheduler for the program [t], that is, an algorithm that, for
+  every execution path, picks out the next thread to yield control to. *)
 
   (** The recursion template for the interleaving relation, without enforcing
   [tp !! tid = Some t]. *)

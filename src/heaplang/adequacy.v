@@ -41,7 +41,7 @@ Section adequacy.
     iDestruct (state_adequacy with "Hs Hwp") as "Hwp"; [done|].
     rewrite -wpi_clear_mask. iMod "Hwp".
     iDestruct (later_adequacy_empty with "Hlc Hwp") as "Hwp".
-    iDestruct (voidE_adequacy with "Hwp") as "Hwp".
+    iDestruct (wpi_insert_voidE with "Hwp") as "Hwp".
     iDestruct (ub_adequacy with "Hwp") as "Hwp".
     iApply voidE_terminates_empty_mask.
     by rewrite Hte.

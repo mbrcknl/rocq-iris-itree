@@ -1440,7 +1440,7 @@ Proof.
   eapply demonic_trace in Htr as (t2&Hinst&Htr).
   eapply state_trace with (s := σ) in Htr as (t3&Heval&Htr); last done.
   eapply later_trace with (n := Some n) in Htr.
-  eapply void_trace in Htr.
+  eapply insert_voidE_trace in Htr.
   eapply ub_trace in Htr.
   exists (ub_ifn (insert_voidE (later_ifn (Some n) t3))).
   split.
@@ -1460,11 +1460,11 @@ Proof.
       destruct (interp_tr_ub (insert_voidE_tr (interp_tr_later (Some n) tr'))) as [[[[σ_ [r|]]|]|] | | | ] eqn:Heq';
         rewrite Heq' in Hinv; try contradiction.
       exists σ_.
-      apply void_trace_ret_inv in Htr as ->. by apply bool_decide_unpack in Hinv as ->.
+      apply is_trace_Ret_inv in Htr as ->. by apply bool_decide_unpack in Hinv as ->.
     * destruct u.
       destruct (interp_tr_ub (insert_voidE_tr (interp_tr_later (Some n) tr'))) as [[[[σ_ [r|]]|]|] | | | ] eqn:Heq';
         rewrite Heq' in Hinv; try contradiction.
-      apply void_trace_ret_inv in Htr as ->. by destruct u.
+      apply is_trace_Ret_inv in Htr as ->. by destruct u.
 Qed.
 
 End adequacy.

@@ -35,9 +35,11 @@ Lemma ub_to_translate {E1 E2 R} (HE1 : ubE -< E1) (HE2 : ubE -< E2) (Hin : E1 -<
 Proof. move => ?. rewrite /ub. by apply vis_to_translate. Qed.
 Global Hint Resolve ub_to_translate : itree_auto.
 
+(** Unwrap [Some v] to [v] or emit [EUb]. *)
 Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
   (match o with | Some x => Ret x | None => ub end)%itree.
 Notation "x ?" := (some_or_ub x) (at level 10, format "x ?") : itree_scope.
+(** Unwrap [Some (Some v)] to [v] or emit [EUb]. *)
 Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E R :=
   (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
 Notation "x '?' '?'" := (some_some_or_ub x) (at level 10, format "x '?' '?'") : itree_scope.
@@ -56,7 +58,6 @@ Proof.
 Qed.
 Global Hint Resolve some_some_or_ub_to_translate : itree_auto.
 
-
 Section handler.
   Context {Σ : gFunctors}.
 
@@ -72,63 +73,66 @@ Section handler.
   Qed.
 End handler.
 
-Variant ub_crash := UbCrash.
+Section ifn.
+  (** Return type for executions that crashed due to UB. *)
+  Variant ub_crash := UbCrash.
 
-(** "Sandbox" an [itree] with UB events by replacing UB with returning [None]
-("crashing safely"). *)
-Definition ub_ifn {R E} (t : itree (ubE +' E) R) : itree E (R + ub_crash) :=
-  ITree.iter (λ (t : itree (ubE +' E) (R + ub_crash)),
-    match observe t with
-    | RetF r => Ret (inr r)
-    | TauF t => Ret (inl t)
-    | VisF (inl1 EUb) k => Ret (inr (inr UbCrash))
-    | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
-    end) (ITree.map inl t).
+  (** Interpretation function for [ubE]. It effectively replaces [EUb] events
+  with [Ret (inr UbCrash)]. *)
+  Definition ub_ifn {R E} (t : itree (ubE +' E) R) : itree E (R + ub_crash) :=
+    ITree.iter (λ (t : itree (ubE +' E) (R + ub_crash)),
+      match observe t with
+      | RetF r => Ret (inr r)
+      | TauF t => Ret (inl t)
+      | VisF (inl1 EUb) k => Ret (inr (inr UbCrash))
+      | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
+      end) (ITree.map inl t).
 
-Lemma ub_ifn_ret {E R} (r : R) :
-  ub_ifn (Ret r) ≅ (Ret (inl r) : itree E (R + ub_crash)).
-Proof.
-  rewrite /ub_ifn.
-  pose (Heq := map_ret (E:=ubE +' E) (inl (B := ub_crash)) r).
-  apply bisimulation_is_eq in Heq as ->.
-  rewrite unfold_iter bind_ret_l //.
-Qed.
+  Lemma ub_ifn_ret {E R} (r : R) :
+    ub_ifn (Ret r) ≅ (Ret (inl r) : itree E (R + ub_crash)).
+  Proof.
+    rewrite /ub_ifn.
+    pose (Heq := map_ret (E:=ubE +' E) (inl (B := ub_crash)) r).
+    apply bisimulation_is_eq in Heq as ->.
+    rewrite unfold_iter bind_ret_l //.
+  Qed.
 
-Lemma ub_ifn_tau {E R} (t : itree (ubE +' E) R) :
-  ub_ifn (Tau t) ≅ Tau (ub_ifn t).
-Proof.
-  rewrite /ub_ifn.
-  pose (Heq := map_tau (E:=ubE +' E) (inl (B := ub_crash)) t).
-  apply bisimulation_is_eq in Heq as ->.
-  rewrite unfold_iter bind_ret_l //.
-Qed.
+  Lemma ub_ifn_tau {E R} (t : itree (ubE +' E) R) :
+    ub_ifn (Tau t) ≅ Tau (ub_ifn t).
+  Proof.
+    rewrite /ub_ifn.
+    pose (Heq := map_tau (E:=ubE +' E) (inl (B := ub_crash)) t).
+    apply bisimulation_is_eq in Heq as ->.
+    rewrite unfold_iter bind_ret_l //.
+  Qed.
 
-Lemma ub_ifn_ub {E R} (k : ∅ → itree (ubE +' E) R) :
-  ub_ifn (Vis (inl1 EUb) k) ≅ Ret (inr UbCrash).
-Proof.
-  rewrite /ub_ifn.
-  pose (Heq := map_vis (E:=ubE +' E) (inl (B := ub_crash)) (inl1 EUb) k).
-  apply bisimulation_is_eq in Heq.
-  rewrite Heq unfold_iter bind_ret_l //.
-Qed.
+  Lemma ub_ifn_ub {E R} (k : ∅ → itree (ubE +' E) R) :
+    ub_ifn (Vis (inl1 EUb) k) ≅ Ret (inr UbCrash).
+  Proof.
+    rewrite /ub_ifn.
+    pose (Heq := map_vis (E:=ubE +' E) (inl (B := ub_crash)) (inl1 EUb) k).
+    apply bisimulation_is_eq in Heq.
+    rewrite Heq unfold_iter bind_ret_l //.
+  Qed.
 
-Lemma ub_ifn_vis {E R A} (e : E A) (k : A → itree (ubE +' E) R) :
-  ub_ifn (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (ub_ifn (k a))).
-Proof.
-  rewrite /ub_ifn.
-  pose (Heq := map_vis (E:=ubE +' E) (inl (B := ub_crash)) (inr1 e) k).
-  apply bisimulation_is_eq in Heq as ->.
-  rewrite unfold_iter /= bind_bind bind_vis. f_equiv. f_equiv. intros a.
-  rewrite !bind_ret_l //.
-Qed.
+  Lemma ub_ifn_vis {E R A} (e : E A) (k : A → itree (ubE +' E) R) :
+    ub_ifn (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (ub_ifn (k a))).
+  Proof.
+    rewrite /ub_ifn.
+    pose (Heq := map_vis (E:=ubE +' E) (inl (B := ub_crash)) (inr1 e) k).
+    apply bisimulation_is_eq in Heq as ->.
+    rewrite unfold_iter /= bind_bind bind_vis. f_equiv. f_equiv. intros a.
+    rewrite !bind_ret_l //.
+  Qed.
+End ifn.
 
-Section ub_adequacy.
+Section adequacy.
   Context {R : Type} {E : Type → Type}.
   Context `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
 
   (** Intermediate statement of UB adequacy for empty masks. See below for
   general statement. *)
-  Theorem ub_adequacy' (t : itree (ubE +' E) R) Φ :
+  Theorem ub_adequacy_empty (t : itree (ubE +' E) R) Φ :
     WPi t @ ubH ⊕ H; ∅ {{ Φ }} -∗
     WPi ub_ifn t @ H; ∅ {{ r,
       match r with
@@ -150,7 +154,7 @@ Section ub_adequacy.
           iIntros (r). destruct r as [r|[]]; by iIntros "Hfalse".
   Qed.
 
-  (** Adequacy theorem for UB. *)
+  (** Adequacy theorem for [ubH]. *)
   Theorem ub_adequacy (t : itree (ubE +' E) R) M Φ :
     WPi t @ ubH ⊕ H; M {{ Φ }} -∗
     WPi ub_ifn t @ H; M {{ r,
@@ -163,13 +167,14 @@ Section ub_adequacy.
     iIntros "Hwp".
     rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
     iMod "Hwp". iModIntro.
-    iPoseProof ub_adequacy' as "Had". iSpecialize ("Had" with "Hwp").
+    iPoseProof ub_adequacy_empty as "Had". iSpecialize ("Had" with "Hwp").
     iApply wpi_wand; last done. iIntros (r). destruct r as [r|[]].
     - eauto.
     - by iIntros "Hfalse".
   Qed.
-End ub_adequacy.
+End adequacy.
 
+(** Assert a decidable property [P] and crash with [EUb] if it fails. *)
 Definition assert {E} `{ubE -< E} (P : Prop) `{Decision P} : itree E () :=
   if decide P then
     Ret ()
@@ -189,7 +194,7 @@ Lemma assert_False {E} `{ubE -< E} (P : Prop) `{Decision P} :
   ¬ P → assert (E := E) P ≈ ub.
 Proof. intros HP. rewrite /assert decide_False //. Qed.
 
-Section wp_ub.
+Section wp.
   Context {E : Type → Type} `{H : iHandler Σ E} `{ubE -< E} `{inH Σ ubE E ubH H}.
   Context `{!invGS_gen hlc Σ}.
 
@@ -209,11 +214,13 @@ Section wp_ub.
     - iApply wpi_ret.
     - contradiction.
   Qed.
-End wp_ub.
+End wp.
 
 Section ub_trace.
   Context {R : Type} {E : Type → Type}.
 
+  (** Interpret away [ubE] from a trace, instead returning [inr UbCrash] if
+  [EUb] is encountered. *)
   Fixpoint interp_tr_ub (tr : trace (ubE +' E) R) : trace E (R + ub_crash) :=
     match tr with
     | TRet r => TRet (inl r)
@@ -223,6 +230,7 @@ Section ub_trace.
     | _ => TCut
     end.
 
+  (** [ub_ifn] preserves traces. *)
   Lemma ub_trace (tr : trace (ubE +' E) R) t :
     is_trace tr t →
     is_trace (interp_tr_ub tr) (ub_ifn t).

@@ -6,7 +6,12 @@ From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
 From ITree Require Import ITree Eqit.
 
+(** Later events. The main application of this event type is for doing
+termination insensitive reasoning in spite of our [WPi] being defined as a
+least fixpoint (and thus being termination sensitive "by default"). *)
 Variant laterE : Type → Type :=
+  (** An event that marks that a step has been taken. This can be thought of as
+  the semantic analogue of the logical later modality [▷ P]. *)
   | ELater : laterE ().
 
 Definition step `{laterE -< E} : itree E () :=
@@ -22,17 +27,21 @@ Global Instance AnswerEqDecision_laterE :
   AnswerEqDecision laterE.
 Proof. intros A [] [] []. by left. Qed.
 
-Variant later_modality : Set :=
-  | Identity
-  | Later.
-
-Definition lat {Σ} (m : later_modality) (P : iProp Σ) : iProp Σ :=
-  match m with
-  | Identity => P
-  | Later => ▷ P
-  end.
-
 Section lat.
+  (** Choice of modality for handling [ELater]. *)
+  Variant later_modality : Set :=
+    (** No modality. *)
+    | Identity
+    (** Later modality [▷ P]. *)
+    | Later.
+
+  (** Apply a modality [later_modality] to an [iProp]. *)
+  Definition lat {Σ} (m : later_modality) (P : iProp Σ) : iProp Σ :=
+    match m with
+    | Identity => P
+    | Later => ▷ P
+    end.
+
   Lemma lat_mono {Σ} m (Φ Ψ : iProp Σ) :
     (Φ -∗ Ψ) -∗
     lat m Φ -∗ lat m Ψ.
@@ -76,7 +85,7 @@ Section handler.
   Qed.
 End handler.
 
-Section wpi_later.
+Section wpi.
   Context `{!invGS_gen hlc Σ} {E : Type → Type} {H : iHandler Σ E} {m : later_modality}.
   Context `{laterE -< E} `{inH Σ laterE E (laterH m) H}.
 
@@ -96,46 +105,59 @@ Section wpi_later.
     (lat m (|={M}=> Φ ())) -∗
     WPi step @ H; M {{ Φ }}.
   Proof. exact: wpi_later. Qed.
+End wpi.
 
-End wpi_later.
+Section ifn.
+  (* TODO: Use consistent convention with having definitions outside sections. *)
 
-Variant later_exhausted : Set := LaterExhausted.
+  (** Return type for executions that timeout because too many [ELater]s were
+  encountered. *)
+  Variant later_exhausted : Set := LaterExhausted.
 
-Definition later_ifn_loop {R E} (n : option nat) (t : itree (laterE +' E) R) : itree E ((option nat * itree (laterE +' E) R) + (R + later_exhausted)) :=
-    match observe t with
-    | RetF r => Ret (inr (inl r))
-    | TauF t => Ret (inl (n, t))
-    | VisF (inl1 e) k =>
-        if bool_decide (n = Some 0) then
-          Ret (inr (inr LaterExhausted))
-        else
-          match e in laterE T return (T → _) → _ with
-            ELater => λ k, Ret (inl ((λ x, x - 1) <$> n, k ()))
-          end k
-    | VisF (inr1 e) k => ITree.map (λ x, inl (n, k x)) (trigger e)
-    end.
+  Definition later_ifn_loop {R E} (n : option nat) (t : itree (laterE +' E) R) : itree E ((option nat * itree (laterE +' E) R) + (R + later_exhausted)) :=
+      match observe t with
+      | RetF r => Ret (inr (inl r))
+      | TauF t => Ret (inl (n, t))
+      | VisF (inl1 e) k =>
+          if bool_decide (n = Some 0) then
+            Ret (inr (inr LaterExhausted))
+          else
+            match e in laterE T return (T → _) → _ with
+              ELater => λ k, Ret (inl ((λ x, x - 1) <$> n, k ()))
+            end k
+      | VisF (inr1 e) k => ITree.map (λ x, inl (n, k x)) (trigger e)
+      end.
 
-Definition later_ifn {R E} (n : option nat) (t : itree (laterE +' E) R) : itree E (R + later_exhausted) :=
-  ITree.iter (λ '(n, t), later_ifn_loop n t) (n, t).
+  (** Interpretation function for [laterE]. It replaces [ELater]s by [Tau]s. If
+  [n = Some n'], it will truncate after [n'] of [ELater]s, that is, put
+  [Ret (inr LaterExhausted)] in branches where [n'] laters have been
+  encountered. *)
+  Definition later_ifn {R E} (n : option nat) (t : itree (laterE +' E) R) : itree E (R + later_exhausted) :=
+    ITree.iter (λ '(n, t), later_ifn_loop n t) (n, t).
 
-Lemma later_ifn_unfold R E n (t : itree (laterE +' E) R) :
-  later_ifn n t ≈ r ← later_ifn_loop n t;
-   match r with
-   | inl nt => later_ifn nt.1 nt.2
-   | inr r => Ret r
-   end.
-Proof. rewrite /later_ifn unfold_iter. f_equiv => -[[??]|//]. by rewrite tau_eutt. Qed.
+  Lemma later_ifn_unfold R E n (t : itree (laterE +' E) R) :
+    later_ifn n t ≈ r ← later_ifn_loop n t;
+     match r with
+     | inl nt => later_ifn nt.1 nt.2
+     | inr r => Ret r
+     end.
+  Proof. rewrite /later_ifn unfold_iter. f_equiv => -[[??]|//]. by rewrite tau_eutt. Qed.
+End ifn.
 
 Section adequacy.
   Context {R : Type} {E : Type → Type}.
   Context `{!invGS Σ} {H : iHandler Σ E}.
 
+  (** Adequacy for [laterH]. *)
   Theorem later_adequacy_empty (t : itree (laterE +' E) R) m Φ n `{!Sequential H}:
+    (* When the [Later] modality is enabled, we need [£ n] so that we can strip
+    [n] laters in the goal. *)
     (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     WPi t @ laterH m ⊕ H; ∅ {{ Φ }} -∗
     WPi later_ifn n t @ H; ∅ {{ r,
       match r with
       | inl r => Φ r
+      (* We can only exhaust laters if we set a timeout in the first place. *)
       | inr LaterExhausted => ⌜is_Some n⌝
       end
     }}.
@@ -172,7 +194,7 @@ Section adequacy.
         iModIntro. by iApply "Hwp".
   Qed.
 
-  (* TODO: can we get this? *)
+  (* TODO: can we get this?
   Theorem later_adequacy (t : itree (laterE +' E) R) m Φ n M `{!Sequential H} :
     (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     WPi t @ laterH m ⊕ H; M {{ Φ }} -∗
@@ -191,11 +213,16 @@ Section adequacy.
     - eauto.
     - (* Where do we get the mask from? *)
   Abort.
+   *)
 End adequacy.
 
 Section trace.
   Context {R : Type} {E : Type → Type}.
 
+  (** Interpret away [laterE] events in [trcae (laterE +' E)]. Akin to the
+  definition of [later_ifn], if [n = Some n'] and more than [n'] [ELater]s are
+  reached, [inr LaterExhausted] is returned to mark that a timeout has
+  happened. *)
   Fixpoint interp_tr_later (n : option nat) (tr : trace (laterE +' E) R) : trace E (R + later_exhausted) :=
     match tr with
     | TRet r => TRet (inl r)
@@ -210,6 +237,7 @@ Section trace.
     | _ => TCut
     end.
 
+  (** Intermediate statement for induction. *)
   Lemma later_trace' (tr : trace (laterE +' E) R) n t :
     is_trace tr t →
     is_trace (interp_tr_later (Some n) tr) (later_ifn (Some n) t).
@@ -246,6 +274,7 @@ Section trace.
       * constructor.
       * rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. by apply IHHtr.
   Qed.
+  (** Traces are preserved by [later_ifn]. *)
   Lemma later_trace (tr : trace (laterE +' E) R) n t :
     is_trace tr t →
     is_trace (interp_tr_later n tr) (later_ifn n t).

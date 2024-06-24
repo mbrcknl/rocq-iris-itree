@@ -3,6 +3,7 @@ From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop fancy_updates.
 From iris.itree Require Import wpi itree handler trace.
 
+(** The event type without any events (the additive unit for event types). *)
 (* TODO: rename to emptyE *)
 Inductive voidE : Type → Type :=.
 
@@ -17,6 +18,7 @@ Section handler.
   Proof. by iIntros (A [] Φ s) "HH". Qed.
 End handler.
 
+(** Convert the event type [E] to the equivalent [E +' voidE] in an ITree. *)
 Definition insert_voidE {E R} (t : itree E R) : itree (E +' voidE) R :=
   translate inl1 t.
 
@@ -24,7 +26,7 @@ Section adequacy.
   Context {R : Type} {E : Type → Type}.
   Context `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
 
-  Theorem voidE_adequacy_empty (t : itree E R) Φ :
+  Theorem wpi_insert_voidE_empty (t : itree E R) Φ :
     WPi t @ H; ∅ {{ Φ }} -∗
     WPi insert_voidE t @ H ⊕ voidH; ∅ {{ Φ }}.
   Proof.
@@ -40,18 +42,18 @@ Section adequacy.
         iIntros (r []).
   Qed.
 
-  Theorem voidE_adequacy (t : itree E R) Φ M :
+  Theorem wpi_insert_voidE (t : itree E R) Φ M :
     WPi t @ H; M {{ Φ }} -∗
     WPi insert_voidE t @ H ⊕ voidH; M {{ Φ }}.
   Proof.
     iIntros "Hwp".
     rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
     iMod "Hwp". iModIntro.
-    iPoseProof voidE_adequacy_empty as "Had". iSpecialize ("Had" with "Hwp").
+    iPoseProof wpi_insert_voidE_empty as "Had". iSpecialize ("Had" with "Hwp").
     iApply wpi_wand; last done. iIntros (r). eauto.
   Qed.
 
-  Theorem voidE_terminates_empty_mask (t : itree voidE R) Φ :
+  Theorem void_adequacy_empty (t : itree voidE R) Φ :
     WPi t @ voidH; ∅ {{ Φ }} -∗
     |={∅}=> ∃ v, ⌜t ≈ Ret v⌝ ∗ Φ v.
   Proof.
@@ -61,13 +63,15 @@ Section adequacy.
     - iIntros "!>" (Φ A [] k) "HH".
   Qed.
 
-  Theorem voidE_terminates (t : itree voidE R) Φ M :
+  (** Adequacy for [voidE]. This says that [WPi t @ voidH; M {{ Φ }}] ensures
+  termination of [t] and asserts the postcondition for the returned value. *)
+  Theorem void_adequacy (t : itree voidE R) Φ M :
     WPi t @ voidH; M {{ Φ }} -∗
     |={M, ∅}=> ∃ v, ⌜t ≈ Ret v⌝ ∗ |={∅,M}=> Φ v.
   Proof.
     iIntros "Hwp".
     rewrite -wpi_clear_mask. iMod "Hwp".
-    iMod (voidE_terminates_empty_mask with "Hwp") as (? ?) "$".
+    iMod (void_adequacy_empty with "Hwp") as (? ?) "$".
     done.
   Qed.
 End adequacy.
@@ -75,6 +79,7 @@ End adequacy.
 Section trace.
   Context {R : Type} {E : Type → Type}.
 
+  (** Convert the event type [E] to the equivalent [E +' voidE] in a trace. *)
   Fixpoint insert_voidE_tr (tr : trace E R) : trace (E +' voidE) R :=
     match tr with
     | TRet r => TRet r
@@ -83,7 +88,8 @@ Section trace.
     | TCut => TCut
     end.
 
-  Lemma void_trace (tr : trace E R) t :
+  (** Traces are preserved by [insert_voidE]. *)
+  Lemma insert_voidE_trace (tr : trace E R) t :
     is_trace tr t →
     is_trace (insert_voidE_tr tr) (insert_voidE t).
   Proof.
@@ -95,16 +101,5 @@ Section trace.
     - rewrite /insert_voidE translate_vis. by constructor.
     - constructor.
     - rewrite /insert_voidE translate_tau. constructor. by apply IHHtr.
-  Qed.
-
-  Lemma void_trace_ret_inv (t : itree E R) r :
-    is_trace (TRet r) t →
-    t ≈ Ret r.
-  Proof.
-    intros Htr. rewrite /is_trace in Htr.
-    remember (TRet r) as tr. remember (observe t) as ot. revert t Heqot Heqtr.
-    induction Htr; intros t_ Heqot Heqtr; simplify_obs; simplify_eq.
-    - done.
-    - apply tau_eutt_RR_l; eauto. apply _.
   Qed.
 End trace.

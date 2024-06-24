@@ -16,7 +16,17 @@ From ITree Require Import ITree.
 From ITree Require Import Basics.Monad.
 From ITree Require Import Eqit.
 
+(** Event type for demonic non-determinism. *)
 Variant demonicE : Type → Type :=
+  (** Choose demonic non-deterministically among the inhabitants of [A]. We
+  require [Inhabited A] to ensure the existence of an interpretation function
+  [demonic_ifn]. (Without this assumption, we would not be able to produce a
+  relational interpretation of an [itree (demonicE +' E) R] if there is just
+  one branch that does empty demonic choice. This would clearly be undesirable
+  behavior.) *)
+  (* TODO: We currently require [EqDecision A] for trace theory below, which in
+  turn is needed for [heaplang/opsem_adequacy.v], but perhaps this assumption
+  belongs elsewhere ("pay for what you use"). *)
   | EDemonic (A : Type) `{EqDecision A} `{Inhabited A} : demonicE A.
 
 Global Instance demonicE_AnswerEqDecision :
@@ -44,7 +54,7 @@ Section handler.
   Qed.
 End handler.
 
-Section wp_demonic.
+Section wp.
   Context {E : Type → Type} `{H : iHandler Σ E} `{demonicE -< E} `{inH Σ demonicE E demonicH H}.
   Context `{!invGS_gen hlc Σ}.
 
@@ -64,23 +74,28 @@ Section wp_demonic.
   Proof.
     iIntros "Hwp". iApply wpi_demonic. iIntros (?). iApply wpi_ret. iApply "Hwp".
   Qed.
-End wp_demonic.
+End wp.
 
-Section demonic_adequacy.
+Section adequacy.
   Context {E : Type → Type} `{H : iHandler Σ E} {R : Type} `{!invGS_gen hlc Σ}.
 
+  (** The interpretation relation for [demonicE]. This codifies what it
+  means for an [itree E R] to "instantiate" the demonic choices in an
+  [itree (demonicE +' E) R]. One can think of the relational interpretation
+  [t' : itree E R] as specifying an algorithm to pick out an [a : A] for each
+  emitted [EDemonic A] event. *)
   Variant demonic_irelF
     (demonic_irel : itree (demonicE +' E) R → itree E R → Prop)
     : itree' (demonicE +' E) R → itree' E R → Prop :=
-  | DInstantiate A `{EqDecision A} `{Inhabited A} (a : A) k t :
+  | demonic_EDemonic A `{EqDecision A} `{Inhabited A} (a : A) k t :
     demonic_irel (k a) t →
     demonic_irelF demonic_irel (VisF (inl1 (EDemonic A)) k) (TauF t)
-  | DReturns r :
+  | demonic_Ret r :
     demonic_irelF demonic_irel (RetF r) (RetF r)
-  | DSteps t_next t_next' :
+  | demonic_Tau t_next t_next' :
     demonic_irel t_next t_next' →
     demonic_irelF demonic_irel (TauF t_next) (TauF t_next')
-  | DEmits A (e : E A) k k' :
+  | demonic_Vis A (e : E A) k k' :
     (∀ a, demonic_irel (k a) (k' a)) →
     demonic_irelF demonic_irel (VisF (inr1 e) k) (VisF e k').
   Hint Constructors demonic_irelF : iris_itree.
@@ -129,7 +144,7 @@ Section demonic_adequacy.
       * apply REL.
       * done.
       * done.
-    - simplify_K. pclearbot. eapply DInstantiate. right. eapply CIH.
+    - simplify_K. pclearbot. eapply demonic_EDemonic. right. eapply CIH.
       + apply REL.
       + done.
       + done.
@@ -171,6 +186,7 @@ Section demonic_adequacy.
           pclearbot. iApply "Hwp". iPureIntro. apply H1.
   Qed.
 
+  (** Adequacy for [demonicH]. *)
   Theorem demonic_adequacy (t : itree (demonicE +' E) R) (t' : itree E R) M Φ :
     demonic_irel t t' →
     WPi t @ demonicH ⊕ H; M {{ Φ }} -∗
@@ -181,11 +197,13 @@ Section demonic_adequacy.
     - pclearbot. apply Hinstant.
     - done.
   Qed.
-End demonic_adequacy.
+End adequacy.
 
-Section demonic_ifn.
+Section ifn.
   Context {E : Type → Type} {R : Type} `{AnswerEqDecision E}.
 
+  (** Interpretation function for [demonicE]. This instantiates the demonic
+  choices using [Inhabited A] implementation. *)
   Definition demonic_ifn : itree (demonicE +' E) R → itree E R :=
     cofix _demonic_ifn t :=
         match observe t with
@@ -214,6 +232,7 @@ Section demonic_ifn.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
+  (** The function [demonic_ifn] instantiates the relation [demonic_irel]. *)
   Lemma demonic_ifn_irel t :
     demonic_irel t (demonic_ifn t).
   Proof.
@@ -227,9 +246,9 @@ Section demonic_ifn.
       * econstructor. right. by apply (CIH (k inhabitant)).
       * constructor. right. by apply (CIH (k a)).
   Qed.
-End demonic_ifn.
+End ifn.
 
-Section demonic_state.
+Section trace.
   Context {E : Type → Type} {R : Type} `{AnswerEqDecision E}.
 
   Lemma unfold_demonic_irel_under tr (t : itree (demonicE +' E) R) :
@@ -243,6 +262,7 @@ Section demonic_state.
     - done.
   Qed.
 
+  (** Construct a relational interpretation from a trace. *)
   Lemma demonic_trace `{AnswerEqDecision E} tr (t : itree (demonicE +' E) R) :
     is_trace tr t →
     ∃ t', demonic_irel t t' ∧ is_trace (interp_tr tr) t'.
@@ -251,7 +271,7 @@ Section demonic_state.
     - exists (Ret r). split; constructor.
     - destruct e as [e|e]; first destruct e.
       * exists (Tau t'). split.
-        + apply DInstantiate with (a := a). left. by pfold.
+        + apply demonic_EDemonic with (a := a). left. by pfold.
         + simpl. constructor. done.
       * specialize (H A e).
         exists (Vis e (λ a', if decide (a = a') then t' else demonic_ifn (k a'))).
@@ -277,4 +297,4 @@ Section demonic_state.
         + constructor. left. by pfold.
         + by constructor.
   Qed.
-End demonic_state.
+End trace.

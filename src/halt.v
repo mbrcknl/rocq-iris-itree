@@ -59,6 +59,8 @@ Section handler.
   Context {Σ : gFunctors} `{!invGS_gen hlc Σ}.
 
   Program Definition haltH : iHandler Σ haltE :=
+    (** Halting reestablishes the invariants, making it qualitatively different
+    from some other kinds of NB. *)
     IHandler (λ _ _ _ _, (|={∅, ⊤}=> True)%I) _.
   Next Obligation.
     eauto.
@@ -70,7 +72,7 @@ Section handler.
   Qed.
 End handler.
 
-Section wp_halt.
+Section wp.
   Context {E : Type → Type} `{!invGS_gen hlc Σ}.
   Context {H : iHandler Σ E} `{!haltE -< E} `{!inH haltH H}.
 
@@ -90,56 +92,55 @@ Section wp_halt.
     - iApply wpi_ret. iApply "HΦ".
     - iApply wpi_halt.
   Qed.
-End wp_halt.
+End wp.
 
-(** "Sandbox" an [itree] with halt events by replacing halt with returning [None]. *)
-Definition halt_ifn {R E} (t : itree (haltE +' E) R) : itree E (option R) :=
-  ITree.iter (λ (t : itree (haltE +' E) (option R)),
-    match observe t with
-    | RetF r => Ret (inr r)
-    | TauF t => Ret (inl t)
-    | VisF (inl1 EHalt) k => Ret (inr None)
-    | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
-    end) (ITree.map Some t).
+Section ifn.
+  (** Return type for executions that halted. *)
+  Variant halted := Halted.
 
-Lemma halt_ifn_ret {E R} (r : R) :
-  halt_ifn (Ret r) ≅ (Ret (Some r) : itree E (option R)).
-Proof.
-  rewrite /halt_ifn.
-  pose (Heq := map_ret (E:=haltE +' E) Some r).
-  apply bisimulation_is_eq in Heq as ->.
-  rewrite unfold_iter bind_ret_l //.
-Qed.
+  (** Interpretation function for [haltE]. It effectively replaces [EHalt] events
+  with [Ret (inr Halted)]. *)
+  Definition halt_ifn {R E} (t : itree (haltE +' E) R) : itree E (R + halted) :=
+    ITree.iter (λ (t : itree (haltE +' E) R),
+      match observe t with
+      | RetF r => Ret (inr (inl r))
+      | TauF t => Ret (inl t)
+      | VisF (inl1 EHalt) k => Ret (inr (inr Halted))
+      | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
+      end) t.
 
-Lemma halt_ifn_tau {E R} (t : itree (haltE +' E) R) :
-  halt_ifn (Tau t) ≅ Tau (halt_ifn t).
-Proof.
-  rewrite /halt_ifn.
-  pose (Heq := map_tau (E:=haltE +' E) (Some : R -> option R) t).
-  apply bisimulation_is_eq in Heq as ->.
-  rewrite unfold_iter bind_ret_l //.
-Qed.
+  Lemma halt_ifn_ret {E R} (r : R) :
+    halt_ifn (Ret r) ≅ (Ret (inl r) : itree E (R + halted)).
+  Proof.
+    rewrite /halt_ifn.
+    rewrite unfold_iter bind_ret_l //.
+  Qed.
 
-Lemma halt_ifn_halt {E R} (k : ∅ → itree (haltE +' E) R) :
-  halt_ifn (Vis (inl1 EHalt) k) ≅ Ret None.
-Proof.
-  rewrite /halt_ifn.
-  pose (Heq := map_vis (E:=haltE +' E) (Some : R -> option R) (inl1 EHalt) k).
-  apply bisimulation_is_eq in Heq.
-  rewrite Heq unfold_iter bind_ret_l //.
-Qed.
+  Lemma halt_ifn_tau {E R} (t : itree (haltE +' E) R) :
+    halt_ifn (Tau t) ≅ Tau (halt_ifn t).
+  Proof.
+    rewrite /halt_ifn.
+    rewrite unfold_iter bind_ret_l //.
+  Qed.
 
-Lemma halt_ifn_vis {E R A} (e : E A) (k : A → itree (haltE +' E) R) :
-  halt_ifn (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (halt_ifn (k a))).
-Proof.
-  rewrite /halt_ifn.
-  pose (Heq := map_vis (E:=haltE +' E) (Some : R -> option R) (inr1 e) k).
-  apply bisimulation_is_eq in Heq as ->.
-  rewrite unfold_iter /= bind_bind bind_vis. f_equiv. f_equiv. intros a.
-  rewrite !bind_ret_l //.
-Qed.
+  Lemma halt_ifn_halt {E R} (k : ∅ → itree (haltE +' E) R) :
+    halt_ifn (Vis (inl1 EHalt) k) ≅ Ret (inr Halted).
+  Proof.
+    rewrite /halt_ifn.
+    rewrite unfold_iter bind_ret_l //.
+  Qed.
 
-Section halt_adequacy.
+  Lemma halt_ifn_vis {E R A} (e : E A) (k : A → itree (haltE +' E) R) :
+    halt_ifn (Vis (inr1 e) k) ≅ Vis e (λ a, Tau (halt_ifn (k a))).
+  Proof.
+    rewrite /halt_ifn.
+    pose (Heq := map_vis (E:=haltE +' E) (Some : R -> option R) (inr1 e) k).
+    rewrite unfold_iter /= bind_bind bind_vis. f_equiv. f_equiv. intros a.
+    rewrite !bind_ret_l //.
+  Qed.
+End ifn.
+
+Section adequacy.
   Context {R : Type} {E : Type → Type}.
   Context `{!invGS_gen hlc Σ} {H : iHandler Σ E}.
   (** This sequentiality assumption is necessary because [halt_ifn]
@@ -147,12 +148,12 @@ Section halt_adequacy.
   corresponding to the main thread. *)
   Context `{!Sequential H}.
 
-  Theorem halt_adequacy' (t : itree (haltE +' E) R) Φ :
+  Theorem halt_adequacy_empty (t : itree (haltE +' E) R) Φ :
     WPi t @ haltH ⊕ H; ∅ {{ Φ }} -∗
     WPi halt_ifn t @ H; ∅ {{ r,
       match r with
-      | Some r => Φ r
-      | None => |={∅, ⊤}=> True
+      | inl r => Φ r
+      | inr Halted => |={∅, ⊤}=> True
       end
     }}.
   Proof.
@@ -168,18 +169,19 @@ Section halt_adequacy.
         + by iIntros "!>" (a) "Hwp".
   Qed.
 
+  (** Adequacy theorem for [haltH]. *)
   Corollary halt_adequacy (t : itree (haltE +' E) R) Φ :
     WPi t @ haltH ⊕ H; ⊤ {{ Φ }} -∗
     WPi halt_ifn t @ H; ⊤ {{ r,
       match r with
-      | Some r => Φ r
-      | None => True
+      | inl r => Φ r
+      | inr Halted => True
       end
     }}.
   Proof.
     iIntros "Hwp". rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
     iMod "Hwp". iModIntro.
-    iApply (wpi_wand with "[] [Hwp]"). 2: by iApply halt_adequacy'.
-    iIntros (?) "Hp". by case_match.
+    iApply (wpi_wand with "[] [Hwp]"). 2: by iApply halt_adequacy_empty.
+    iIntros (?) "Hp". case_match; first done. by case_match.
   Qed.
-End halt_adequacy.
+End adequacy.

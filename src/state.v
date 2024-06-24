@@ -101,20 +101,20 @@ Section stateH_adequacy.
     → itree' E (S * R)
     → Prop :=
   (** Forwarding what doesn't affect the state. *)
-  | ForwardRet s r :
+  | state_Ret s r :
     state_irelF state_irel s (RetF r) (RetF (s, r))
-  | ForwardTau s t t' :
+  | state_Tau s t t' :
     state_irel s t t' →
     state_irelF state_irel s (TauF t) (TauF t')
-  | ForwardVis s A e k k' :
+  | state_Vis s A e k k' :
     (∀ a : A, state_irel s (k a) (k' a)) →
     state_irelF state_irel s (VisF (inr1 e) k) (VisF e k')
   (** Setting the state from [s] to [s']. *)
-  | SetState s s' k t :
+  | state_ESetState s s' k t :
     state_irel s' (k tt) t →
     state_irelF state_irel s (VisF (inl1 (ESetState s')) k) (TauF t)
   (** Getting the state [s]. *)
-  | GetState s k t :
+  | state_EGetState s k t :
     state_irel s (k s) t →
     state_irelF state_irel s (VisF (inl1 EGetState) k) (TauF t).
   Hint Constructors state_irelF : iris_itree.
@@ -160,7 +160,7 @@ Section stateH_adequacy.
       * apply REL.
       * done.
       * clear REL REL0. by pclearbot.
-    - do 2 simplify_K. pclearbot. eapply SetState. right. eapply CIH; first reflexivity.
+    - do 2 simplify_K. pclearbot. eapply state_ESetState. right. eapply CIH; first reflexivity.
       + apply REL.
       + done.
       + clear REL REL0. by pclearbot.
@@ -238,9 +238,13 @@ Section stateH_adequacy.
   Qed.
 End stateH_adequacy.
 
-Section state_ifn.
+Section ifn.
   Context {S R : Type} {E : Type → Type}.
 
+  (** Interpretation function for [stateE]. It turns out that this function is
+  equivalent to [state_irel], in the sense that every [itree (stateE S +' E) R]
+  admits exactly one relational interpretation. However, for consistency (and
+  extendability), we have both perspectives. *)
   Definition state_ifn : S → itree (stateE S +' E) R → itree E (S * R) :=
     cofix _state_ifn s t :=
         match observe t with
@@ -271,6 +275,8 @@ Section state_ifn.
     apply bisimulation_is_eq. apply observing_sub_eqit; constructor; reflexivity.
   Qed.
 
+  (** The function [state_ifn] instantiates the relation [state_irel]. *)
+  (* TODO: Prove the converse uniqueness property. *)
   Lemma state_ifn_irel s t :
     state_irel s t (state_ifn s t).
   Proof.
@@ -283,11 +289,15 @@ Section state_ifn.
     - destruct e as [e|e]; first destruct e as [|s'];
       constructor; right; by apply CIH.
   Qed.
-End state_ifn.
+End ifn.
 
-Section state_trace.
+Section trace.
   Context {S R : Type} `{EqDecision S} {E : Type → Type}.
 
+  (** Interpret away state events in a [trace (stateE S +' E) R]. [None] is
+  returned if the state is not coherent, that is, the trace claims that a state
+  that does not match the actual state is read. The final state of the trace is
+  incorporated in the return value of type [S * R]. *)
   Fixpoint interp_tr_state (s : S) (tr : trace (stateE S +' E) R) : option (trace E (S * R)) :=
     match tr with
     | TRet r => Some (TRet (s, r))
@@ -302,7 +312,8 @@ Section state_trace.
     | TCut => Some TCut
     end.
 
-  Lemma state_trace' (tr : trace (stateE S +' E) R) tr' t s :
+  (** Traces are preserved by [state_ifn]. *)
+  Lemma state_trace_preserved (tr : trace (stateE S +' E) R) tr' t s :
     is_trace tr t →
     interp_tr_state s tr = Some tr' →
     is_trace tr' (state_ifn s t).
@@ -329,6 +340,7 @@ Section state_trace.
       setoid_rewrite <- unfold_state_ifn in IHHtr. by apply IHHtr.
   Qed.
 
+  (** Construct a relational interpretation from a trace. *)
   Theorem state_trace (tr : trace (stateE S +' E) R) tr' t s :
     is_trace tr t →
     interp_tr_state s tr = Some tr' →
@@ -336,6 +348,6 @@ Section state_trace.
   Proof.
     intros Htr Hst. exists (state_ifn s t).
     split; first apply state_ifn_irel.
-    by eapply state_trace'.
+    by eapply state_trace_preserved.
   Qed.
-End state_trace.
+End trace.

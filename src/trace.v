@@ -80,6 +80,17 @@ Section is_trace.
   Proof.
     intros Htr. by constructor.
   Qed.
+
+  Lemma is_trace_Ret_inv (t : itree E R) r :
+    is_trace (TRet r) t →
+    t ≈ Ret r.
+  Proof.
+    intros Htr. rewrite /is_trace in Htr.
+    remember (TRet r) as tr. remember (observe t) as ot. revert t Heqot Heqtr.
+    induction Htr; intros t_ Heqot Heqtr; simplify_obs; simplify_eq.
+    - reflexivity.
+    - apply tau_eutt_RR_l; eauto. apply _.
+  Qed.
 End is_trace.
 
 Class AnswerEqDecision (E : Type → Type) :=
