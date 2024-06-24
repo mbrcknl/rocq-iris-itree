@@ -25,12 +25,6 @@ Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} `{laterE -< E} : 
   | None => yield
   end.
 Arguments yield_if_not_val !_ / _.
-Definition step_if_not_val (e : expr) {E} `{laterE -< E} `{laterE -< E} : itree E () :=
-  match to_val e with
-  | Some _ => Ret ()
-  | None => step
-  end.
-Arguments step_if_not_val !_ / _.
 
 (* TODO: remove these duplicate definitions *)
 Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
@@ -141,7 +135,6 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
   let yield := do yield in
   let yield_if_not_val e := do (yield_if_not_val e) in
   let step := do step in
-  let step_if_not_val e := do (step_if_not_val e) in
   let store' l x := do (store' l x) in
   let store l x := do (store l x) in
   let load l := do (load l) in
@@ -157,7 +150,7 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       f ← compile_expr_yield e1;
       '(f_, x_, e) ← (val_to_RecV f)?;
       let body := subst' x_ x  (subst' f_ f e) in
-      step_if_not_val body;;
+      step;;
       yield_if_not_val body;;
       call body
   | UnOp op e =>
@@ -174,11 +167,11 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
       b ← (val_to_bool v0)?;
       if b then
         (* if true then e1 else e2 ~> e1 (must yield here!) ~> ... *)
-        step_if_not_val e1;;
+        step;;
         yield_if_not_val e1;;
         compile_expr' e1
       else
-        step_if_not_val e2;;
+        step;;
         yield_if_not_val e2;;
         compile_expr' e2
   | Pair e1 e2 =>

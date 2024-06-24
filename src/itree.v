@@ -147,11 +147,11 @@ Qed.
 Ltac simplify_obs :=
   repeat match goal with
   | H : RetF _ = observe _ |- _ =>
-    apply ret_observe_eqit in H as <-
+    destruct (bisimulation_is_eq _ _ (ret_observe_eqit _ _ H))
   | H : TauF _ = observe _ |- _ =>
-    apply tau_observe_eqit in H as <-
+    destruct (bisimulation_is_eq _ _ (tau_observe_eqit _ _ H))
   | H : VisF _ _ = observe _ |- _ =>
-    apply vis_observe_eqit in H as <-
+    destruct (bisimulation_is_eq _ _ (vis_observe_eqit _ _ _ H))
   end.
 
 Definition do {E R A B} (t : itree E R) : itree (callE A B +' E) R :=

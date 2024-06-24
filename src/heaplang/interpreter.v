@@ -31,9 +31,8 @@ Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : e
   end.
 
 Lemma heaplang_interpreter_adequacy `{!invGS Σ} `{!heaplangHGS Σ} m e σ fuel later_fuel Φ :
-  (m = Later → is_Some later_fuel) →
+  (⌜m = Later⌝ → match later_fuel with Some n => £ n | None => False end) -∗
   state_interp σ -∗
-  £ (default 0 later_fuel) -∗
   heap_inv -∗
   WP e @ m; ⊤ {{ Φ }} -∗
   |={⊤, ∅}=>
@@ -45,12 +44,10 @@ Lemma heaplang_interpreter_adequacy `{!invGS Σ} `{!heaplangHGS Σ} m e σ fuel 
         match r with | inl v => Φ v | inr LastThreadKilled => True end
     end.
 Proof.
-  iIntros (Hlat) "Hstate Hlc Hinv Hwp".
-  iDestruct (heaplang_adequacy_eval e σ (heaplang_eval_itree σ later_fuel e) with "Hstate [Hlc] Hinv Hwp") as "Heval".
+  iIntros "Hlc Hstate Hinv Hwp".
+  iMod (heaplang_adequacy_eval e σ (heaplang_eval_itree σ later_fuel e) with "[Hlc] Hstate Hinv Hwp") as "[%v [%Heval HΦ]]".
   { apply heaplang_ifn_irel. }
   { eauto. }
-  { done. }
-  iMod "Heval" as "[%v [%Heval HΦ]]".
   apply exec_ret in Heval as [n Heq].
   rewrite /heaplang_interpreter. destruct (exec fuel (heaplang_eval_itree σ later_fuel e)) eqn:Heq'.
   * apply exec_agree with (m := fuel) (r1 := s) in Heq as ->.
@@ -75,12 +72,9 @@ Lemma heaplang_interpreter_adequacy_termination `{!invGS Σ} `{!heaplangHGS Σ} 
       end⌝.
 Proof.
   iIntros "Hstate Hinv Hwp".
-  iMod lc_zero as "Hlc".
-  iDestruct (heaplang_adequacy_eval e σ (heaplang_eval_itree σ None e) with "Hstate [Hlc] Hinv Hwp") as "Heval".
+  iMod (heaplang_adequacy_eval e σ (heaplang_eval_itree σ None e) with "[] Hstate Hinv Hwp") as "[%v [%Heval HΦ]]".
   { apply heaplang_ifn_irel. }
-  { intros. discriminate. }
-  { done. }
-  iMod "Heval" as "[%v [%Heval HΦ]]".
+  { iIntros ([=]). }
   apply exec_ret in Heval as [fuel Heq].
   iModIntro. iExists fuel. iIntros (fuel' Hlt).
   rewrite /heaplang_interpreter (exec_stable fuel' fuel) // Heq //.

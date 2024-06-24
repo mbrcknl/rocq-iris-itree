@@ -39,10 +39,10 @@ Section is_trace.
   Definition is_trace (tr : trace E R) (t : itree E R) : Prop :=
     is_trace_ tr (observe t).
 
-  Local Instance is_trace_eutt_unilateral :
-    Proper (pointwise_relation (trace E R) (eutt (=) ==> impl)) is_trace.
+  Local Instance is_trace_eqit_unilateral tr b1 b2 :
+    Proper (eqit (=) b1 b2 ==> impl) (is_trace tr).
   Proof.
-    intros tr t1 t2 Heqit Htr.
+    intros t1 t2 Heqit%eutt_weak Htr.
     rewrite /is_trace. rewrite /is_trace in Htr.
     remember (observe t1) as ot1. remember (observe t2) as ot2.
     revert t1 t2 ot2 Heqot1 Heqot2 Heqit. induction Htr as [r|tr' A e a k Htr IH|A f e k|t|tr t' Htr IH]; intros t1 t2 ot2 Heqot1 Heqot2 Heqit.
@@ -65,12 +65,13 @@ Section is_trace.
       transitivity (Tau t'). { apply eqit_inv_Tau_l. reflexivity. }
       pfold. rewrite /eqit_. simpl. rewrite Heqot1. punfold Heqit.
   Qed.
-  Global Instance is_trace_eutt :
-    Proper (pointwise_relation (trace E R) (eutt (=) ==> (↔))) is_trace.
+  Global Instance is_trace_eqit tr b1 b2 :
+    Proper (eqit (=) b1 b2 ==> (↔)) (is_trace tr).
   Proof.
-    intros tr t1 t2 Heqit. split; apply is_trace_eutt_unilateral.
-    - done.
-    - by symmetry.
+    intros t1 t2 Heqit. split.
+    - by apply (is_trace_eqit_unilateral tr b1 b2).
+    - apply (is_trace_eqit_unilateral tr b2 b1). apply eqit_flip. eapply (eqit_Proper_R (=)); eauto.
+      rewrite /HeterogeneousRelations.eq_rel /HeterogeneousRelations.subrelationH. naive_solver.
   Qed.
 
   Lemma is_trace_Vis A e a tr' k :

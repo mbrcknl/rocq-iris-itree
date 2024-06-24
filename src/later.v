@@ -130,10 +130,9 @@ Section adequacy.
   Context {R : Type} {E : Type → Type}.
   Context `{!invGS Σ} {H : iHandler Σ E}.
 
-  Theorem later_adequacy_empty (t : itree (laterE +' E) R) lat Φ n `{!Sequential H}:
-    (lat = Later → is_Some n) →
-    WPi t @ laterH lat ⊕ H; ∅ {{ Φ }} -∗
-    £ (default 0 n) -∗
+  Theorem later_adequacy_empty (t : itree (laterE +' E) R) m Φ n `{!Sequential H}:
+    (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
+    WPi t @ laterH m ⊕ H; ∅ {{ Φ }} -∗
     WPi later_ifn n t @ H; ∅ {{ r,
       match r with
       | inl r => Φ r
@@ -141,29 +140,28 @@ Section adequacy.
       end
     }}.
   Proof.
-    move => Hlat. iIntros "Hwp". iRevert (n Hlat).
+    iIntros "Hlc Hwp". iRevert (n) "Hlc".
     iRevert (t Φ) "Hwp". iApply wpi_iter'; first solve_proper.
-    - iIntros "!>" (Φ t) "Hwp". iIntros (n Hlat) "Hlc".
+    - iIntros "!>" (Φ t) "Hwp". iIntros (n) "Hlc".
       rewrite later_ifn_unfold /later_ifn_loop/=. wpi_norm. by iApply wpi_ret'.
-    - iIntros "!>" (Φ t) "Hwp". iIntros (n Hlat) "Hlc".
+    - iIntros "!>" (Φ t) "Hwp". iIntros (n) "Hlc".
       iEval (rewrite later_ifn_unfold /later_ifn_loop/=). wpi_norm/=.
       iApply wpi_update. iMod "Hwp". iModIntro. by iApply "Hwp".
-    - iIntros "!>" (Φ A [[]|e] k) "HH"; iIntros (n Hlat) "Hlc".
+    - iIntros "!>" (Φ A [[]|e] k) "HH"; iIntros (n) "Hlc".
       + iEval (rewrite later_ifn_unfold /later_ifn_loop/=).
         case_bool_decide; wpi_norm/=.
         * iApply wpi_ret'. iModIntro. iPureIntro. naive_solver.
         * iApply wpi_update. iMod "HH". destruct n; simplify_eq/=.
-          -- destruct lat.
+          -- destruct m.
              ++ iApply wpi_wand; last iApply "HH".
                 ** iIntros (r) "H". destruct r; first done. by destruct l.
-                ** iIntros ([=]).
-                ** simpl. iModIntro. iApply lc_weaken; last done. lia.
+                ** iIntros "!>" ([=]).
               ++ destruct n => //.
-                 iDestruct "Hlc" as "[? ?]". iApply (lc_fupd_elim_later with "[$]").
+                 iDestruct ("Hlc" with "[//]") as "[? ?]". iApply (lc_fupd_elim_later with "[$]").
                  iModIntro. simpl. replace (n - 0) with n by lia.
                  iApply wpi_wand; last iApply "HH"; eauto.
                  iIntros (r) "H". destruct r; first done. by destruct l.
-          -- destruct lat; [|unfold is_Some in *; naive_solver] => /=.
+          -- destruct m; last first. { iDestruct ("Hlc" with "[//]") as "[]". }
              iModIntro. by iApply "HH".
       + iEval (rewrite later_ifn_unfold /later_ifn_loop/=).
         rewrite /ITree.map. wpi_norm/=.
@@ -175,10 +173,9 @@ Section adequacy.
   Qed.
 
   (* TODO: can we get this? *)
-  Theorem later_adequacy (t : itree (laterE +' E) R) lat Φ n M `{!Sequential H} :
-    (lat = Later → is_Some n) →
-    WPi t @ laterH lat ⊕ H; M {{ Φ }} -∗
-    £ (default 0 n) -∗
+  Theorem later_adequacy (t : itree (laterE +' E) R) m Φ n M `{!Sequential H} :
+    (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
+    WPi t @ laterH m ⊕ H; M {{ Φ }} -∗
     WPi later_ifn n t @ H; M {{ r,
       match r with
       | inl r => Φ r
@@ -186,12 +183,88 @@ Section adequacy.
       end
     }}.
   Proof.
-    iIntros (?) "Hwp Hlc".
+    iIntros "Hlc Hwp".
     rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
     iMod "Hwp". iModIntro.
-    iDestruct (later_adequacy_empty with "Hwp Hlc") as "Hwp"; [done|].
+    iDestruct (later_adequacy_empty with "Hlc Hwp") as "Hwp".
     iApply wpi_wand; last done. iIntros (r). destruct r.
     - eauto.
     - (* Where do we get the mask from? *)
   Abort.
 End adequacy.
+
+Section trace.
+  Context {R : Type} {E : Type → Type}.
+
+  Fixpoint interp_tr_later (n : option nat) (tr : trace (laterE +' E) R) : trace E (R + later_exhausted) :=
+    match tr with
+    | TRet r => TRet (inl r)
+    | TVis A (inl1 ELater) a k =>
+        match n with
+        | Some 0 => TRet (inr LaterExhausted)
+        | Some (S n') => interp_tr_later (Some n') k
+        | None => interp_tr_later None k
+        end
+    | TVis A (inr1 e) a k => TVis A e a (interp_tr_later n k)
+    | TVisEmpty A (inr1 e) => TVisEmpty A e
+    | _ => TCut
+    end.
+
+  Lemma later_trace' (tr : trace (laterE +' E) R) n t :
+    is_trace tr t →
+    is_trace (interp_tr_later (Some n) tr) (later_ifn (Some n) t).
+  Proof.
+    intros Htr. rewrite /is_trace in Htr.
+    revert t tr Htr. induction n; intros t tr Htr.
+    - remember (observe t) as ot. revert t Heqot.
+      induction Htr; intros t_ Heqot; simplify_obs.
+      * constructor.
+      * destruct e as [e|e]; first destruct e as [].
+        + rewrite later_ifn_unfold. rewrite /later_ifn_loop /=.
+          simpl_itree. constructor.
+        + simpl. rewrite later_ifn_unfold. rewrite /later_ifn_loop. simpl_itree.
+          rewrite bind_trigger. constructor. by apply IHHtr.
+      * destruct e as [e|e].
+        + destruct e. constructor.
+        + rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. rewrite bind_trigger.
+          by constructor.
+      * constructor.
+      * rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. by apply IHHtr.
+    - remember (observe t) as ot. revert t Heqot IHn.
+      induction Htr; intros t_ Heqot IHn; simplify_obs.
+      * constructor.
+      * destruct e as [e|e]; first destruct e as [].
+        + rewrite later_ifn_unfold. rewrite /later_ifn_loop /=.
+          simpl_itree. replace (n - 0) with n by lia. apply IHn.
+          by destruct a.
+        + simpl. rewrite later_ifn_unfold. rewrite /later_ifn_loop. simpl_itree.
+          rewrite bind_trigger. constructor. by apply IHHtr.
+      * destruct e as [e|e].
+        + destruct e. constructor.
+        + rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. rewrite bind_trigger.
+          by constructor.
+      * constructor.
+      * rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. by apply IHHtr.
+  Qed.
+  Lemma later_trace (tr : trace (laterE +' E) R) n t :
+    is_trace tr t →
+    is_trace (interp_tr_later n tr) (later_ifn n t).
+  Proof.
+    intros Htr. destruct n; first by apply later_trace'.
+    rewrite /is_trace in Htr.
+    remember (observe t) as ot. revert t Heqot.
+    induction Htr; intros t_ Heqot; simplify_obs.
+    * constructor.
+    * destruct e as [e|e]; first destruct e as [].
+      + rewrite later_ifn_unfold. rewrite /later_ifn_loop /=.
+        simpl_itree. apply IHHtr. by destruct a.
+      + simpl. rewrite later_ifn_unfold. rewrite /later_ifn_loop. simpl_itree.
+        rewrite bind_trigger. constructor. by apply IHHtr.
+    * destruct e as [e|e].
+      + destruct e. constructor.
+      + rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. rewrite bind_trigger.
+        by constructor.
+    * constructor.
+    * rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. by apply IHHtr.
+  Qed.
+End trace.

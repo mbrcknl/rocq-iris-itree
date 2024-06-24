@@ -22,12 +22,11 @@ Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
 Section adequacy.
   Context {Σ} `{!invGS Σ} `{!heaplangHGS Σ}.
 
-  Lemma heaplang_adequacy_irel R t σ te (Φ : R → iProp Σ) n lat :
+  Lemma heaplang_adequacy_irel R t σ te (Φ : R → iProp Σ) n m :
     heaplang_irel σ n t te →
-    (lat = Later → is_Some n) →
+    (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     state_interp σ -∗
-    £ (default 0 n) -∗
-    WPi t @ heaplangH lat; ⊤ {{ Φ }} -∗
+    WPi t @ heaplangH m; ⊤ {{ Φ }} -∗
     |={⊤, ∅}=> ∃ v, ⌜te ≈ Ret v⌝ ∗
       match v with
       | inr UbCrash => False
@@ -36,25 +35,24 @@ Section adequacy.
           match r with | inl v => Φ v | inr _ => True end
       end.
   Proof.
-    iIntros ((?&?&?&?&?&?&Hte) ?) "Hs Hlc Hwp".
+    iIntros ((?&?&?&?&?&?&Hte)) "Hlc Hs Hwp".
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; [done|].
     iDestruct (demonic_adequacy with "Hwp") as "Hwp"; [done|].
     iDestruct (state_adequacy with "Hs Hwp") as "Hwp"; [done|].
     rewrite -wpi_clear_mask. iMod "Hwp".
-    iDestruct (later_adequacy_empty with "Hwp Hlc") as "Hwp"; [done|].
+    iDestruct (later_adequacy_empty with "Hlc Hwp") as "Hwp".
     iDestruct (voidE_adequacy with "Hwp") as "Hwp".
     iDestruct (ub_adequacy with "Hwp") as "Hwp".
     iApply voidE_terminates_empty_mask.
     by rewrite Hte.
   Qed.
 
-  Lemma heaplang_adequacy_eval e σ te (Φ : val → iProp Σ) n lat :
+  Lemma heaplang_adequacy_eval e σ te (Φ : val → iProp Σ) n m :
     heaplang_eval e σ n te →
-    (lat = Later → is_Some n) →
+    (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     state_interp σ -∗
-    £ (default 0 n) -∗
     heap_inv -∗
-    WP e @ lat; ⊤ {{ Φ }} -∗
+    WP e @ m; ⊤ {{ Φ }} -∗
     |={⊤, ∅}=> ∃ v, ⌜te ≈ Ret v⌝ ∗
       match v with
       | inr UbCrash => False
@@ -63,8 +61,8 @@ Section adequacy.
           match r with | inl v => Φ v | inr _ => True end
       end.
   Proof.
-    iIntros (? ?) "Hs Hlc Hinv Hwp".
-    iApply (heaplang_adequacy_irel with "Hs Hlc"); [done..|].
+    iIntros (?) "Hlc Hs Hinv Hwp".
+    iApply (heaplang_adequacy_irel with "Hlc Hs"); [done..|].
     iApply wpi_bind. iApply wpi_wand. 2: { rewrite wp_heaplang_eq. by iApply "Hwp". }
     iIntros (?) "?". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
   Qed.

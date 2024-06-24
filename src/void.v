@@ -1,7 +1,7 @@
-From ITree Require Import ITree Eqit.
+From ITree Require Import ITree Eqit TranslateFacts.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop fancy_updates.
-From iris.itree Require Import wpi itree handler.
+From iris.itree Require Import wpi itree handler trace.
 
 (* TODO: rename to emptyE *)
 Inductive voidE : Type → Type :=.
@@ -71,3 +71,40 @@ Section adequacy.
     done.
   Qed.
 End adequacy.
+
+Section trace.
+  Context {R : Type} {E : Type → Type}.
+
+  Fixpoint insert_voidE_tr (tr : trace E R) : trace (E +' voidE) R :=
+    match tr with
+    | TRet r => TRet r
+    | TVis A e a k => TVis A (inl1 e) a (insert_voidE_tr k)
+    | TVisEmpty A e => TVisEmpty A (inl1 e)
+    | TCut => TCut
+    end.
+
+  Lemma void_trace (tr : trace E R) t :
+    is_trace tr t →
+    is_trace (insert_voidE_tr tr) (insert_voidE t).
+  Proof.
+    intros Htr. rewrite /is_trace in Htr.
+    remember (observe t) as ot. revert t Heqot.
+    induction Htr; intros t_ Heqot; simplify_obs.
+    - constructor.
+    - rewrite /insert_voidE translate_vis. constructor. by apply IHHtr.
+    - rewrite /insert_voidE translate_vis. by constructor.
+    - constructor.
+    - rewrite /insert_voidE translate_tau. constructor. by apply IHHtr.
+  Qed.
+
+  Lemma void_trace_ret_inv (t : itree E R) r :
+    is_trace (TRet r) t →
+    t ≈ Ret r.
+  Proof.
+    intros Htr. rewrite /is_trace in Htr.
+    remember (TRet r) as tr. remember (observe t) as ot. revert t Heqot Heqtr.
+    induction Htr; intros t_ Heqot Heqtr; simplify_obs; simplify_eq.
+    - done.
+    - apply tau_eutt_RR_l; eauto. apply _.
+  Qed.
+End trace.

@@ -210,3 +210,34 @@ Section wp_ub.
     - contradiction.
   Qed.
 End wp_ub.
+
+Section ub_trace.
+  Context {R : Type} {E : Type → Type}.
+
+  Fixpoint interp_tr_ub (tr : trace (ubE +' E) R) : trace E (R + ub_crash) :=
+    match tr with
+    | TRet r => TRet (inl r)
+    | TVis A (inr1 e) a k => TVis A e a (interp_tr_ub k)
+    | TVisEmpty A (inl1 EUb) => TRet (inr UbCrash)
+    | TVisEmpty A (inr1 e) => TVisEmpty A e
+    | _ => TCut
+    end.
+
+  Lemma ub_trace (tr : trace (ubE +' E) R) t :
+    is_trace tr t →
+    is_trace (interp_tr_ub tr) (ub_ifn t).
+  Proof.
+    intros Htr. rewrite /is_trace in Htr.
+    remember (observe t) as ot. revert t Heqot.
+    induction Htr; intros t_ Heqot; simplify_obs.
+    - constructor.
+    - destruct e as [e|e]; first destruct e as [].
+      * constructor.
+      * simpl. rewrite ub_ifn_vis. constructor. constructor. by apply IHHtr.
+    - destruct e as [e|e].
+      * destruct e. constructor.
+      * rewrite ub_ifn_vis. by constructor.
+    - constructor.
+    - rewrite ub_ifn_tau. constructor. by apply IHHtr.
+  Qed.
+End ub_trace.
