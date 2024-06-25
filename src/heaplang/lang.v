@@ -11,14 +11,14 @@ From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
 
+(** The event type for heaplang. *)
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' laterE +' ubE.
 Global Hint Transparent heaplangE : itree_auto.
 
-Definition step `{laterE -< E} : itree E () :=
-  trigger ELater.
-Definition yield `{threadpoolE -< E} : itree E () :=
-  trigger EYield.
+(** [yield] precisely if an expression is not a value.
 
+This appears many times in the below specification of the semantics of
+heaplang. The reason is explained later by example. *)
 Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} `{laterE -< E} : itree E () :=
   match to_val e with
   | Some _ => Ret ()
@@ -26,7 +26,7 @@ Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} `{laterE -< E} : 
   end.
 Arguments yield_if_not_val !_ / _.
 
-(* TODO: remove these duplicate definitions *)
+(* TODO: Remove these duplicate definitions (already in [ub.v] but without [do]) *)
 Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
   (match o with | Some x => Ret x | None => ub end)%itree.
 Notation "x ?" := (do $ some_or_ub x) (at level 10, format "x ?") : itree_scope.
@@ -34,31 +34,37 @@ Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E 
   (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
 Notation "x ??" := (do $ some_some_or_ub x) (at level 10, format "x ??") : itree_scope.
 
+(** Cast a value to [RecV]. *)
 Definition val_to_RecV (v : val) : option (binder * binder * expr) :=
   match v with
   | RecV f_ x_ e => Some (f_, x_, e)
   | _ => None
   end.
+(** Cast a value to [LitInt]. *)
 Definition val_to_int (v : val) : option Z :=
   match v with
   | LitV (LitInt n) => Some n
   | _ => None
   end.
+(** Cast a value to [LitLoc]. *)
 Definition val_to_loc (v : val) : option loc :=
   match v with
   | LitV (LitLoc l) => Some l
   | _ => None
   end.
+(** Cast a value to [PairV]. *)
 Definition val_to_pair (v : val) : option (val * val) :=
   match v with
   | PairV v1 v2 => Some (v1, v2)
   | _ => None
   end.
+(** Cast a value to [LitBool]. *)
 Definition val_to_bool (v : val) : option bool :=
   match v with
   | LitV (LitBool b) => Some b
   | _ => None
   end.
+(** Cast a value to [InjLV]/[InjRV]. *)
 Definition val_to_sum (v : val) : option (val + val) :=
   match v with
   | InjLV v => Some (inl v)
@@ -66,331 +72,387 @@ Definition val_to_sum (v : val) : option (val + val) :=
   | _ => None
   end.
 
-Lemma Decision_range' P n :
-  (∀ i, Decision (P i)) →
-  Decision (∀ i, (0 ≤ i)%Z → (i < Z.of_nat n)%Z → P i).
-Proof.
-  intros HPdec.
-  induction n.
-  - left. intros i Hlower Hupper. lia.
-  - destruct (decide (P n)) as [Heq|Hneq].
-    * destruct (decide (∀ i : Z, (0 ≤ i)%Z → (i < n)%Z → P i)) as [HP|HP].
-      + left. intros i Hlower Hupper.
-        destruct (decide (i = n)) as [->|Hi]; first done.
-        apply HP; lia.
-      + right. intros HP'.
-        apply HP. intros i Hlower Hupper.
-        destruct (decide (i = n)) as [->|Hi]; first done.
-        apply HP'; lia.
-    * right. intros HP. apply Hneq. apply HP; lia.
-Qed.
-Lemma Decision_range P n :
-  (∀ i, Decision (P i)) →
-  Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → P i).
-Proof.
-  intros HP.
-  destruct (decide (n < 0)%Z) as [Hleq|Hleq].
-  * left. intros i Hlower Hupper. lia.
-  * replace n with (Z.of_nat (Z.to_nat n)); first by apply Decision_range'.
-    lia.
-Qed.
-Instance free_locations_dec n l σ :
-  Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)).
-Proof. apply Decision_range. apply _. Qed.
-Definition free_locations n σ : Set :=
-  {l : loc | bool_decide (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None))}.
-Global Hint Transparent free_locations : itree_auto.
-Instance free_locations_Inhabited n σ :
-  Inhabited (free_locations n σ).
-Proof.
-  constructor. apply exist with (x := Loc.fresh (dom σ.(heap))).
-  apply bool_decide_pack.
-  intros i Hlower Hupper.
-  apply not_elem_of_dom. by apply Loc.fresh_fresh.
-Defined.
-Instance free_locations_EqDecision n σ :
-  EqDecision (free_locations n σ).
-Proof.
-  intros l1 l2.
-  destruct (decide (`l1 = `l2)) as [Heq|Hneq].
-  - apply dsig_eq in Heq. by left.
-  - right. intros Heq. apply Hneq. by apply dsig_eq.
-Qed.
+Section free_locations.
+  (** Version of [Decision_range] using [Z] inequalities instead of [nat]
+  inequalities. *)
+  Lemma Decision_range_Z P n :
+    (∀ i, Decision (P i)) →
+    Decision (∀ i, (0 ≤ i)%Z → (i < Z.of_nat n)%Z → P i).
+  Proof.
+    intros HPdec.
+    induction n.
+    - left. intros i Hlower Hupper. lia.
+    - destruct (decide (P n)) as [Heq|Hneq].
+      * destruct (decide (∀ i : Z, (0 ≤ i)%Z → (i < n)%Z → P i)) as [HP|HP].
+        + left. intros i Hlower Hupper.
+          destruct (decide (i = n)) as [->|Hi]; first done.
+          apply HP; lia.
+        + right. intros HP'.
+          apply HP. intros i Hlower Hupper.
+          destruct (decide (i = n)) as [->|Hi]; first done.
+          apply HP'; lia.
+      * right. intros HP. apply Hneq. apply HP; lia.
+  Qed.
+  (** If [P i] is decidable for all [i], then whether it holds in a finite range
+  is also decidable. *)
+  Lemma Decision_range P n :
+    (∀ i, Decision (P i)) →
+    Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → P i).
+  Proof.
+    intros HP.
+    destruct (decide (n < 0)%Z) as [Hleq|Hleq].
+    * left. intros i Hlower Hupper. lia.
+    * replace n with (Z.of_nat (Z.to_nat n)); first by apply Decision_range_Z.
+      lia.
+  Qed.
 
-Definition store' `{!stateE state -< E} `{ubE -< E} (l : loc) (x : option val) : itree E val :=
-  σ ← trigger EGetState;
-  v ← some_some_or_ub (σ.(heap) !! l);
-  trigger (ESetState (state_upd_heap (<[l:=x]>) σ));;
-  Ret v.
-Definition store `{!stateE state -< E} `{ubE -< E} (l : loc) (x : val) : itree E val :=
-  store' l (Some x).
-Definition load `{!stateE state -< E} `{ubE -< E} (l : loc) : itree E val :=
-  σ ← trigger EGetState;
-  some_some_or_ub (σ.(heap) !! l).
+  (** Whether a range of the heap is free is decidable. *)
+  Instance free_locations_dec n l σ :
+    Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None)).
+  Proof. apply Decision_range. apply _. Qed.
+  (** Available locations in heap [σ] for allocating a block of [n] adjacent
+  memory cells. *)
+  Definition free_locations n σ : Set :=
+    {l : loc | bool_decide (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ.(heap) !! (l +ₗ i) = None))}.
+  Global Hint Transparent free_locations : itree_auto.
+  (** The heap always has more space. *)
+  Global Instance free_locations_Inhabited n σ :
+    Inhabited (free_locations n σ).
+  Proof.
+    constructor. apply exist with (x := Loc.fresh (dom σ.(heap))).
+    apply bool_decide_pack.
+    intros i Hlower Hupper.
+    apply not_elem_of_dom. by apply Loc.fresh_fresh.
+  Defined.
+  Instance free_locations_EqDecision n σ :
+    EqDecision (free_locations n σ).
+  Proof.
+    intros l1 l2.
+    destruct (decide (`l1 = `l2)) as [Heq|Hneq].
+    - apply dsig_eq in Heq. by left.
+    - right. intros Heq. apply Hneq. by apply dsig_eq.
+  Qed.
+End free_locations.
 
-Definition step_ret {E} `{laterE -< E} (v : val) : itree E val :=
-  step ;; Ret v.
+Section semantics.
+  (** Store [x] at memory cell [l] and return the old value. It exhibits UB if
+  the memory cell at [l] is currently free. If [x = None], [l] gets
+  deallocated. *)
+  Definition store' `{!stateE state -< E} `{ubE -< E} (l : loc) (x : option val) : itree E val :=
+    σ ← trigger EGetState;
+    v ← some_some_or_ub (σ.(heap) !! l);
+    trigger (ESetState (state_upd_heap (<[l:=x]>) σ));;
+    Ret v.
+  (** Store [x] at memory cell [l] and return the old value. It exhibits UB if
+  the memory cell at [l] is currently free. *)
+  Definition store `{!stateE state -< E} `{ubE -< E} (l : loc) (x : val) : itree E val :=
+    store' l (Some x).
+  (** Load memory cell [l]. It exhibits UB if the memory cell is free. *)
+  Definition load `{!stateE state -< E} `{ubE -< E} (l : loc) : itree E val :=
+    σ ← trigger EGetState;
+    some_some_or_ub (σ.(heap) !! l).
 
-Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
-  let yield := do yield in
-  let yield_if_not_val e := do (yield_if_not_val e) in
-  let step := do step in
-  let store' l x := do (store' l x) in
-  let store l x := do (store l x) in
-  let load l := do (load l) in
-  let ub := do ub in
-  let assert P `{Decision P} := do (assert P) in
-  let step_ret v := do (step_ret v) in
-  let compile_expr_yield e := (v ← compile_expr' e ; yield_if_not_val e ;; Ret v)%itree in
-  match e with
-  | Val v => Ret v
-  | Rec f x e => step_ret (RecV f x e)
-  | App e1 e2 =>
-      x ← compile_expr_yield e2;
-      f ← compile_expr_yield e1;
-      '(f_, x_, e) ← (val_to_RecV f)?;
-      let body := subst' x_ x  (subst' f_ f e) in
-      step;;
-      yield_if_not_val body;;
-      call body
-  | UnOp op e =>
-      v ← compile_expr_yield e;
-      v' ← (un_op_eval op v)?;
-      step_ret v'
-  | BinOp op e1 e2 =>
-      v2 ← compile_expr_yield e2;
-      v1 ← compile_expr_yield e1;
-      v ← (bin_op_eval op v1 v2)?;
-      step_ret v
-  | If e0 e1 e2 =>
-      v0 ← compile_expr_yield e0;
-      b ← (val_to_bool v0)?;
-      if b then
-        (* if true then e1 else e2 ~> e1 (must yield here!) ~> ... *)
+  (** Do a step and then return [v]. This is used to ensure that the
+  postcondition is asserted under a later modality. *)
+  Definition step_ret {E} `{laterE -< E} (v : val) : itree E val :=
+    later.step ;; Ret v.
+
+  (** The semantic interpretation of [e], before rectifying the recursive
+  calls. *)
+  Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
+    (* FIXME: Get rid of these [do]s in favor of [ITreeToTranslate] magic. *)
+    (* We redefine a bunch of things we need to lift them from
+    [itree heaplangE val] to [itree (callE expr val +' heaplangE) val] using
+    [do]. This helps with automation, which can cancel out [interp (rec f)] and
+    [do]. *)
+    let yield := do yield in
+    let yield_if_not_val e := do (yield_if_not_val e) in
+    let step := do later.step in
+    let store' l x := do (store' l x) in
+    let store l x := do (store l x) in
+    let load l := do (load l) in
+    let ub := do ub in
+    let assert P `{Decision P} := do (assert P) in
+    let step_ret v := do (step_ret v) in
+    (* [compile_expr_yield e] evaluates [e] and yields precisely if it did any
+    work. If [e] is a value on the other hand, this is just returned. This
+    means it can be used to evaluate arguments of operations, only introducing
+    [yield]s if the entire operation is not atomic. *)
+    let compile_expr_yield e := (v ← compile_expr' e ; yield_if_not_val e ;; Ret v)%itree in
+    (* The general pattern for the placement of [step] and [yield] can be
+    loosely explained as follows. In order to prove the results in
+    [opsem_adequacy.v], we decide to model the semantics as closely to the
+    operational semantics as possible (this is a design decision: one could
+    still have a meaningful semantics that is defined in another way).
+    Whenever we do something corresponding to an opsem step [e ~> e'], there
+    should be a [step] to mark that "progress has been made". Moreover, there
+    should be a [yield] in so far that [e'] is not a value. To understand
+    why, consider evaluating some [e] which steps to a value in one step
+    [e ~> v]. In that case, [e] should be an atomic expression, and hence it
+    should not [yield] (otherwise, when establishing its [WPi], one would need
+    to reestablish the invariants). To understand this reasoning better, look
+    at the annotations for [App] case below. *)
+    match e with
+    (* If [e] is a value, the computation is already over and no yield or step
+    is necessary. This is the only place [Ret] appears. In every other case
+    (when work has to be done), [step_ret] is used so that a [step] is done
+    before returning. *)
+    | Val v => Ret v
+    (* [Rec f x e ~> RecV f x e] is a single step ending in a value, so we only
+    need to do a [step], not a [yield]. *)
+    | Rec f x e => step_ret (RecV f x e)
+    | App e1 e2 =>
+        (* [App e1 e2 ~>* App e1 x] for [x] a value. We recursively evaluate
+        [e2]. [compile_expr_yield e2] ends in a [step] and [yield] if at least one
+        opsem step was taken, so the opsem steps [App e1 e2 ~>* App e1 x ~>* App f x]
+        compose with [step] and [yield] appropriately inserted (see note above). *)
+        x ← compile_expr_yield e2;
+        (* [App e1 x ~>* App f x] (for [f] also a value). *)
+        f ← compile_expr_yield e1;
+        '(f_, x_, e) ← (val_to_RecV f)?;
+        let body := subst' x_ x  (subst' f_ f e) in
         step;;
-        yield_if_not_val e1;;
-        compile_expr' e1
-      else
-        step;;
-        yield_if_not_val e2;;
-        compile_expr' e2
-  | Pair e1 e2 =>
-      v2 ← compile_expr_yield e2;
-      v1 ← compile_expr_yield e1;
-      step_ret (PairV v1 v2)
-  | Fst e =>
-      v ← compile_expr_yield e;
-      '(x, _) ← (val_to_pair v)?;
-      step_ret x
-  | Snd e =>
-      v ← compile_expr_yield e;
-      '(_, y) ← (val_to_pair v)?;
-      step_ret y
-  | InjL e =>
-      v ← compile_expr_yield e;
-      step_ret (InjLV v)
-  | InjR e =>
-      v ← compile_expr_yield e;
-      step_ret (InjRV v)
-  | Case e0 e1 e2 =>
-      v0' ← compile_expr_yield e0;
-      v0 ← (val_to_sum v0')?;
-      match v0 with
-      | inl v =>
-          step ;;
-          yield ;;
-          call (App e1 (Val v))
-      | inr v =>
-          step ;;
-          yield ;;
-          call (App e2 (Val v))
-      end
-  | Fork e =>
-      thread ← trigger EFork;
-      match thread with
-      | CurrentThread => step_ret (LitV LitUnit)
-      | NewThread =>
-          v ← compile_expr_yield e;
-          kill_thread
-      end
-  | AllocN ne e =>
-      v ← compile_expr_yield e;
-      n' ← compile_expr_yield ne;
-      n ← (val_to_int n')?;
-      assert (0 < n)%Z;;
-      σ ← trigger EGetState;
-      l ← trigger (EDemonic (free_locations n σ));
-      trigger (ESetState (state_init_heap (`l) n v σ));;
-      step_ret (LitV (LitLoc (`l)))
-  | Free e =>
-      l' ← compile_expr_yield e;
-      l ← (val_to_loc l')?;
-      store' l None;;
-      step_ret (LitV LitUnit)
-  | Load e =>
-      l' ← compile_expr_yield e;
-      l ← (val_to_loc l')?;
-      v ← load l;
-      step_ret v
-  | Store e1 e2 =>
-      v ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
-      l ← (val_to_loc l')?;
-      store l v;;
-      step_ret (LitV LitUnit)
-  | Xchg e1 e2 =>
-      v ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
-      l ← (val_to_loc l')?;
-      v' ← store l v;
-      step_ret v'
-  | CmpXchg e1 e2 e3 =>
-      v2 ← compile_expr_yield e3;
-      v1 ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
-      l ← (val_to_loc l')?;
-      w ← load l;
-      (* Asserts that equality coincides with the equality of the language. *)
-      assert (vals_compare_safe v1 w);;
-      if decide (v1 = w) then
-        store l v2;;
-        step_ret (PairV w (LitV (LitBool true)))
-      else step_ret (PairV w (LitV (LitBool false)))
-  | FAA e1 e2 =>
-      v' ← compile_expr_yield e2;
-      l' ← compile_expr_yield e1;
-      v ← (val_to_int v')?;
-      l ← (val_to_loc l')?;
-      w ← load l;
-      n ← (val_to_int w)?;
-      store l (LitV (LitInt (n + v)));;
-      step_ret (LitV (LitInt n))
-  | _ => ub
-  end%itree.
+        yield_if_not_val body;;
+        call body
+    | UnOp op e =>
+        v ← compile_expr_yield e;
+        v' ← (un_op_eval op v)?;
+        step_ret v'
+    | BinOp op e1 e2 =>
+        v2 ← compile_expr_yield e2;
+        v1 ← compile_expr_yield e1;
+        v ← (bin_op_eval op v1 v2)?;
+        step_ret v
+    | If e0 e1 e2 =>
+        v0 ← compile_expr_yield e0;
+        b ← (val_to_bool v0)?;
+        if b then
+          (* if true then e1 else e2 ~> e1 (must yield here!) ~> ... *)
+          step;;
+          yield_if_not_val e1;;
+          compile_expr' e1
+        else
+          step;;
+          yield_if_not_val e2;;
+          compile_expr' e2
+    | Pair e1 e2 =>
+        v2 ← compile_expr_yield e2;
+        v1 ← compile_expr_yield e1;
+        step_ret (PairV v1 v2)
+    | Fst e =>
+        v ← compile_expr_yield e;
+        '(x, _) ← (val_to_pair v)?;
+        step_ret x
+    | Snd e =>
+        v ← compile_expr_yield e;
+        '(_, y) ← (val_to_pair v)?;
+        step_ret y
+    | InjL e =>
+        v ← compile_expr_yield e;
+        step_ret (InjLV v)
+    | InjR e =>
+        v ← compile_expr_yield e;
+        step_ret (InjRV v)
+    | Case e0 e1 e2 =>
+        v0' ← compile_expr_yield e0;
+        v0 ← (val_to_sum v0')?;
+        match v0 with
+        | inl v =>
+            step ;;
+            yield ;;
+            call (App e1 (Val v))
+        | inr v =>
+            step ;;
+            yield ;;
+            call (App e2 (Val v))
+        end
+    | Fork e =>
+        thread ← trigger EFork;
+        match thread with
+        | CurrentThread => step_ret (LitV LitUnit)
+        | NewThread =>
+            v ← compile_expr_yield e;
+            kill_thread
+        end
+    | AllocN ne e =>
+        v ← compile_expr_yield e;
+        n' ← compile_expr_yield ne;
+        n ← (val_to_int n')?;
+        assert (0 < n)%Z;;
+        σ ← trigger EGetState;
+        l ← trigger (EDemonic (free_locations n σ));
+        trigger (ESetState (state_init_heap (`l) n v σ));;
+        step_ret (LitV (LitLoc (`l)))
+    | Free e =>
+        l' ← compile_expr_yield e;
+        l ← (val_to_loc l')?;
+        store' l None;;
+        step_ret (LitV LitUnit)
+    | Load e =>
+        l' ← compile_expr_yield e;
+        l ← (val_to_loc l')?;
+        v ← load l;
+        step_ret v
+    | Store e1 e2 =>
+        v ← compile_expr_yield e2;
+        l' ← compile_expr_yield e1;
+        l ← (val_to_loc l')?;
+        store l v;;
+        step_ret (LitV LitUnit)
+    | Xchg e1 e2 =>
+        v ← compile_expr_yield e2;
+        l' ← compile_expr_yield e1;
+        l ← (val_to_loc l')?;
+        v' ← store l v;
+        step_ret v'
+    | CmpXchg e1 e2 e3 =>
+        v2 ← compile_expr_yield e3;
+        v1 ← compile_expr_yield e2;
+        l' ← compile_expr_yield e1;
+        l ← (val_to_loc l')?;
+        w ← load l;
+        (* Asserts that equality coincides with the equality of the language. *)
+        assert (vals_compare_safe v1 w);;
+        if decide (v1 = w) then
+          store l v2;;
+          step_ret (PairV w (LitV (LitBool true)))
+        else step_ret (PairV w (LitV (LitBool false)))
+    | FAA e1 e2 =>
+        v' ← compile_expr_yield e2;
+        l' ← compile_expr_yield e1;
+        v ← (val_to_int v')?;
+        l ← (val_to_loc l')?;
+        w ← load l;
+        n ← (val_to_int w)?;
+        store l (LitV (LitInt (n + v)));;
+        step_ret (LitV (LitInt n))
+    | _ => ub
+    end%itree.
 
-Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
+  Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
 
-Definition compile_expr_yield (e : expr) : itree heaplangE val :=
-  v ← compile_expr e ; yield_if_not_val e ;; Ret v.
-Arguments compile_expr_yield !_.
+  Definition compile_expr_yield (e : expr) : itree heaplangE val :=
+    v ← compile_expr e ; yield_if_not_val e ;; Ret v.
+  Arguments compile_expr_yield !_.
 
-Definition compile_expr_kill {R} (e : expr) : itree heaplangE R :=
-  compile_expr_yield e ;; kill_thread.
-Arguments compile_expr_kill !_.
+  Definition compile_expr_kill {R} (e : expr) : itree heaplangE R :=
+    compile_expr_yield e ;; kill_thread.
+  Arguments compile_expr_kill !_.
 
-Lemma compile_expr_val (v : val) :
-  compile_expr (Val v) ≈ Ret v.
-Proof. rewrite /compile_expr/compile_expr'. by eutt_norm. Qed.
+  Lemma compile_expr_val (v : val) :
+    compile_expr (Val v) ≈ Ret v.
+  Proof. rewrite /compile_expr/compile_expr'. by eutt_norm. Qed.
 
-Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
-  match Ki with
-  | ResolveLCtx _ _ _ => False
-  | ResolveMCtx _ _ => False
-  | ResolveRCtx _ _ => False
-  | _ => True
-  end.
+  Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
+    match Ki with
+    | ResolveLCtx _ _ _ => False
+    | ResolveMCtx _ _ => False
+    | ResolveRCtx _ _ => False
+    | _ => True
+    end.
 
 
-Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
-  supported_subset_ectx Ki →
-  compile_expr (fill_item Ki e) ≈
-    v ← compile_expr e;
-    yield_if_not_val e;;
-    compile_expr (fill_item Ki (Val v)).
-Proof.
-  intros Hsubset. destruct Ki; simpl; rewrite /compile_expr; try contradiction;
-  eutt_norm; simpl; by eutt_norm.
-Qed.
+  Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
+    supported_subset_ectx Ki →
+    compile_expr (fill_item Ki e) ≈
+      v ← compile_expr e;
+      yield_if_not_val e;;
+      compile_expr (fill_item Ki (Val v)).
+  Proof.
+    intros Hsubset. destruct Ki; simpl; rewrite /compile_expr; try contradiction;
+    eutt_norm; simpl; by eutt_norm.
+  Qed.
 
-Lemma split_last {A} (xs : list A) :
-  length xs > 0 →
-  ∃ x xs', xs = xs' ++ [x].
-Proof.
-  intros Hlen.
-  induction xs as [|y ys IH]. { simpl in Hlen. lia. }
-  destruct (length ys) as [|n] eqn:Hlen'.
-  - apply nil_length_inv in Hlen' as ->. by exists y, [].
-  - assert (S n > 0) as HS; first lia.
-    destruct (IH HS) as (x&xs'&->). by exists x, (y :: xs').
-Qed.
+  Lemma split_last {A} (xs : list A) :
+    length xs > 0 →
+    ∃ x xs', xs = xs' ++ [x].
+  Proof.
+    intros Hlen.
+    induction xs as [|y ys IH]. { simpl in Hlen. lia. }
+    destruct (length ys) as [|n] eqn:Hlen'.
+    - apply nil_length_inv in Hlen' as ->. by exists y, [].
+    - assert (S n > 0) as HS; first lia.
+      destruct (IH HS) as (x&xs'&->). by exists x, (y :: xs').
+  Qed.
 
-Lemma list_singleton {A} (xs : list A) :
-  length xs = 1 →
-  ∃ x, xs = [x].
-Proof.
-  intros Hlen.
-  destruct xs as [|x xs']; first done.
-  exists x. simpl in Hlen. injection Hlen as Hlen.
-  by apply nil_length_inv in Hlen as ->.
-Qed.
+  Lemma list_singleton {A} (xs : list A) :
+    length xs = 1 →
+    ∃ x, xs = [x].
+  Proof.
+    intros Hlen.
+    destruct xs as [|x xs']; first done.
+    exists x. simpl in Hlen. injection Hlen as Hlen.
+    by apply nil_length_inv in Hlen as ->.
+  Qed.
 
-Lemma fill_item_not_val Ki e :
-  yield_if_not_val (fill_item Ki e) ≈ (yield : itree heaplangE ()).
-Proof.
-  rewrite /yield_if_not_val. by destruct Ki.
-Qed.
-Lemma fill_not_val K e :
-  length K > 0 →
-  yield_if_not_val (fill K e) ≈ (yield : itree heaplangE ()).
-Proof.
-  intros Hlen.
-  unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
-  rewrite fill_app /= fill_item_not_val //.
-Qed.
+  Lemma fill_item_not_val Ki e :
+    yield_if_not_val (fill_item Ki e) ≈ (yield : itree heaplangE ()).
+  Proof.
+    rewrite /yield_if_not_val. by destruct Ki.
+  Qed.
+  Lemma fill_not_val K e :
+    length K > 0 →
+    yield_if_not_val (fill K e) ≈ (yield : itree heaplangE ()).
+  Proof.
+    intros Hlen.
+    unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
+    rewrite fill_app /= fill_item_not_val //.
+  Qed.
 
-Lemma compile_expr_bind_ind K e l :
-  Forall supported_subset_ectx K →
-  length K = l →
-  l > 0 →
-  compile_expr (fill K e) ≈
-    v ← compile_expr e;
-    yield_if_not_val e;;
-    compile_expr (fill K (Val v)).
-Proof.
-  revert K. induction l as [|n IH]; intros K Hsubset Hlen Hne.
-  { apply nil_length_inv in Hlen. lia. }
-  destruct n as [|n'].
-  { apply list_singleton in Hlen as [x ->]. simpl. rewrite compile_expr_bind_item //.
-    by rewrite Forall_singleton in Hsubset. }
-  unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
-  apply Forall_app in Hsubset as [HsubsetK' HsubsetKi].
-  rewrite Forall_singleton in HsubsetKi. rewrite app_length /= in Hlen.
-  rewrite fill_app /=. rewrite compile_expr_bind_item //; first rewrite IH //; try lia.
-  rewrite bind_bind. f_equiv. intros v. rewrite fill_app /=.
-  rewrite bind_bind. f_equiv. intros _.
-  rewrite compile_expr_bind_item //. f_equiv. intros v'. rewrite !fill_not_val //.
-  - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
-    rewrite Hlen. lia.
-  - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
-    rewrite Hlen. lia.
-Qed.
-Lemma compile_expr_bind K e :
-  Forall supported_subset_ectx K →
-  length K > 0 →
-  compile_expr (fill K e) ≈
-    v ← compile_expr e;
-    yield_if_not_val e;;
-    compile_expr (fill K (Val v)).
-Proof.
-  intros Hsubset Hne. by apply compile_expr_bind_ind with (l := length K).
-Qed.
-
-Lemma compile_expr_bind' K e :
-  Forall supported_subset_ectx K →
-  compile_expr (fill K e) ≈
-    v ← compile_expr e;
-    if (decide (length K = 0)) then
-      Ret v
-    else
+  Lemma compile_expr_bind_ind K e l :
+    Forall supported_subset_ectx K →
+    length K = l →
+    l > 0 →
+    compile_expr (fill K e) ≈
+      v ← compile_expr e;
       yield_if_not_val e;;
       compile_expr (fill K (Val v)).
-Proof.
-  intros Hsubset.
-  destruct (decide _) as [Heq|Hneq].
-  - apply nil_length_inv in Heq as ->.
-    by eutt_norm.
-  - apply compile_expr_bind; first done. lia.
-Qed.
+  Proof.
+    revert K. induction l as [|n IH]; intros K Hsubset Hlen Hne.
+    { apply nil_length_inv in Hlen. lia. }
+    destruct n as [|n'].
+    { apply list_singleton in Hlen as [x ->]. simpl. rewrite compile_expr_bind_item //.
+      by rewrite Forall_singleton in Hsubset. }
+    unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
+    apply Forall_app in Hsubset as [HsubsetK' HsubsetKi].
+    rewrite Forall_singleton in HsubsetKi. rewrite app_length /= in Hlen.
+    rewrite fill_app /=. rewrite compile_expr_bind_item //; first rewrite IH //; try lia.
+    rewrite bind_bind. f_equiv. intros v. rewrite fill_app /=.
+    rewrite bind_bind. f_equiv. intros _.
+    rewrite compile_expr_bind_item //. f_equiv. intros v'. rewrite !fill_not_val //.
+    - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
+      rewrite Hlen. lia.
+    - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
+      rewrite Hlen. lia.
+  Qed.
+  Lemma compile_expr_bind K e :
+    Forall supported_subset_ectx K →
+    length K > 0 →
+    compile_expr (fill K e) ≈
+      v ← compile_expr e;
+      yield_if_not_val e;;
+      compile_expr (fill K (Val v)).
+  Proof.
+    intros Hsubset Hne. by apply compile_expr_bind_ind with (l := length K).
+  Qed.
+
+  Lemma compile_expr_bind' K e :
+    Forall supported_subset_ectx K →
+    compile_expr (fill K e) ≈
+      v ← compile_expr e;
+      if (decide (length K = 0)) then
+        Ret v
+      else
+        yield_if_not_val e;;
+        compile_expr (fill K (Val v)).
+  Proof.
+    intros Hsubset.
+    destruct (decide _) as [Heq|Hneq].
+    - apply nil_length_inv in Heq as ->.
+      by eutt_norm.
+    - apply compile_expr_bind; first done. lia.
+  Qed.
+End semantics.
 
 Class heaplangHGpreS (Σ : gFunctors) := HeapLangHGpreS {
   heaplangH_ghost_varG :> ghost_mapG Σ loc (option val);
