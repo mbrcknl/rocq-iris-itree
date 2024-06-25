@@ -5,10 +5,17 @@ From Paco Require Import paco.
 From Paco Require Import paco2.
 From Coq Require Import ssreflect.
 
+(** A "trace" records a single, finite execution path in an ITree, specifying
+all the events emitted and their answers. [Tau]s are not tracked. *)
 Inductive trace (E : Type → Type) (R : Type) :=
+  (** Return a value [r]. *)
   | TRet (r : R)
+  (** Emit an event [e] and receive answer [a], continuing the execution with
+  trace [k]. *)
   | TVis (A : Type) (e : E A) (a : A) (k : trace E R)
+  (** Emit an event [e] with empty answer type and halt execution. *)
   | TVisEmpty (A : Type) (e : E A)
+  (** Discontinue the trace. *)
   | TCut.
 
 Arguments TRet {_ _}.
@@ -23,23 +30,26 @@ Section is_trace.
     : trace E R
     → itree' E R
     → Prop :=
-  | is_TRet r :
+  | trace_TRet r :
     is_trace_ (TRet r) (RetF r)
-  | is_TVis tr' A (e : E A) a k :
+  | trace_TVis tr' A (e : E A) a k :
     is_trace_ tr' (observe (k a)) →
     is_trace_ (TVis A e a tr') (VisF e k)
-  | is_TVisEmpty A (f : A → Empty_set) (e : E A) k :
+  | trace_TVisEmpty A (f : A → Empty_set) (e : E A) k :
     is_trace_ (TVisEmpty A e) (VisF e k)
-  | is_TCut t :
+  | trace_TCut t :
     is_trace_ TCut t
-  | trace_skip_tau tr t' :
+  (** [is_trace] is insensitive to [Tau]s. Because it is defined
+  inductively, we eventually show insensitivity to [eutt]. *)
+  | trace_Tau tr t' :
     is_trace_ tr (observe t') →
     is_trace_ tr (TauF t').
 
+  (** [tr] is a valid trace in [t]. *)
   Definition is_trace (tr : trace E R) (t : itree E R) : Prop :=
     is_trace_ tr (observe t).
 
-  Local Instance is_trace_eqit_unilateral tr b1 b2 :
+  Local Instance is_trace_eqit_impl tr b1 b2 :
     Proper (eqit (=) b1 b2 ==> impl) (is_trace tr).
   Proof.
     intros t1 t2 Heqit%eutt_weak Htr.
@@ -69,8 +79,8 @@ Section is_trace.
     Proper (eqit (=) b1 b2 ==> (↔)) (is_trace tr).
   Proof.
     intros t1 t2 Heqit. split.
-    - by apply (is_trace_eqit_unilateral tr b1 b2).
-    - apply (is_trace_eqit_unilateral tr b2 b1). apply eqit_flip. eapply (eqit_Proper_R (=)); eauto.
+    - by apply (is_trace_eqit_impl tr b1 b2).
+    - apply (is_trace_eqit_impl tr b2 b1). apply eqit_flip. eapply (eqit_Proper_R (=)); eauto.
       rewrite /HeterogeneousRelations.eq_rel /HeterogeneousRelations.subrelationH. naive_solver.
   Qed.
 
@@ -93,21 +103,27 @@ Section is_trace.
   Qed.
 End is_trace.
 
-Class AnswerEqDecision (E : Type → Type) :=
-  is_AnswerEqDecision A : E A → EqDecision A.
+Section decidable_eq.
+  (** A class for event types that have decidable equality of answer types.
+  This is used various places when constructing relational interpretations to
+  decide whether we are in a specified execution or a counterfactual one. *)
+  Class AnswerEqDecision (E : Type → Type) :=
+    is_AnswerEqDecision A : E A → EqDecision A.
 
-Global Instance AnswerEqDecisionSum E E' :
-  AnswerEqDecision E →
-  AnswerEqDecision E' →
-  AnswerEqDecision (E +' E').
-Proof. by intros HE HE' A [e%HE|e%HE']. Qed.
+  Global Instance AnswerEqDecisionSum E E' :
+    AnswerEqDecision E →
+    AnswerEqDecision E' →
+    AnswerEqDecision (E +' E').
+  Proof. by intros HE HE' A [e%HE|e%HE']. Qed.
 
-Program Definition equal `{AnswerEqDecision E} {A : Type} (e : E A) (a a' : A) : {a = a'} + {a ≠ a'} :=
-  @decide (a = a') _.
-Next Obligation.
-  intros E Hdec A e a a'. by apply is_AnswerEqDecision.
-Qed.
+  Program Definition equal `{AnswerEqDecision E} {A : Type} (e : E A) (a a' : A) : {a = a'} + {a ≠ a'} :=
+    @decide (a = a') _.
+  Next Obligation.
+    intros E Hdec A e a a'. by apply is_AnswerEqDecision.
+  Qed.
+End decidable_eq.
 
+(** Prune the events of [E] from a [trace (E +' E') R]. *)
 Fixpoint interp_tr {R E E'} (tr : trace (E +' E') R) : trace E' R :=
   match tr with
   | TRet r => TRet r
@@ -118,21 +134,25 @@ Fixpoint interp_tr {R E E'} (tr : trace (E +' E') R) : trace E' R :=
   | TCut => TCut
   end.
 
-Inductive is_postfix {E R}
-  : trace E R
-  → trace E R
-  → Prop :=
-| is_postfix_same tr :
-  is_postfix tr tr
-| is_postfix_TVis tr tr' A e a :
-  is_postfix tr tr' →
-  is_postfix tr (TVis A e a tr').
+Section postfix.
+  (** [is_postfix tr tr'] says that [tr] is a postfix of [tr']. *)
+  Inductive is_postfix {E R}
+    : trace E R
+    → trace E R
+    → Prop :=
+  | is_postfix_same tr :
+    is_postfix tr tr
+  | is_postfix_TVis tr tr' A e a :
+    is_postfix tr tr' →
+    is_postfix tr (TVis A e a tr').
 
-Lemma interp_tr_is_postfix {E E' R} (tr tr' : trace (E +' E') R) :
-  is_postfix tr tr' →
-  is_postfix (interp_tr tr) (interp_tr tr').
-Proof.
-  induction 1; first constructor. destruct e.
-  - done.
-  - simpl. by constructor.
-Qed.
+  (** [interp_tr] preserves postfix. *)
+  Lemma interp_tr_is_postfix {E E' R} (tr tr' : trace (E +' E') R) :
+    is_postfix tr tr' →
+    is_postfix (interp_tr tr) (interp_tr tr').
+  Proof.
+    induction 1; first constructor. destruct e.
+    - done.
+    - simpl. by constructor.
+  Qed.
+End postfix.
