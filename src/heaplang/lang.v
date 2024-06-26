@@ -692,6 +692,20 @@ Section wp.
       rewrite wp_heaplang_eq. by iApply "Hwp".
   Qed.
 
+  (** Rule for changing the mask.
+
+  Contrary to [wp_atomic] in upstream Iris, this rule curiously has no
+  atomicity assumption. The burden of this assumption is shifted to the bind
+  lemma above, which on the other hand is weaker than its commensurate lemma in
+  upstream Iris. See the comment above. *)
+  Lemma wp_atomic m E1 E2 e Φ :
+    (|={E1,E2}=> WP e @ m; E2 {{ v, |={E2,E1}=> Φ v }}) ⊢ WP e @ m; E1 {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_heaplang_eq. iIntros "#Hinv".
+    setoid_rewrite <- wpi_clear_mask. iMod "Hwp". iMod ("Hwp" with "Hinv") as "Hwp".
+    iApply wpi_wand; last done. iIntros (r) "HΦ". by iMod "HΦ".
+  Qed.
+
   (* Proof rules for various operations: *)
 
   Lemma wp_Fork m e Φ :
