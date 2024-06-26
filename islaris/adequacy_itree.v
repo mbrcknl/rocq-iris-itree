@@ -19,7 +19,7 @@ Proof.
 Qed.
 
 Definition islaEH Pκs : seHandler islaE :=
-  (demonicEH ⊕ₚₛ specEH Pκs ⊕ₚₛ stateEH seq_state ⊕ₚₛ laterEH Later ⊕ₚₛ haltEH ⊕ₚₛ ubEH).
+  (demonicEH ⊕ₑₛ specEH Pκs ⊕ₑₛ stateEH seq_state ⊕ₑₛ laterEH Later ⊕ₑₛ haltEH ⊕ₑₛ ubEH).
 
 Local Notation isla_estate κs ls σ n := ((), (κs, ({| seq_local := ls; seq_global := σ |}, (n, ((), ()))))).
 

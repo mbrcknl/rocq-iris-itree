@@ -759,16 +759,16 @@ Next Obligation.
   - apply ehandler_proper; [done..|].
     move => ??? ???. by apply Hp.
 Qed.
-Notation "H1 ⊕ₚ H2" := (sumEH H1 H2)
+Notation "H1 ⊕ₑ H2" := (sumEH H1 H2)
   (at level 59, right associativity) : type_scope.
 
 Global Instance sumEH_inEH_l {GE R E1 E2 E3} `{E1 -< E2} (EH1 : eHandler E1 GE R) (EH2 : eHandler E2 GE R) (EH3 : eHandler E3 GE R) f1 f2:
   inEH EH1 EH2 f1 f2 →
-  inEH EH1 (EH2 ⊕ₚ EH3) (f1 ∘ fst) (λ s1 s, (f2 s1 s.1, s.2)).
+  inEH EH1 (EH2 ⊕ₑ EH3) (f1 ∘ fst) (λ s1 s, (f2 s1 s.1, s.2)).
 Proof. move => Hin ????? /=. by apply: Hin. Qed.
 Global Instance sumEH_inEH_r {GE R E1 E2 E3} `{E1 -< E3} (EH1 : eHandler E1 GE R) (EH2 : eHandler E2 GE R) (EH3 : eHandler E3 GE R) f1 f2:
   inEH EH1 EH3 f1 f2 →
-  inEH EH1 (EH2 ⊕ₚ EH3) (f1 ∘ snd) (λ s1 s, (s.1, f2 s1 s.2)).
+  inEH EH1 (EH2 ⊕ₑ EH3) (f1 ∘ snd) (λ s1 s, (s.1, f2 s1 s.2)).
 Proof. move => Hin ????? /=. by apply: Hin. Qed.
 
 Global Program Instance eHandlerBind_sum E1 E2 E R S
@@ -776,7 +776,7 @@ Global Program Instance eHandlerBind_sum E1 E2 E R S
   (EHb1 : eHandler E1 E S) (EHb2 : eHandler E2 E S)
   `{!eHandlerBind EH1 EHb1} `{!eHandlerBind EH2 EHb2}
   :
-  eHandlerBind (EH1 ⊕ₚ EH2) (EHb1 ⊕ₚ EHb2) := {|
+  eHandlerBind (EH1 ⊕ₑ EH2) (EHb1 ⊕ₑ EHb2) := {|
    ebind_to_b s := (ebind_to_b s.1, ebind_to_b s.2);
    ebind_from_b s := (ebind_from_b s.1, ebind_from_b s.2);
 |}.
@@ -799,7 +799,7 @@ Section handler_adequate.
 
   Global Program Instance sumEH_adequate {GE R E1 E2} (H1 : iHandler Σ E1) (EH1 : eHandler E1 GE R) (H2 : iHandler Σ E2) EH2
     (A1 : eHandlerAdequate H1 EH1) (A2 : eHandlerAdequate H2 EH2) :
-    eHandlerAdequate (H1 ⊕ H2) (EH1 ⊕ₚ EH2) := {|
+    eHandlerAdequate (H1 ⊕ H2) (EH1 ⊕ₑ EH2) := {|
       ehandler_inv s Ms := (∃ Ms1 Ms2, ⌜Ms ≡ₚ Ms1 ++ Ms2⌝ ∗ A1.(ehandler_inv) s.1 Ms1 ∗ A2.(ehandler_inv) s.2 Ms2)%I |}.
   Next Obligation.
     iIntros (??????????????????) "HH (%Ms1&%Ms2&%Hm&Hs1&Hs2)". simpl in *. case_match.
@@ -834,13 +834,13 @@ Program Definition sumSEH {E1 E2} (EH1 : seHandler E1) (EH2 : seHandler E2)
 Next Obligation.
   move => /= ????????? Hmono Hp. case_match; (apply: sehandler_mono; [|done]) => /= ??; apply Hmono.
 Qed.
-Notation "H1 ⊕ₚₛ H2" := (sumSEH H1 H2)
+Notation "H1 ⊕ₑₛ H2" := (sumSEH H1 H2)
   (at level 59, right associativity) : type_scope.
 
 
 Global Instance sumSEH_inEH_l {GE R E1 E2 E3} `{E1 -< E2} (EH1 : seHandler E1) (EH2 : seHandler E2) (EH3 : seHandler E3) f1 f2:
   inEH EH1 EH2 f1 f2 →
-  inEH (GE:=GE) (R:=R) EH1 (EH2 ⊕ₚₛ EH3) (f1 ∘ fst) (λ s1 s, (f2 s1 s.1, s.2)).
+  inEH (GE:=GE) (R:=R) EH1 (EH2 ⊕ₑₛ EH3) (f1 ∘ fst) (λ s1 s, (f2 s1 s.1, s.2)).
 Proof.
 (* TODO: fix this proof *)
   move => Hin A e [s1 s2] k C /= HC.
@@ -856,7 +856,7 @@ Proof.
 Qed.
 Global Instance sumSEH_inEH_r {GE R E1 E2 E3} `{E1 -< E3} (EH1 : seHandler E1) (EH2 : seHandler E2) (EH3 : seHandler E3) f1 f2:
   inEH EH1 EH3 f1 f2 →
-  inEH (GE:=GE) (R:=R) EH1 (EH2 ⊕ₚₛ EH3) (f1 ∘ snd) (λ s1 s, (s.1, f2 s1 s.2)).
+  inEH (GE:=GE) (R:=R) EH1 (EH2 ⊕ₑₛ EH3) (f1 ∘ snd) (λ s1 s, (s.1, f2 s1 s.2)).
 Proof.
 (* TODO: fix this proof *)
   move => Hin A e [s1 s2] k C /= HC.
@@ -876,7 +876,7 @@ Section handler_adequate.
 
   Global Program Instance sumSEH_adequate {E1 E2} (H1 : iHandler Σ E1) (EH1 : seHandler E1) (H2 : iHandler Σ E2) EH2
     (A1 : seHandlerAdequate H1 EH1) (A2 : seHandlerAdequate H2 EH2) :
-    seHandlerAdequate (H1 ⊕ H2) (EH1 ⊕ₚₛ EH2) := {|
+    seHandlerAdequate (H1 ⊕ H2) (EH1 ⊕ₑₛ EH2) := {|
       sehandler_inv s := (A1.(sehandler_inv) s.1 ∗ A2.(sehandler_inv) s.2)%I |}.
   Next Obligation.
     iIntros (???????????????) "HH [Hs1 Hs2]". simpl in *. case_match.
@@ -1020,7 +1020,7 @@ Qed.
 
 Lemma big_sepL2_omap_id_insert {Σ A B} x (l : list (option A)) (Ms : list B) (P : A → B → iProp Σ) i M:
   l !! i = Some None →
-  ([∗ list] t;M∈(omap id l);Ms, P t M) -∗
+  ([∗ list] t;M∈omap id l;Ms, P t M) -∗
   P x M -∗
   ∃ Ms', ⌜Ms' ≡ₚ M :: Ms⌝ ∗ ([∗ list] t;M∈omap id (<[i:=Some x]>l);Ms', P t M).
 Proof.
@@ -1038,7 +1038,7 @@ Qed.
 
 Lemma big_sepL2_omap_id_delete {Σ A B} x (l : list (option A)) (Ms : list B) (P : A → B → iProp Σ) i:
   l !! i = Some (Some x) →
-  ([∗ list] t;M∈(omap id l);Ms, P t M) -∗
+  ([∗ list] t;M∈omap id l;Ms, P t M) -∗
   ∃ M Ms', ⌜Ms ≡ₚ M :: Ms'⌝ ∗ P x M ∗ ([∗ list] t;M∈omap id (<[i:=None]>l);Ms', P t M).
 Proof.
   iIntros (Hi) "Hs".
@@ -1118,431 +1118,3 @@ Tactic Notation "exec_norm/=" :=
   repeat (simpl; exec_norm).
 
 Ltac exec_bind := exec_norm/=; apply: exec_bind => /=.
-
-
-(*
-Inductive ordinal : Type :=
-| oO | oS (n : ordinal) | oLimit (T : Type) (f : T → ordinal).
-
-Inductive ord_le : ordinal → ordinal → Prop :=
-| o_le_O n : ord_le oO n
-| o_le_S_S n1 n2 : ord_le n1 n2 → ord_le (oS n1) (oS n2)
-| o_le_add_l T f n : (∀ x, ord_le (f x) n) → ord_le (oLimit T f) n
-| o_le_add_r T f n x : ord_le n (f x) → ord_le n (oLimit T f).
-
-Fixpoint ord_add (o1 o2 : ordinal) : ordinal :=
-  match o1 with
-  | oO => o2
-  | oS o' => oS (ord_add o' o2)
-  | oLimit T f => oLimit T (λ x, ord_add (f x) o2)
-  end.
-
-Definition ord_lt (o1 o2 : ordinal) : Prop :=
-  ord_le (oS o1) o2.
-
-Lemma ord_lt_le_r o o1 o2 :
-  ord_lt o1 o →
-  ord_le o o2 →
-  ord_lt o1 o2.
-Admitted.
-
-Lemma ord_lt_le_l o o1 o2 :
-  ord_le o1 o →
-  ord_lt o o2 →
-  ord_lt o1 o2.
-Admitted.
-
-Lemma ord_add_le o1 o1' o2 o2' :
-  ord_le o1 o1' →
-  ord_le o2 o2' →
-  ord_le (ord_add o1 o2) (ord_add o1' o2').
-Proof.
-  move => Hle. elim: Hle o2 o2' => /=.
-  - admit.
-  - constructor. naive_solver.
-  - constructor. naive_solver.
-  - econstructor. naive_solver.
-Admitted.
-
-Lemma ord_add_lt_l o1 o1' o2 o2' :
-  ord_lt o1 o1' →
-  ord_le o2 o2' →
-  ord_lt (ord_add o1 o2) (ord_add o1' o2').
-Admitted.
-
-Lemma ord_lt_S o :
-  ord_lt o (oS o).
-Admitted.
-
-Lemma ord_le_lt o o':
-  ord_lt o o' →
-  ord_le o o'.
-Admitted.
-
-Lemma ord_le_S o :
-  ord_le o (oS o).
-Proof. apply ord_le_lt, ord_lt_S. Qed.
-
-Global Instance ord_le_preorder : PreOrder ord_le.
-Admitted.
-
-Lemma ord_ind (P : ordinal → Prop):
-  (∀ x : ordinal, (∀ y : ordinal, ord_lt y x → P y) → P x) → ∀ a, P a.
-Proof. Admitted.
-
-Class eHandlerAdequate {Σ E GE R} (H : iHandler Σ E) (EH : eHandler E GE R)
-  `{!invGS_gen hlc Σ} := {
-  handler_inv : ordinal → (ordinal → itree GE R → iProp Σ) → EH.(eh_state) → iProp Σ;
-  handler_adequate : ∀ A e s C k G o oi,
-      EH A e s k C →
-      H A e (λ a, G (o a) (k a)) (λ a, |={⊤, ∅}=> G (o a) (k a)) -∗
-      handler_inv oi G s -∗
-      |={∅}=> ∃ t' s' o' oi', ⌜C t' s'⌝ ∗ ⌜ord_le (ord_add o' oi') (ord_add (oAdd _ o) oi)⌝
-          ∗ handler_inv oi' G s' ∗ G o' t'
-}.
-
-Section wp_itree_n.
-  Context {Σ : gFunctors} {E : Type → Type} `{!invGS_gen hlc Σ}.
-  Context {H : iHandler Σ E}.
-
-  Definition wpi_mask_n {R} (n : ordinal) (M : coPset) (t : itree E R) (Φ : R → iProp Σ) : iProp Σ.
-  Admitted.
-
-  Global Instance wpi_mask_n_proper R n M :
-    Proper (eqit (=) false false ==> (pointwise_relation R (⊣⊢)) ==> (⊣⊢)) (wpi_mask_n (R:=R) n M).
-  Proof.
-    intros t1 t2 Ht Φ1 Φ2 HΦ.
-  Admitted.
-End wp_itree_n.
-
-Notation "'WPi{' n '}' t @ H ; M {{ v , Q } }" := (wpi_mask_n (H := H) n M t (λ v, Q))
-  (at level 20, n, t, Q at level 200,
-   format "'[hv' 'WPi{' n '}'  t  '/' @  '[' H ; M ']'  '/' {{  '[' v ,  '/' Q  ']' } } ']'") : bi_scope.
-Notation "'WPi{' n '}' t @ H ; M {{ Φ } }" := (WPi{n} t @ H; M {{ v, Φ v }})%I
-  (at level 20, n, t, Φ at level 200, only parsing) : bi_scope.
-
-Section wpi_adequate.
-  Context {Σ : gFunctors} {E : Type → Type} {R : Type} `{!invGS_gen hlc Σ}.
-
-  Lemma wpi_n_vis A (e : E A) k H n (Φ : R → _) :
-    WPi{n} Vis e k @ H;∅ {{ Φ }} ⊣⊢ ∃ n',
-     ⌜ord_lt (oAdd _ n') n⌝ ∗ H _ e (λ a, WPi{n' a} k a @ H;∅ {{ Φ }})
-            (λ a, |={⊤, ∅}=> WPi{n' a} k a @ H;∅ {{ _, False }}).
-  Admitted.
-
-  Lemma wpi_n_Tau (t : itree E R) H n (Φ : R → _) :
-    WPi{n} Tau t @ H;∅ {{ Φ }} ⊣⊢ ∃ n', ⌜n = oS n'⌝ ∗ WPi{n'} t @ H;∅ {{ Φ }}.
-  Admitted.
-
-  (* TODO: Do this by having X tokens where X is the sum of the n of
-  the top-most itree and the ones inside the invariant. A bit like the
-  fake laters in DimSum. *)
-  Theorem wpi_adequate (Φ : R → iProp Σ) (H : iHandler Σ E) (EH : eHandler E E R)
-    (A : eHandlerAdequate H EH) t s C o ow oi :
-    exec EH t s C →
-    ord_le (ord_add ow oi) o →
-    WPi{ow} t @ H;∅ {{Φ}} -∗
-    A.(handler_inv) oi (λ o t, WPi{o} t @ H;∅ {{Φ}}) s -∗
-    |={∅}=> ∃ t' t'' s' ow' oi', ⌜C t' s'⌝ ∗ ⌜t' ≈ t''⌝ ∗ ⌜ord_le (ord_add ow' oi') o⌝ ∗
-              A.(handler_inv) oi' (λ o t, WPi{o} t @ H;∅ {{Φ}}) s' ∗ WPi{ow'} t'' @ H;∅ {{Φ}}.
-  Proof.
-    move => Hexec Ho.
-    iIntros "Hwp Hinv".
-    iInduction o as [] "IH" using ord_ind forall (t s ow oi Hexec Ho).
-    punfold Hexec. inv Hexec.
-    - iModIntro. iExists _, _, _, _, _. iSplit; [done|]. iFrame. by rewrite -H0 -itree_eta.
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]; simplify_eq/=.
-      pclearbot.
-      iDestruct (wpi_n_Tau with "Hwp") as (ow' ->) "Hwp".
-      iMod ("IH" with "[%] [%] [%] Hwp Hinv") as (????????) "[??]".
-      2: done. 2: done. { apply: ord_lt_le_r; [|done]. apply ord_add_lt_l; [|done]. apply ord_lt_S. }
-      iModIntro. iFrame. iExists _. iSplit; [done|]. iSplit; [done|]. iPureIntro. etrans; [|done].
-      etrans; [done|]. apply ord_add_le; [|done]. apply ord_le_S.
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]. 1, 2: by simplify_eq/=.
-      subst. simpl in *. do 2 simplify_K.
-      rewrite wpi_n_vis. iDestruct "Hwp" as (n' Hn') "Hwp".
-      iMod (handler_adequate with "[Hwp] Hinv") as (????) "Hwp"; [done| |].
-      + iApply (ihandler_mono with "[] [] Hwp").
-        * iIntros (?) "?" => /=. done.
-        * iIntros "!>" (?) ">?" => /=. iModIntro. admit.
-      + iDestruct "Hwp" as (??) "[Hs Hwp]". pclearbot.
-        iMod ("IH" with "[%] [%] [%] Hwp Hs") as (????????) "[??]". 2: done. 2: reflexivity.
-        { apply: ord_lt_le_r; [|done]. apply: ord_lt_le_l; [done|]. by apply ord_add_lt_l. }
-        iModIntro. iFrame. iExists _. iSplit; [done|]. iSplit; [done|]. iPureIntro.
-        etrans; [done|]. etrans; [|done]. etrans; [done|].
-        apply ord_add_le; [|done]. by apply ord_le_lt.
-  Admitted.
-
-      (* iApply ("Hwp" with "[//] Hs"). *)
-
-    iApply (wpi_iter G with "[] Hwp [//]"); clear. { solve_proper. }
-    iIntros "!>" (t Φ') "Hwp". iIntros (s Hpure) "HΦ Hs".
-    punfold Hpure. inv Hpure.
-    - iModIntro. iExists _, _. iFrame. iSplit; [done|]. rewrite -H0. admit.
-    - pclearbot. destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]; simplify_eq/=.
-      rewrite /wpiF/=. iMod "Hwp". iApply ("Hwp" with "[//] HΦ Hs").
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]. 1, 2: by simplify_eq/=.
-      subst. simpl in *. do 2 simplify_K.
-      rewrite /wpiF/=. iMod "Hwp".
-      unfold G.
-      iMod (handler_adequate with "[Hwp] Hs") as (??) "Hwp"; [done| |].
-      2: {
-      iDestruct "Hwp" as (??) "[Hs Hwp]". pclearbot.
-
-
-  (* Cannot be sound if P is not monotone, pick P := □ G -∗ False *)
-  Lemma wpi_strong_ind P t (H : iHandler Σ E) (Φ : R → iProp Σ) :
-    □ (∀ t' Φ' G,
-          wpiF H G t' Φ' -∗
-       □ (∀ t'' Φ'', G t'' Φ'' -∗ P G t'' Φ'') -∗
-         P G t' Φ') -∗
-    WPi t @ H;∅ {{Φ}} -∗ ∃ G, P G t Φ.
-  Admitted.
-
-  Theorem wpi_adequate (Φ : R → iProp Σ) (H : iHandler Σ E) (EH : eHandler E E R)
-    (A : eHandlerAdequate H EH) t s C :
-    exec EH t s C →
-    WPi t @ H;∅ {{Φ}} -∗
-    ∃ G, A.(handler_inv) (λ t, G t Φ) s -∗
-    |={∅}=> ∃ t' s', ⌜C t' s'⌝ ∗ A.(handler_inv) (λ t, G t Φ) s' ∗ WPi t' @ H;∅ {{Φ}}.
-  Proof.
-    move => Hpure. iIntros "Hwp".
-    pose (P := (λ G (t : leibnizO (itree E R)) (Φ' : R -d> iPropO Σ), (∀ s,
-                 ⌜exec EH t s C⌝ -∗
-                 (∀ a, Φ' a -∗ Φ a) -∗
-                 A.(handler_inv) (λ t, G t Φ') s -∗
-                 |={∅}=> ∃ t' s', ⌜C t' s'⌝ ∗ A.(handler_inv) (λ t, G t Φ') s' ∗ WPi t' @ H;∅ {{Φ}})%I)).
-    iDestruct (wpi_strong_ind P with "[] Hwp") as (G) "HG".
-    2: { iExists G. unfold P. iApply "HG".  done. by iIntros. }
-  Abort.
-    (* iIntros "Hwp". *)
-    (* move Heq:{2 3 4}n => m. have Hle: itree_n_le n m. admit. clear Heq. *)
-    (* iInduction n as [] "IH" using itree_n_ind forall (m t s Hpure Hle). *)
-    (* punfold Hpure. inv Hpure. *)
-
-
-  (* TODO: Do this by having X tokens where X is the sum of the n of
-  the top-most itree and the ones inside the invariant. A bit like the
-  fake laters in DimSum. *)
-  Theorem wpi_adequate (Φ : R → iProp Σ) (H : iHandler Σ E) (EH : eHandler E E R)
-    (A : eHandlerAdequate H EH) t s C n :
-    exec EH t s C →
-    WPi{n} t @ H;∅ {{Φ}} -∗
-    A.(handler_inv) (λ t, ∃ n', ⌜itree_n_lt n' n⌝ ∗ WPi{n'} t @ H;∅ {{Φ}}) s -∗
-    |={∅}=> ∃ t' t'' s', ⌜C t' s'⌝ ∗ ⌜t' ≈ t''⌝ ∗ A.(handler_inv) (λ t, ∃ n', ⌜itree_n_lt n' n⌝ ∗ WPi{n'} t @ H;∅ {{Φ}}) s' ∗ WPi{n} t'' @ H;∅ {{Φ}}.
-  Proof.
-    move => Hpure.
-    iIntros "Hwp Hinv".
-    move Heq:{2 3 4}n => m. have Hle: itree_n_le n m. admit. clear Heq.
-    iInduction n as [] "IH" using itree_n_ind forall (m t s Hpure Hle).
-    punfold Hpure. inv Hpure.
-    - iModIntro. iExists _, _, _. iSplit; [done|]. iFrame.
-      admit.
-(* by rewrite -H0 -itree_eta. *)
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]; simplify_eq/=.
-      pclearbot.
-      iApply ("IH" with "[%] [%] [%] [Hwp] [Hinv]"). 2: done. all: admit.
-      (* rewrite /wpiF/=. iMod "Hwp". iApply ("Hwp" with "[//] HΦ HG Hs"). *)
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]. 1, 2: by simplify_eq/=.
-      subst. simpl in *. do 2 simplify_K.
-      rewrite wpi_n_vis. iDestruct "Hwp" as (n' Hn') "Hwp".
-      iMod (handler_adequate with "[Hwp] Hinv") as (??) "Hwp"; [done| |].
-      + iApply (ihandler_mono with "[] [] Hwp").
-        * iIntros (?) "?" => /=. iExists _. iFrame. iPureIntro. admit.
-        * iIntros "!>" (?) ">?" => /=. iModIntro. iExists _. admit.
-      + iDestruct "Hwp" as (?) "[Hs [%n'' [% Hwp]]]". pclearbot.
-        iApply ("IH" with "[%] [//] [%] Hwp Hs"). 2:
-      (* iApply ("Hwp" with "[//] Hs"). *)
-
-    iApply (wpi_iter G with "[] Hwp [//]"); clear. { solve_proper. }
-    iIntros "!>" (t Φ') "Hwp". iIntros (s Hpure) "HΦ Hs".
-    punfold Hpure. inv Hpure.
-    - iModIntro. iExists _, _. iFrame. iSplit; [done|]. rewrite -H0. admit.
-    - pclearbot. destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]; simplify_eq/=.
-      rewrite /wpiF/=. iMod "Hwp". iApply ("Hwp" with "[//] HΦ Hs").
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]. 1, 2: by simplify_eq/=.
-      subst. simpl in *. do 2 simplify_K.
-      rewrite /wpiF/=. iMod "Hwp".
-      unfold G.
-      iMod (handler_adequate with "[Hwp] Hs") as (??) "Hwp"; [done| |].
-      2: {
-      iDestruct "Hwp" as (??) "[Hs Hwp]". pclearbot.
-
-    pose (G := (λ (t : leibnizO (itree E R)) (Φ' : R -d> iPropO Σ), (∀ s G' G'',
-                 ⌜exec EH t s C⌝ -∗
-                 (∀ a, Φ' a -∗ Φ a) -∗
-                 □ (∀ t, G'' t Φ -∗ G' t) -∗
-                 (∀ t s, ⌜exec EH t s C⌝ -∗ handler_inv G' s -∗ G' t -∗
-                    |={∅}=> ∃ t' s', ⌜C t' s'⌝ ∗ A.(handler_inv) G' s' ∗
-                                                     WPi t' @ H;∅ {{Φ}}) -∗
-                 A.(handler_inv) G' s -∗
-                 |={∅}=> ∃ t' s', ⌜C t' s'⌝ ∗ A.(handler_inv) G' s' ∗ WPi t' @ H;∅ {{Φ}})%I)).
-    iIntros "Hwp".
-    iExists (λ t, G t Φ).
-    iApply (wpi_iter G with "[] Hwp [//]"); clear. { solve_proper. }
-    2: by iIntros.
-    2: admit.
-    2: { unfold G at 2.
-    iIntros "!>" (t Φ') "Hwp". iIntros (s G' G'' Hpure) "HΦ #HG Hs".
-    punfold Hpure. inv Hpure.
-    - iModIntro. iExists _, _. iFrame. iSplit; [done|]. rewrite -H0. admit.
-    - pclearbot. destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]; simplify_eq/=.
-      rewrite /wpiF/=. iMod "Hwp". iApply ("Hwp" with "[//] HΦ HG Hs").
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]. 1, 2: by simplify_eq/=.
-      subst. simpl in *. do 2 simplify_K.
-      rewrite /wpiF/=. iMod "Hwp".
-      iMod (handler_adequate with "[Hwp] Hs") as (??) "Hwp"; [done| |].
-      2: { simpl.
-      iDestruct "Hwp" as (??) "[Hs Hwp]". pclearbot.
-      (* iApply ("Hwp" with "[//] Hs"). *)
-
-    iApply (wpi_iter G with "[] Hwp [//]"); clear. { solve_proper. }
-    iIntros "!>" (t Φ') "Hwp". iIntros (s Hpure) "HΦ Hs".
-    punfold Hpure. inv Hpure.
-    - iModIntro. iExists _, _. iFrame. iSplit; [done|]. rewrite -H0. admit.
-    - pclearbot. destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]; simplify_eq/=.
-      rewrite /wpiF/=. iMod "Hwp". iApply ("Hwp" with "[//] HΦ Hs").
-    - destruct (itree_match t) as [[??]|[[??]|[?[?[??]]]]]. 1, 2: by simplify_eq/=.
-      subst. simpl in *. do 2 simplify_K.
-      rewrite /wpiF/=. iMod "Hwp".
-      unfold G.
-      iMod (handler_adequate with "[Hwp] Hs") as (??) "Hwp"; [done| |].
-      2: {
-      iDestruct "Hwp" as (??) "[Hs Hwp]". pclearbot.
-      (* iApply ("Hwp" with "[//] Hs"). *)
-      admit.
-  Admitted.
-
-End wpi_adequate.
-
-Program Definition threadpoolEH GE R : eHandler threadpoolE GE R :=
-  EHandler (nat * list (option (itree GE R))) (λ A e s,
-      match e with
-      | EFork => λ k C, C CurrentThread (s.1, s.2 ++ [Some (k NewThread)]) (k CurrentThread)
-      | EYield => λ k C,
-          let tp' := <[s.1 := Some (k tt)]>s.2 in
-          ∃ i t', tp' !! i = Some (Some t') ∧ C tt (i, tp') t'
-      | EKillThread => λ k C,
-          let tp' := <[s.1 := None]>s.2 in
-          ∃ i t', tp' !! i = Some (Some t') ∧ C _ (i, tp') t'
-      end) _.
-Next Obligation. Admitted.
-Next Obligation. move => /= *. Admitted.
-
-
-Section handler_adequate.
-  Context {Σ : gFunctors} `{!invGS_gen hlc Σ}.
-
-  Global Program Instance sumEH_adequate {E1 E2} (H1 : iHandler Σ E1) EH1 (H2 : iHandler Σ E2) EH2
-    (A1 : eHandlerAdequate H1 EH1) (A2 : eHandlerAdequate H2 EH2) :
-    eHandlerAdequate (H1 ⊕ H2) (EH1 ⊕ₚ EH2) := {|
-      handler_inv s := (A1.(handler_inv) s.1 ∗ A2.(handler_inv) s.2)%I |}.
-  Next Obligation.
-    iIntros (???????????????) "HH [Hs1 Hs2]". simpl in *. case_match.
-    - iMod (A1.(handler_adequate) with "[$] [$]") as (??) "Hwp"; [done|].
-      iDestruct "Hwp" as (?) "[? $]". iModIntro. iExists (_, _) => /=. by iFrame.
-    - iMod (A2.(handler_adequate) with "[$] [$]") as (??) "Hwp"; [done|].
-      iDestruct "Hwp" as (?) "[? $]". iModIntro. iExists (_, _) => /=. by iFrame.
-  Qed.
-End handler_adequate.
-
-Program Definition ubEH : eHandler ubE :=
-  EHandler unit (λ A e s C, True) _.
-Next Obligation. done. Qed.
-
-Global Program Instance ubEH_adequate {Σ} `{!invGS_gen hlc Σ} :
-    eHandlerAdequate ubH ubEH := {| handler_inv s := True%I |}.
-Next Obligation. move => ??????????. by iIntros (?). Qed.
-
-
-Program Definition stateEH S : eHandler (stateE S) :=
-  EHandler S (λ A e s,
-      match e with
-      | EGetState    => λ C, C s s
-      | ESetState s' => λ C, C tt s'
-      end) _.
-Next Obligation. move => /= *. case_match; naive_solver. Qed.
-
-Global Program Instance stateEH_adequate {Σ} `{!invGS_gen hlc Σ} S `{!stateInterp Σ S} :
-    eHandlerAdequate (stateH S) (stateEH S) := {| handler_inv s := state_interp s |}.
-Next Obligation.
-  move => ??????????? HEH.
-  iIntros "HH Hs". rewrite /stateH/=. case_match.
-  - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
-  - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
-Qed.
-
-
-Program Definition demonicEH : eHandler demonicE :=
-  EHandler unit (λ A e s, match e with | EDemonic A => λ C, ∃ x, C x tt end) _.
-Next Obligation. move => /= *. case_match; naive_solver. Qed.
-
-Global Program Instance demonicEH_adequate {Σ} `{!invGS_gen hlc Σ} :
-    eHandlerAdequate demonicH demonicEH := {| handler_inv s := True%I |}.
-Next Obligation.
-  move => ????????? HP. iIntros "Hwp _".
-  rewrite /demonicH/=. case_match => /=. simplify_eq/=. destruct HP as [??].
-  iModIntro. iExists _, _. iSplit; [done|]. iSplit; [done|]. iApply "Hwp".
-Qed.
-
-
-Program Definition haltEH : eHandler haltE :=
-  EHandler unit (λ A e s C, False) _.
-Next Obligation. done. Qed.
-
-Global Program Instance haltEH_adequate {Σ} `{!invGS_gen hlc Σ} :
-    eHandlerAdequate haltH haltEH := {| handler_inv s := True%I |}.
-Next Obligation. move => ????????? HP. done. Qed.
-
-
-Program Definition laterEH lat : eHandler laterE :=
-  EHandler nat (λ A e s, match e with | ELater =>
-     λ C, ∃ s', s = S s' ∧ C tt (if lat is Later then s' else s) end) _.
-Next Obligation. move => /= *. case_match; naive_solver. Qed.
-
-Global Program Instance laterEH_adequate {Σ} `{!invGS Σ} lat :
-  eHandlerAdequate (laterH lat) (laterEH lat) := {| handler_inv s := £ s |}.
-Next Obligation.
-  move => /= ?? lat ?????? HP.
-  iIntros "Hp Hs". case_match.
-  destruct HP as [? [??]]; subst.
-  destruct lat => /=.
-  - iModIntro. by iFrame.
-  - rewrite lc_succ. iDestruct "Hs" as "[Hl $]". iApply (lc_fupd_elim_later with "[$]").
-    iModIntro. by iFrame.
-Qed.
-
-(* Program Definition threadpoolEH E R (EH : eHandler E) : eHandler (threadpoolE +' E) := *)
-(*   EHandler (list ( R) * EH.(eh_state)) (λ A e s,  *)
-(*       match e with *)
-(*       | inl1 e =>  *)
-(*           match e with *)
-(*           | EFork => λ C, C CurrentThread (s.1 ++ [_], s.2) *)
-(*           | EYield => λ C, _ *)
-(*           | EKillThread => λ C, _ *)
-(*           end *)
-(*       | inr1 e => λ C, EH A e s.2 (λ a s', C a (s.1, s')) *)
-(*       end) _. *)
-(* Next Obligation. move => /= *. case_match; naive_solver. Qed. *)
-
-(* Global Program Instance laterEH_adequate {Σ} `{!invGS Σ} lat : *)
-(*   eHandlerAdequate (laterH lat) (laterEH lat) := {| handler_inv s := £ s |}. *)
-(* Next Obligation. *)
-
-(* Program Definition threadpoolEH E R (EH : eHandler E) : eHandler (threadpoolE +' E) := *)
-(*   EHandler (list (option (itree (threadpoolE +' E) R)) * EH.(eh_state)) (λ A e s,  *)
-(*       match e with *)
-(*       | inl1 e =>  *)
-(*           match e with *)
-(*           | EFork => λ C, C CurrentThread (s.1 ++ [_], s.2) *)
-(*           | EYield => λ C, _ *)
-(*           | EKillThread => λ C, _ *)
-(*           end *)
-(*       | inr1 e => λ C, EH A e s.2 (λ a s', C a (s.1, s')) *)
-(*       end) _. *)
-(* Next Obligation. move => /= *. case_match; naive_solver. Qed. *)
-
-(* Global Program Instance laterEH_adequate {Σ} `{!invGS Σ} lat : *)
-(*   eHandlerAdequate (laterH lat) (laterEH lat) := {| handler_inv s := £ s |}. *)
-(* Next Obligation. *)
-*)
