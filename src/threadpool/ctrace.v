@@ -565,19 +565,17 @@ Section interleaving.
   Qed.
 End interleaving.
 
-Section tactics.
-  Lemma tac_normalize_ctrace_insert {E R} p (t t' : itree (threadpoolE +' E) R) tid tr tid' ts :
-    NormalizeITree p t t' →
-    is_ctrace tr tid (<[tid':=t']>ts) →
-    is_ctrace tr tid (<[tid':=t]>ts).
-  Proof. by move => [->]. Qed.
+Lemma tac_normalize_ctrace_insert {E R} p (t t' : itree (threadpoolE +' E) R) tid tr tid' ts :
+  NormalizeITree p t t' →
+  is_ctrace tr tid (<[tid':=t']>ts) →
+  is_ctrace tr tid (<[tid':=t]>ts).
+Proof. by move => [->]. Qed.
 
-  Ltac is_ctrace_norm :=
-    lazymatch goal with
-    | |- is_ctrace _ _ (<[_:=_]>_) =>
-        notypeclasses refine (tac_normalize_ctrace_insert _ _ _ _ _ _ _ _ _);
-          [solve_normalize_itree..|]
-    end.
-  Tactic Notation "is_ctrace_norm/=" :=
-    repeat (simpl; is_ctrace_norm).
-End tactics.
+Ltac is_ctrace_norm :=
+  lazymatch goal with
+  | |- is_ctrace _ _ (<[_:=_]>_) =>
+      notypeclasses refine (tac_normalize_ctrace_insert _ _ _ _ _ _ _ _ _);
+        [solve_normalize_itree..|]
+  end.
+Tactic Notation "is_ctrace_norm/=" :=
+  repeat (simpl; is_ctrace_norm).

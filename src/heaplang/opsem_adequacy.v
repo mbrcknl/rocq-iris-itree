@@ -31,7 +31,7 @@ Qed.
 Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
   (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
     match thread with
-    | CurrentThread => step ;; k (LitV LitUnit)
+    | CurrentThread => later.step ;; k (LitV LitUnit)
     | NewThread => compile_expr_kill e
     end
   )%itree.
@@ -45,7 +45,7 @@ Qed.
 
 Lemma trace_base_Fork {R} tid (tp : list (itree heaplangE R)) tr e k :
   tp !! tid = Some (v ← compile_expr (Fork e) ; k v)%itree →
-  is_ctrace tr tid (<[tid := (step ;; k (LitV LitUnit))%itree]>tp ++ [compile_expr_kill e]) →
+  is_ctrace tr tid (<[tid := (later.step ;; k (LitV LitUnit))%itree]>tp ++ [compile_expr_kill e]) →
   is_ctrace (CTFork (compile_expr_kill e) tr) tid tp.
 Proof.
   intros Htp Htr. eapply is_ctrace_insert; first done; first apply compile_Fork; eauto.
@@ -78,7 +78,7 @@ Qed.
 Lemma base_Beta f_ x_ e v :
   compile_expr (App (Val (RecV f_ x_ e)) (Val v))
   ≈ let e' := (subst' x_ v (subst' f_ (RecV f_ x_ e) e))
-     in step ;; yield_if_not_val e' ;; compile_expr e'.
+     in later.step ;; yield_if_not_val e' ;; compile_expr e'.
 Proof.
   rewrite /compile_expr. eutt_norm/=. setoid_rewrite interp_recursive_call. by eutt_norm/=.
 Qed.
@@ -511,7 +511,7 @@ Proof. apply enumerate_from_lookup'. Qed.
 Definition ctrace_step_yield (tid : nat) (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
   CTVis () (subevent _ ELater) () (CTYield tid tr).
 Lemma is_ctrace_step_yield tid tid' tp tr t :
-  tp !! tid = Some (step ;; yield ;; t)%itree →
+  tp !! tid = Some (later.step ;; yield ;; t)%itree →
   is_ctrace tr tid' (<[tid := t]>tp) →
   is_ctrace (ctrace_step_yield tid' tr) tid tp.
 Proof.
@@ -1112,14 +1112,14 @@ Proof.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (step ;; yield ;; k v')%itree); first done.
+    eapply is_ctrace_insert with (t' := (later.step ;; yield ;; k v')%itree); first done.
     { rewrite /compile_expr_yield base_UnOp //. eutt_norm/=. rewrite /step_ret. by eutt_norm/=. }
     eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     by rewrite list_insert_insert.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (step ;; yield ;; k v')%itree); first done.
+    eapply is_ctrace_insert with (t' := (later.step ;; yield ;; k v')%itree); first done.
     { rewrite /compile_expr_yield base_BinOp //. eutt_norm/=. rewrite /step_ret. by eutt_norm/=. }
     eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
     by rewrite list_insert_insert.
@@ -1162,7 +1162,7 @@ Proof.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (step ;; yield ;; k v1)%itree); first done.
+    eapply is_ctrace_insert with (t' := (later.step ;; yield ;; k v1)%itree); first done.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
     eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
@@ -1170,7 +1170,7 @@ Proof.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
-    eapply is_ctrace_insert with (t' := (step ;; yield ;; k v2)%itree); first done.
+    eapply is_ctrace_insert with (t' := (later.step ;; yield ;; k v2)%itree); first done.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
     eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }

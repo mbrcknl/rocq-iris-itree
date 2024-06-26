@@ -15,6 +15,28 @@ From elpi.apps Require Import locker.
 Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' laterE +' ubE.
 Global Hint Transparent heaplangE : itree_auto.
 
+Lemma split_last {A} (xs : list A) :
+  length xs > 0 →
+  ∃ x xs', xs = xs' ++ [x].
+Proof.
+  intros Hlen.
+  induction xs as [|y ys IH]. { simpl in Hlen. lia. }
+  destruct (length ys) as [|n] eqn:Hlen'.
+  - apply nil_length_inv in Hlen' as ->. by exists y, [].
+  - assert (S n > 0) as HS; first lia.
+    destruct (IH HS) as (x&xs'&->). by exists x, (y :: xs').
+Qed.
+
+Lemma list_singleton {A} (xs : list A) :
+  length xs = 1 →
+  ∃ x, xs = [x].
+Proof.
+  intros Hlen.
+  destruct xs as [|x xs']; first done.
+  exists x. simpl in Hlen. injection Hlen as Hlen.
+  by apply nil_length_inv in Hlen as ->.
+Qed.
+
 (** [yield] precisely if an expression is not a value.
 
 This appears many times in the below specification of the semantics of
@@ -25,6 +47,20 @@ Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} `{laterE -< E} : 
   | None => yield
   end.
 Arguments yield_if_not_val !_ / _.
+
+Lemma fill_item_not_val Ki e :
+  yield_if_not_val (fill_item Ki e) ≈ (yield : itree heaplangE ()).
+Proof.
+  rewrite /yield_if_not_val. by destruct Ki.
+Qed.
+Lemma fill_not_val K e :
+  length K > 0 →
+  yield_if_not_val (fill K e) ≈ (yield : itree heaplangE ()).
+Proof.
+  intros Hlen.
+  unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
+  rewrite fill_app /= fill_item_not_val //.
+Qed.
 
 (* TODO: Remove these duplicate definitions (already in [ub.v] but without [do]) *)
 Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
@@ -135,19 +171,24 @@ Section free_locations.
 End free_locations.
 
 Section semantics.
+  (* We first define some abstractions for manipulating memory that we can
+  reuse in the definition of the semantics of heaplang ([compile_expr]). In
+  turn, we also get to reuse reasoning principles about these abstractions. *)
+
   (** Store [x] at memory cell [l] and return the old value. It exhibits UB if
   the memory cell at [l] is currently free. If [x = None], [l] gets
-  deallocated. *)
+  deallocated. It does not [yield] nor [step]. *)
   Definition store' `{!stateE state -< E} `{ubE -< E} (l : loc) (x : option val) : itree E val :=
     σ ← trigger EGetState;
     v ← some_some_or_ub (σ.(heap) !! l);
     trigger (ESetState (state_upd_heap (<[l:=x]>) σ));;
     Ret v.
   (** Store [x] at memory cell [l] and return the old value. It exhibits UB if
-  the memory cell at [l] is currently free. *)
+  the memory cell at [l] is currently free. It does not [yield] nor [step]. *)
   Definition store `{!stateE state -< E} `{ubE -< E} (l : loc) (x : val) : itree E val :=
     store' l (Some x).
-  (** Load memory cell [l]. It exhibits UB if the memory cell is free. *)
+  (** Load memory cell [l]. It exhibits UB if the memory cell is free. It does
+  not [yield] nor [step]. *)
   Definition load `{!stateE state -< E} `{ubE -< E} (l : loc) : itree E val :=
     σ ← trigger EGetState;
     some_some_or_ub (σ.(heap) !! l).
@@ -158,7 +199,11 @@ Section semantics.
     later.step ;; Ret v.
 
   (** The semantic interpretation of [e], before rectifying the recursive
-  calls. *)
+  calls.
+
+  If [e] is not a value, this will exhibit a [step] at the very end of
+  the computation, but not a [yield]. This means that if [e] is an atomic
+  expression, [compile_expr' e] will not contain any [yield]s. *)
   Fixpoint compile_expr' (e : expr) : itree (callE expr val +' heaplangE) val :=
     (* FIXME: Get rid of these [do]s in favor of [ITreeToTranslate] magic. *)
     (* We redefine a bunch of things we need to lift them from
@@ -174,24 +219,29 @@ Section semantics.
     let ub := do ub in
     let assert P `{Decision P} := do (assert P) in
     let step_ret v := do (step_ret v) in
-    (* [compile_expr_yield e] evaluates [e] and yields precisely if it did any
-    work. If [e] is a value on the other hand, this is just returned. This
-    means it can be used to evaluate arguments of operations, only introducing
-    [yield]s if the entire operation is not atomic. *)
+    (* Assuming [e] is not a value, [compile_expr_yield e] differs from
+    [compile_expr' e] in that, before returning the output, it not only does a
+    [step] but also a [yield]. This is often appropriate for sequencing
+    computations: [v ← compile_expr_yield e; compile_expr' (f v)] evaluates
+    [e] to [v], then yields if it did any work, and then continues by
+    evaluating [f v], whereas [v ← compile_expr' e; compile_expr' (f v)] would
+    not have a [yield], only a [step], in between evaluating [e] and
+    evaluating [f v]. *)
     let compile_expr_yield e := (v ← compile_expr' e ; yield_if_not_val e ;; Ret v)%itree in
     (* The general pattern for the placement of [step] and [yield] can be
     loosely explained as follows. In order to prove the results in
-    [opsem_adequacy.v], we decide to model the semantics as closely to the
-    operational semantics as possible (this is a design decision: one could
+    [heaplang/opsem_adequacy.v], we decide to model the semantics as closely to
+    the operational semantics as possible (this is a design decision: one could
     still have a meaningful semantics that is defined in another way).
     Whenever we do something corresponding to an opsem step [e ~> e'], there
     should be a [step] to mark that "progress has been made". Moreover, there
-    should be a [yield] in so far that [e'] is not a value. To understand
-    why, consider evaluating some [e] which steps to a value in one step
-    [e ~> v]. In that case, [e] should be an atomic expression, and hence it
-    should not [yield] (otherwise, when establishing its [WPi], one would need
-    to reestablish the invariants). To understand this reasoning better, look
-    at the annotations for [App] case below. *)
+    should be a [yield] but only in so far that [e'] is not a value. To
+    understand why, consider evaluating some [e] which steps to a value in
+    one step [e ~> v]. In that case, [e] is an atomic expression, and
+    hence it should not do a [yield] (otherwise, when establishing its [WPi], one
+    would need to reestablish the invariants). In summary, [yield]s belong
+    where an opsem step has been taken but the computation has not finished
+    yet. See [App e1 e2] case for more. *)
     match e with
     (* If [e] is a value, the computation is already over and no yield or step
     is necessary. This is the only place [Ret] appears. In every other case
@@ -202,15 +252,26 @@ Section semantics.
     need to do a [step], not a [yield]. *)
     | Rec f x e => step_ret (RecV f x e)
     | App e1 e2 =>
-        (* [App e1 e2 ~>* App e1 x] for [x] a value. We recursively evaluate
-        [e2]. [compile_expr_yield e2] ends in a [step] and [yield] if at least one
-        opsem step was taken, so the opsem steps [App e1 e2 ~>* App e1 x ~>* App f x]
-        compose with [step] and [yield] appropriately inserted (see note above). *)
-        x ← compile_expr_yield e2;
-        (* [App e1 x ~>* App f x] (for [f] also a value). *)
+        (* [App e1 e2 ~>* App e1 v]. *)
+        v ← compile_expr_yield e2;
+        (* [App e1 x ~>* App f x] (for [f] a value). *)
         f ← compile_expr_yield e1;
+        (* Let us explain further the use of [compile_expr_yield] in the two
+        operations above, using the intuition provided earlier. We are
+        modeling the opsem steps [App e1 e2 ~>* App e1 x ~>* App f x]. We
+        need [yield] and [step] inbetween each step. [compile_expr_yield e2]
+        ends in a [step] and [yield] if at least one opsem step was taken in
+        [App e1 e2 ~>* App e1 x], which is the desired behavior. If we used
+        just [compile_expr' e2] instead, we would lack the [yield] after the
+        last step of [App e1 e2 ~>* App e1 x]. *)
+        (* f = λ x, e *)
         '(f_, x_, e) ← (val_to_RecV f)?;
-        let body := subst' x_ x  (subst' f_ f e) in
+        (* [App f v ~> e[v/x]]. *)
+        let body := subst' x_ v  (subst' f_ f e) in
+        (* If [e[v/x]] is a value, we are done and so we simply need to [step]
+        and return it (remember we don't end on a yield; see comment above
+        [compile_expr']). If not, we need to [step], [yield] (to mark the opsem
+        step [App f v ~> e[v/x]]), and evaluate it. *)
         step;;
         yield_if_not_val body;;
         call body
@@ -224,14 +285,18 @@ Section semantics.
         v ← (bin_op_eval op v1 v2)?;
         step_ret v
     | If e0 e1 e2 =>
+        (* [If e0 e1 e2 ~>* If v0 e1 e2]. *)
         v0 ← compile_expr_yield e0;
         b ← (val_to_bool v0)?;
         if b then
-          (* if true then e1 else e2 ~> e1 (must yield here!) ~> ... *)
+          (* [If true e1 e2 ~>* e1]. The [step] and [yield_if_not_val] here
+          follows the exact same reasoning as the comments for the [App e1 e2]
+          case. *)
           step;;
           yield_if_not_val e1;;
           compile_expr' e1
         else
+          (* [If false e1 e2 ~>* e2]. *)
           step;;
           yield_if_not_val e2;;
           compile_expr' e2
@@ -254,14 +319,20 @@ Section semantics.
         v ← compile_expr_yield e;
         step_ret (InjRV v)
     | Case e0 e1 e2 =>
+        (* [Case e0 e1 e2 ~> Case v0 e1 e2]. *)
         v0' ← compile_expr_yield e0;
         v0 ← (val_to_sum v0')?;
         match v0 with
         | inl v =>
+            (* [Case (inl v) e1 e2 ~> App e1 v]. The [step] and [yield] here
+            follows the exact same reasoning as the comments for the [App e1 e2]
+            case. We write [yield] instead of the equivalent
+            [yield_if_not_value (App e1 (Val v))]. *)
             step ;;
             yield ;;
             call (App e1 (Val v))
         | inr v =>
+            (* [Case (inr v) e1 e2 ~> App e2 v]. *)
             step ;;
             yield ;;
             call (App e2 (Val v))
@@ -271,16 +342,27 @@ Section semantics.
         match thread with
         | CurrentThread => step_ret (LitV LitUnit)
         | NewThread =>
+            (* We use [compile_expr_yield] here instead of [compile_expr]
+            (which would be morally the same), because it makes some things in
+            [heaplang/opsem_adequacy.v] easier (technical explanation: in the
+            simulated trace, we never execute [kill_thread], instead we just
+            yield and never yield back to the thread that reached a value,
+            which is closer to how completed threads are modeled in the opsem). *)
             v ← compile_expr_yield e;
             kill_thread
         end
     | AllocN ne e =>
+        (* Evaluate the arguments. *)
         v ← compile_expr_yield e;
         n' ← compile_expr_yield ne;
         n ← (val_to_int n')?;
+        (* Allocating 0 cells is UB. *)
         assert (0 < n)%Z;;
+        (* Read the entire heap. *)
         σ ← trigger EGetState;
+        (* Demonically pick a free segment of the heap. *)
         l ← trigger (EDemonic (free_locations n σ));
+        (* Write the evaluated value [v] to every memory cell in that segment. *)
         trigger (ESetState (state_init_heap (`l) n v σ));;
         step_ret (LitV (LitLoc (`l)))
     | Free e =>
@@ -329,13 +411,24 @@ Section semantics.
     | _ => ub
     end%itree.
 
+  (** The semantic interpretation of [e].
+
+  If [e] is not a value, this will exhibit a [step] at the very end of
+  the computation, but not a [yield]. This means that if [e] is an atomic
+  expression, [compile_expr' e] will not contain any [yield]s. *)
   Definition compile_expr : expr → itree heaplangE val := rec compile_expr'.
 
+  (** A version of [compile_expr] that produces an ITree that ends with a
+  [step] and a [yield] (instead of just a [step]) if [e] is not a value. *)
   Definition compile_expr_yield (e : expr) : itree heaplangE val :=
     v ← compile_expr e ; yield_if_not_val e ;; Ret v.
   Arguments compile_expr_yield !_.
 
+  (** An ITree that evaluates an expression and then terminates the current
+  thread. *)
   Definition compile_expr_kill {R} (e : expr) : itree heaplangE R :=
+    (* For technical reasons explained in the comments of the [Fork] case in
+    [compile_expr'], we use [compile_expr_yield] instead of [compile_expr]. *)
     compile_expr_yield e ;; kill_thread.
   Arguments compile_expr_kill !_.
 
@@ -351,61 +444,23 @@ Section semantics.
     | _ => True
     end.
 
-
+  (** Intermediate statement for proving [compile_expr_bind]. *)
   Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
     supported_subset_ectx Ki →
     compile_expr (fill_item Ki e) ≈
-      v ← compile_expr e;
-      yield_if_not_val e;;
+      v ← compile_expr_yield e;
       compile_expr (fill_item Ki (Val v)).
   Proof.
-    intros Hsubset. destruct Ki; simpl; rewrite /compile_expr; try contradiction;
-    eutt_norm; simpl; by eutt_norm.
+    intros Hsubset. destruct Ki; simpl; rewrite /compile_expr_yield/compile_expr;
+    try contradiction; eutt_norm; simpl; by eutt_norm.
   Qed.
-
-  Lemma split_last {A} (xs : list A) :
-    length xs > 0 →
-    ∃ x xs', xs = xs' ++ [x].
-  Proof.
-    intros Hlen.
-    induction xs as [|y ys IH]. { simpl in Hlen. lia. }
-    destruct (length ys) as [|n] eqn:Hlen'.
-    - apply nil_length_inv in Hlen' as ->. by exists y, [].
-    - assert (S n > 0) as HS; first lia.
-      destruct (IH HS) as (x&xs'&->). by exists x, (y :: xs').
-  Qed.
-
-  Lemma list_singleton {A} (xs : list A) :
-    length xs = 1 →
-    ∃ x, xs = [x].
-  Proof.
-    intros Hlen.
-    destruct xs as [|x xs']; first done.
-    exists x. simpl in Hlen. injection Hlen as Hlen.
-    by apply nil_length_inv in Hlen as ->.
-  Qed.
-
-  Lemma fill_item_not_val Ki e :
-    yield_if_not_val (fill_item Ki e) ≈ (yield : itree heaplangE ()).
-  Proof.
-    rewrite /yield_if_not_val. by destruct Ki.
-  Qed.
-  Lemma fill_not_val K e :
-    length K > 0 →
-    yield_if_not_val (fill K e) ≈ (yield : itree heaplangE ()).
-  Proof.
-    intros Hlen.
-    unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
-    rewrite fill_app /= fill_item_not_val //.
-  Qed.
-
+  (** Intermediate statement for proving [compile_expr_bind]. *)
   Lemma compile_expr_bind_ind K e l :
     Forall supported_subset_ectx K →
     length K = l →
     l > 0 →
     compile_expr (fill K e) ≈
-      v ← compile_expr e;
-      yield_if_not_val e;;
+      v ← compile_expr_yield e;
       compile_expr (fill K (Val v)).
   Proof.
     revert K. induction l as [|n IH]; intros K Hsubset Hlen Hne.
@@ -416,26 +471,34 @@ Section semantics.
     unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
     apply Forall_app in Hsubset as [HsubsetK' HsubsetKi].
     rewrite Forall_singleton in HsubsetKi. rewrite app_length /= in Hlen.
-    rewrite fill_app /=. rewrite compile_expr_bind_item //; first rewrite IH //; try lia.
-    rewrite bind_bind. f_equiv. intros v. rewrite fill_app /=.
-    rewrite bind_bind. f_equiv. intros _.
-    rewrite compile_expr_bind_item //. f_equiv. intros v'. rewrite !fill_not_val //.
+    rewrite fill_app /= compile_expr_bind_item // /compile_expr_yield IH // /compile_expr_yield; try lia.
+    eutt_norm.
+    f_equiv. intros v. rewrite fill_app /=. f_equiv. intros _.
+    rewrite compile_expr_bind_item // /compile_expr_yield. eutt_norm. f_equiv. intros v'.
+    rewrite !fill_not_val //.
     - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
       rewrite Hlen. lia.
     - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
       rewrite Hlen. lia.
   Qed.
+  (** A semantic bind lemma. This breaks the computation of [K[e]] into a
+  computation of [e] to a value [v] and then a computation of [K[v]]. *)
   Lemma compile_expr_bind K e :
     Forall supported_subset_ectx K →
+    (* The lemma would not hold with the empty context [K = []], because there
+    would be a [yield] too much on the right side of the [≈]. *)
     length K > 0 →
     compile_expr (fill K e) ≈
-      v ← compile_expr e;
-      yield_if_not_val e;;
+      (* Here appears [compile_expr_yield] (as opposed to merely
+      [compile_expr]) because the computations of [e] and [K[v]] are
+      separated by a [yield] (except for when [e = v]). *)
+      v ← compile_expr_yield e;
       compile_expr (fill K (Val v)).
   Proof.
     intros Hsubset Hne. by apply compile_expr_bind_ind with (l := length K).
   Qed.
 
+  (** A version of [compile_expr_bind] that also works for the empty context. *)
   Lemma compile_expr_bind' K e :
     Forall supported_subset_ectx K →
     compile_expr (fill K e) ≈
@@ -450,7 +513,7 @@ Section semantics.
     destruct (decide _) as [Heq|Hneq].
     - apply nil_length_inv in Heq as ->.
       by eutt_norm.
-    - apply compile_expr_bind; first done. lia.
+    - rewrite compile_expr_bind // /compile_expr_yield; last by lia. by eutt_norm.
   Qed.
 End semantics.
 
@@ -473,16 +536,21 @@ Global Notation "l ↦ v" := (pointsto l v (DfracOwn 1))
 Global Notation "l ↦{ dq } v" := (pointsto l v dq)
   (at level 20, format "l  ↦{ dq }  v") : bi_scope.
 
-Section heaplangH.
+Section handler.
   Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
+  (** The state interpretation for heaplang. It tracks the current heap [σ].
+  It only owns a half fraction of it. *)
   Global Instance stateInterp_heaplang : stateInterp Σ state := λ σ,
     ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap).
-
-  Definition heaplangH m : iHandler Σ heaplangE := threadpoolH ⊕ demonicH ⊕ stateH state ⊕ laterH m ⊕ ubH.
-
+  (** The other half is stored in an invariant so that we can know that another
+  thread won't change it while we have control. *)
   Definition heap_inv : iProp Σ :=
     inv heaplangH_inv_name (∃ σ, ghost_map_auth heaplangH_heap_name (1 / 2) σ.(heap)).
+
+  (** The handler for [heaplangE]. *)
+  Definition heaplangH m : iHandler Σ heaplangE :=
+    threadpoolH ⊕ demonicH ⊕ stateH state ⊕ laterH m ⊕ ubH.
 
   Lemma big_sep_map_list_heap_array l n m v :
     ([∗ map] k↦v0 ∈ heap_array (l +ₗ Z.of_nat m) (replicate n v), k ↪[heaplangH_heap_name] v0) -∗
@@ -510,6 +578,14 @@ Section heaplangH.
     - by iApply @wpi_yield.
   Qed.
 
+  Lemma wpi_compile_expr_yield m e Φ :
+    WPi compile_expr e @ heaplangH m; ⊤ {{ Φ }} -∗
+    WPi compile_expr_yield e @ heaplangH m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite /compile_expr_yield. iApply wpi_bind. iApply wpi_wand; last done.
+    iIntros (r) "HΦ". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
+  Qed.
+
   Lemma wpi_step_ret m M r Φ :
     lat m (Φ r) -∗
     WPi step_ret r @ heaplangH m; M {{ Φ }}.
@@ -518,6 +594,9 @@ Section heaplangH.
     iIntros "HΦ". by iApply wpi_ret.
   Qed.
 
+  (** Specification for [load]. One of the useful things about our theory is
+  that we get to reuse this specification when proving specifications of the
+  various operations that use the [load] abstraction in their definition. *)
   Lemma wpi_load m M l v dq Φ :
     ↑heaplangH_inv_name ⊆ M →
     l ↦{dq} v -∗
@@ -566,8 +645,9 @@ Section heaplangH.
     iApply (wpi_store' with "Hinv Hpointsto"); first done.
     iIntros (r ->) "Hpointsto". by iApply "Hwand".
   Qed.
-End heaplangH.
+End handler.
 
+(** Weakest precondition abstraction for heaplang expressions. *)
 lock Definition wp_heaplang `{!invGS_gen hlc Σ} `{!heaplangHGS Σ} :
   Wp (iProp Σ) expr val later_modality := λ m M e Φ,
     (heap_inv -∗ WPi compile_expr e @ heaplangH m; M {{ Φ }})%I.
@@ -581,6 +661,16 @@ Section wp.
     (heap_inv -∗ WPi compile_expr e @ heaplangH m; M {{ Φ }}).
   Proof. by rewrite unlock. Qed.
 
+  (** Bind lemma for [WP].
+
+  Note that this is qualitatively different from the bind lemma familiar from
+  typical Iris in that it requires mask [⊤]. One perspective is that this is
+  the price we pay for being able to open invariants around any block (no
+  atomicity condition). This would be unsound were it not for the bind lemma
+  being restricted to the [⊤] mask. Namely, there is no way to show
+  [WP e @ m ; M {{ Φ }}] for [M ≠ ⊤] when [e] is not atomic. Another
+  perspective is that we need [⊤] mask to account for the [yield] in the
+  "semantic bind lemma" [compile_expr_bind]. *)
   Lemma wp_bind_K m K e Φ :
     Forall supported_subset_ectx K →
     WP e @ m; ⊤ {{ v,
@@ -595,10 +685,12 @@ Section wp.
       iIntros (r) "Hwp". rewrite wp_heaplang_eq compile_expr_val -wpi_ret'.
       by iApply "Hwp".
     - rewrite compile_expr_bind //. 2: lia. iApply wpi_bind.
+      iApply wpi_compile_expr_yield.
       iApply wpi_wand; last done. iIntros (r) "Hwp".
-      iApply wpi_bind. iApply wpi_yield_if_not_val.
       rewrite wp_heaplang_eq. by iApply "Hwp".
   Qed.
+
+  (* Proof rules for various operations: *)
 
   Lemma wp_Fork m e Φ :
     lat m (Φ (LitV LitUnit)) -∗
@@ -617,7 +709,7 @@ Section wp.
   Qed.
 
   (* TODO: adapt the following lemmas to use WP instead of WPi *)
-  Lemma wpi_AllocN m M v n Φ :
+  Lemma wp_AllocN m M v n Φ :
     (0 < n)%Z →
     ↑heaplangH_inv_name ⊆ M →
     lat m (∀ l,
@@ -652,7 +744,7 @@ Section wp.
   Qed.
 
 
-  Lemma wpi_Load m M l v dq Φ :
+  Lemma wp_Load m M l v dq Φ :
     ↑heaplangH_inv_name ⊆ M →
     l ↦{dq} v -∗
     lat m (l ↦{dq} v -∗ Φ v) -∗
@@ -665,7 +757,7 @@ Section wp.
     iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wpi_Store m M l v v' Φ :
+  Lemma wp_Store m M l v v' Φ :
     ↑heaplangH_inv_name ⊆ M →
     l ↦ v -∗
     lat m (∀ r, ⌜r = LitV (LitUnit)⌝ -∗ l ↦ v' -∗ Φ r) -∗
@@ -678,7 +770,7 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wpi_Free m M l v Φ :
+  Lemma wp_Free m M l v Φ :
     ↑heaplangH_inv_name ⊆ M →
     l ↦ v -∗
     lat m (Φ (LitV LitUnit)) -∗
@@ -704,7 +796,7 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wpi_CmpXchg_fail m M l dq v' v1 v2 Φ :
+  Lemma wp_CmpXchg_fail m M l dq v' v1 v2 Φ :
     ↑heaplangH_inv_name ⊆ M →
     v' ≠ v1 →
     vals_compare_safe v' v1 →
@@ -721,7 +813,7 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wpi_CmpXchg_suc m M l v' v1 v2 Φ :
+  Lemma wp_CmpXchg_suc m M l v' v1 v2 Φ :
     ↑heaplangH_inv_name ⊆ M →
     v' = v1 →
     vals_compare_safe v' v1 →
@@ -739,7 +831,7 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wpi_FAA m M l i1 i2 Φ :
+  Lemma wp_FAA m M l i1 i2 Φ :
     ↑heaplangH_inv_name ⊆ M →
     l ↦ LitV (LitInt i1) -∗
     lat m (l ↦ LitV (LitInt (i1 + i2)) -∗ Φ (LitV (LitInt i1))) -∗
@@ -755,27 +847,32 @@ Section wp.
   Qed.
 End wp.
 
-Lemma heaplangH_init `{!invGS_gen hlc Σ} `{!heaplangHGpreS Σ} σ :
-  ⊢ |={∅}=> ∃ _ : heaplangHGS Σ, heap_inv ∗ state_interp σ ∗ [∗ map] k↦v ∈ σ.(heap), k ↪[heaplangH_heap_name] v.
-Proof.
-  iDestruct (ghost_map_alloc (K := loc) (V := option val) (σ.(heap))) as "Hgmap".
-  iMod "Hgmap" as "[%γ [[Hauth' Hauth] Hfrag]]".
-  iDestruct (inv_alloc (nroot .@ "heaplangH") (∅) ((∃ σ, ghost_map_auth γ (1 / 2) σ.(heap))%I)) as "Hinv".
-  iSpecialize ("Hinv" with "[Hauth]"). { iNext. by iExists σ. }
-  iMod "Hinv". iModIntro.
-  iExists (HeapLangHGS Σ _ γ (nroot .@ "heaplangH")).
-  iFrame.
-Qed.
+Section soundness.
+  (** Lemma for initializing the ghost state for [WP]. *)
+  Lemma heaplangH_init `{!invGS_gen hlc Σ} `{!heaplangHGpreS Σ} σ :
+    ⊢ |={∅}=> ∃ _ : heaplangHGS Σ, heap_inv ∗ state_interp σ ∗ [∗ map] k↦v ∈ σ.(heap), k ↪[heaplangH_heap_name] v.
+  Proof.
+    iDestruct (ghost_map_alloc (K := loc) (V := option val) (σ.(heap))) as "Hgmap".
+    iMod "Hgmap" as "[%γ [[Hauth' Hauth] Hfrag]]".
+    iDestruct (inv_alloc (nroot .@ "heaplangH") (∅) ((∃ σ, ghost_map_auth γ (1 / 2) σ.(heap))%I)) as "Hinv".
+    iSpecialize ("Hinv" with "[Hauth]"). { iNext. by iExists σ. }
+    iMod "Hinv". iModIntro.
+    iExists (HeapLangHGS Σ _ γ (nroot .@ "heaplangH")).
+    iFrame.
+  Qed.
 
-Lemma heaplang_soundness n σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} P:
-  (∀ {HG : invGS Σ} {HS : heaplangHGS Σ},
-    ⊢ heap_inv -∗ state_interp σ -∗ £ n ={⊤,∅}=∗ |={∅}▷=>^n ⌜P⌝) →
-  P.
-Proof.
-  move => Hwp.
-  eapply uPred.pure_soundness.
-  eapply (step_fupdN_soundness_lc _ n n) => ?/=.
-  iIntros "Hlc". iMod (fupd_mask_subseteq ∅) as "Hm"; [done|].
-  iMod heaplangH_init as (?) "[? [??]]".
-  iMod "Hm". iApply (Hwp with "[$] [$] [$]").
-Qed.
+  (** Lemma useful for extract a proposition in classical logic [P] from a
+  proof inside the program logic. *)
+  Lemma heaplang_soundness n σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} P:
+    (∀ {HG : invGS Σ} {HS : heaplangHGS Σ},
+      ⊢ heap_inv -∗ state_interp σ -∗ £ n ={⊤,∅}=∗ |={∅}▷=>^n ⌜P⌝) →
+    P.
+  Proof.
+    move => Hwp.
+    eapply uPred.pure_soundness.
+    eapply (step_fupdN_soundness_lc _ n n) => ?/=.
+    iIntros "Hlc". iMod (fupd_mask_subseteq ∅) as "Hm"; [done|].
+    iMod heaplangH_init as (?) "[? [??]]".
+    iMod "Hm". iApply (Hwp with "[$] [$] [$]").
+  Qed.
+End soundness.
