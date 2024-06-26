@@ -11,8 +11,10 @@ From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
 
+Definition sequential_heaplangE : Type → Type := demonicE +' stateE state +' laterE +' ubE.
 (** The event type for heaplang. *)
-Definition heaplangE : Type → Type := threadpoolE +' demonicE +' stateE state +' laterE +' ubE.
+Definition heaplangE : Type → Type := threadpoolE +' sequential_heaplangE.
+Global Hint Transparent sequential_heaplangE : itree_auto.
 Global Hint Transparent heaplangE : itree_auto.
 
 Lemma split_last {A} (xs : list A) :

@@ -14,19 +14,16 @@ From Paco Require Import paco2.
 
 Set Default Proof Using "Type*".
 
+(* This file proves that our weakest precondition [WP] defined in terms of
+ITrees is adequate with respect to the existing operational semantics of
+heaplang. The high level structure of the proof is a simulation. Specifically,
+in order to apply [heaplang_adequacy_eval]/[heaplang_adequacy_irel], we
+need to construct a relational interpretation. To do so, we invoke
+[heaplang_trace], which in turn takes a [ctrace sequential_heaplangE val]. Thus,
+we need to construct such a [ctrace] from a trace in the operational semantics. *)
+
 Section adequacy.
 Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
-
-Instance state_EqDecision :
-  EqDecision state.
-Proof.
-  intros [σ1 p1] [σ2 p2].
-  destruct (decide (σ1 = σ2)) as [Heq|Hneq].
-  - destruct (decide (p1 = p2)) as [Heq'|Hneq'].
-    * left. by f_equiv.
-    * right. intros Heq'. by injection Heq' as -> ->.
-  - right. intros Heq. by injection Heq as -> ->.
-Qed.
 
 Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
   (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
@@ -392,7 +389,7 @@ Proof.
   - exists [], (Resolve e1 e2 e3). split; first done. by split; first constructor.
 Qed.
 
-Definition ctrace_ub {R} : ctrace (demonicE +' stateE state +' laterE +' ubE) R :=
+Definition ctrace_ub {R} : ctrace sequential_heaplangE R :=
   CTVisEmpty void (subevent _ EUb).
 
 Lemma is_ctrace_ub {A R} tp tid (k : A → itree heaplangE R) :
@@ -441,9 +438,9 @@ Definition tr_terminal (tx : Terminal val) (tr : trace voidE (state * (val + las
   end.
 
 (* TODO: Factor this event type into its own definition. *)
-Definition trace_invariant σ (tx : Terminal val) (opsem_steps : nat) (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
-  match (interp_tr_state σ (interp_tr (sequencify tr))) with
-  | Some tr => tr_terminal tx (interp_tr_ub (insert_voidE_tr (interp_tr_later (Some opsem_steps) tr)))
+Definition trace_invariant σ (tx : Terminal val) (opsem_steps : nat) (tr : ctrace sequential_heaplangE val) :=
+  match interp_tr_heaplang σ (Some opsem_steps) tr with
+  | Some tr => tr_terminal tx tr
   | None => false
   end.
 Arguments trace_invariant _ _ / _ _.
@@ -508,7 +505,7 @@ Lemma enumerate_lookup' {A} (xs : list A) (idx : nat) :
   (enumerate xs) !! idx = (λ x, (idx, x)) <$> (xs !! idx).
 Proof. apply enumerate_from_lookup'. Qed.
 
-Definition ctrace_step_yield (tid : nat) (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+Definition ctrace_step_yield (tid : nat) (tr : ctrace sequential_heaplangE val) :=
   CTVis () (subevent _ ELater) () (CTYield tid tr).
 Lemma is_ctrace_step_yield tid tid' tp tr t :
   tp !! tid = Some (later.step ;; yield ;; t)%itree →
@@ -530,7 +527,7 @@ Lemma trace_invariant_yield tid σ n tx tr :
   trace_invariant σ tx n (CTYield tid tr).
 Proof.
   intros Hinv.
-  rewrite /trace_invariant. rewrite /trace_invariant in Hinv.
+  rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
   rewrite /ctrace_step_yield /=. by destruct (interp_tr_state _ _).
 Qed.
 
@@ -539,22 +536,22 @@ Lemma trace_invariant_step_yield tid σ tx n tr :
   trace_invariant σ tx (S n) (ctrace_step_yield tid tr).
 Proof.
   intros Hinv.
-  rewrite /trace_invariant. rewrite /trace_invariant in Hinv.
+  rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
   rewrite /ctrace_step_yield /=. by destruct (interp_tr_state _ _).
 Qed.
 
-Definition ctrace_store' l x σ (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+Definition ctrace_store' l x σ (tr : ctrace sequential_heaplangE val) :=
   CTVis state (subevent _ EGetState) σ (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=x]> σ))) () tr).
-Definition ctrace_store l x σ (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+Definition ctrace_store l x σ (tr : ctrace sequential_heaplangE val) :=
   ctrace_store' l (Some x) σ tr.
-Definition ctrace_load σ (tr : ctrace (demonicE +' stateE state +' laterE +' ubE) val) :=
+Definition ctrace_load σ (tr : ctrace sequential_heaplangE val) :=
   CTVis state (subevent _ EGetState) σ tr.
 
-Definition ctrace_store'_ub σ : ctrace (demonicE +' stateE state +' laterE +' ubE) val :=
+Definition ctrace_store'_ub σ : ctrace sequential_heaplangE val :=
   CTVis state (subevent _ EGetState) σ ctrace_ub.
 Definition ctrace_store_ub σ :=
   ctrace_store'_ub σ.
-Definition ctrace_load_ub σ : ctrace (demonicE +' stateE state +' laterE +' ubE) val:=
+Definition ctrace_load_ub σ : ctrace sequential_heaplangE val:=
   CTVis state (subevent _ EGetState) σ ctrace_ub.
 
 Lemma is_ctrace_store' σ l x v tid tp tr k :
@@ -644,7 +641,7 @@ Lemma trace_invariant_store' l x σ tx n tr :
   trace_invariant σ tx n (ctrace_store' l x σ tr).
 Proof.
   intros Hinv.
-  rewrite /trace_invariant. rewrite /trace_invariant in Hinv.
+  rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
   simpl. rewrite decide_True //.
 Qed.
 Lemma trace_invariant_store l x σ tx n tr :
@@ -658,7 +655,7 @@ Lemma trace_invariant_load σ tx n tr :
   trace_invariant σ tx n (ctrace_load σ tr).
 Proof.
   intros Hinv.
-  rewrite /trace_invariant. rewrite /trace_invariant in Hinv.
+  rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
   simpl. rewrite decide_True //.
 Qed.
 
@@ -810,7 +807,8 @@ Proof.
         eapply Ectx_step with (K := []); eauto.
         by eapply FreeS.
       + exists (ctrace_store'_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -818,7 +816,8 @@ Proof.
         eapply is_ctrace_store'_ub; first by left.
         { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_store'_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -826,7 +825,7 @@ Proof.
         eapply is_ctrace_store'_ub; first by right.
         { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
     * exists ctrace_ub.
-      split; first done.
+      split; first by done.
       eapply is_ctrace_insert.
       { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
       { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -842,7 +841,8 @@ Proof.
         eapply Ectx_step with (K := []); eauto.
         by eapply LoadS.
       + exists (ctrace_load_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -850,7 +850,8 @@ Proof.
         eapply is_ctrace_load_ub; first by left.
         { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_load_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -874,7 +875,8 @@ Proof.
         eapply Ectx_step with (K := []); eauto.
         by eapply StoreS.
       + exists (ctrace_store_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -882,7 +884,8 @@ Proof.
         eapply is_ctrace_store_ub; first by left.
         { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_store_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -906,7 +909,8 @@ Proof.
         eapply Ectx_step with (K := []); eauto.
         by eapply XchgS.
       + exists (ctrace_store_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -914,7 +918,8 @@ Proof.
         eapply is_ctrace_store_ub; first by left.
         { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_store_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -939,7 +944,8 @@ Proof.
            eapply Ectx_step with (K := []); eauto.
            by eapply CmpXchgS.
         ++ exists (ctrace_load σ ctrace_ub).
-           split; first rewrite /= decide_True //.
+           split.
+           { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
            eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
            { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -950,7 +956,8 @@ Proof.
            eapply is_ctrace_ub.
            rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
       + exists (ctrace_load_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -958,7 +965,8 @@ Proof.
         eapply is_ctrace_load_ub; first by left.
         { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_load_ub σ).
-        split; first rewrite /= decide_True //.
+        split.
+        { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
         eapply is_ctrace_insert.
         { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
         { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -988,7 +996,8 @@ Proof.
                eapply Ectx_step with (K := []); eauto.
                by eapply FaaS.
            +++ exists (ctrace_load σ ctrace_ub).
-               split; first rewrite /= decide_True //.
+               split.
+               { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
                eapply is_ctrace_insert.
                { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
                { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -999,7 +1008,8 @@ Proof.
                eapply is_ctrace_ub.
                rewrite list_lookup_insert // insert_length compile_tp_len -lookup_lt_is_Some //.
         ++ exists (ctrace_load_ub σ).
-           split; first rewrite /= decide_True //.
+           split.
+           { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
            eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
            { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -1007,7 +1017,8 @@ Proof.
            eapply is_ctrace_load_ub; first by left.
            { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
         ++ exists (ctrace_load_ub σ).
-           split; first rewrite /= decide_True //.
+           split.
+           { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
            eapply is_ctrace_insert.
            { rewrite /compile_tp list_lookup_fmap enumerate_lookup' Htp //. }
            { rewrite /compile_expr_yield compile_expr_bind'; first done. admit. }
@@ -1198,7 +1209,8 @@ Proof.
   - destruct (AllocN_free_locations _ _ _ _ _ _ Hbase) as [ll <-].
     exists (CTVis state (subevent _ EGetState) σ1 (CTVis (free_locations n0 σ1) (subevent _ (EDemonic (free_locations n0 σ1))) ll (CTVis () (subevent _ (ESetState (state_init_heap (`ll) n0 v σ1))) () (ctrace_step_yield tid' tr)))).
     repeat split.
-    { rewrite /= decide_True //. by apply trace_invariant_step_yield. }
+    { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
+      by apply trace_invariant_step_yield. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
@@ -1216,7 +1228,8 @@ Proof.
     rewrite list_insert_insert.
     by simpl_itree in Htr.
   - exists (ctrace_store' l None σ1 (ctrace_step_yield tid' tr)). repeat split.
-    { rewrite /= decide_True //. by apply trace_invariant_step_yield. }
+    { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
+      by apply trace_invariant_step_yield. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
@@ -1227,7 +1240,8 @@ Proof.
     rewrite !list_insert_insert.
     by simpl_itree in Htr.
   - exists (ctrace_load σ2 (ctrace_step_yield tid' tr)). repeat split.
-    { rewrite /= decide_True //. by apply trace_invariant_step_yield. }
+    { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
+      by apply trace_invariant_step_yield. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
@@ -1239,7 +1253,8 @@ Proof.
     rewrite list_insert_insert.
     by simpl_itree in Htr.
   - exists (ctrace_store l w σ1 (ctrace_step_yield tid' tr)). repeat split.
-    { rewrite /= decide_True //. by apply trace_invariant_step_yield. }
+    { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
+      by apply trace_invariant_step_yield. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
@@ -1251,7 +1266,8 @@ Proof.
     rewrite list_insert_insert.
     by simpl_itree in Htr.
   - exists (ctrace_store l v2 σ1 (ctrace_step_yield tid' tr)). repeat split.
-    { rewrite /= decide_True //. by apply trace_invariant_step_yield. }
+    { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
+      by apply trace_invariant_step_yield. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
@@ -1266,7 +1282,8 @@ Proof.
     * rewrite bool_decide_eq_true_2 // in Hinv.
       rewrite bool_decide_eq_true_2 // in Htr.
       exists (ctrace_load σ1 (ctrace_store l v2 σ1 (ctrace_step_yield tid' tr))). repeat split.
-      { rewrite /= !decide_True //. by apply trace_invariant_step_yield. }
+      { rewrite /trace_invariant/interp_tr_heaplang /= !decide_True //.
+        by apply trace_invariant_step_yield. }
       eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. reflexivity. }
       eapply is_ctrace_load; first done.
@@ -1283,7 +1300,8 @@ Proof.
     * rewrite bool_decide_eq_false_2 // in Hinv.
       rewrite bool_decide_eq_false_2 // in Htr.
       exists (ctrace_load σ1 (ctrace_step_yield tid' tr)). repeat split.
-      { rewrite /= !decide_True //. by apply trace_invariant_step_yield. }
+      { rewrite /trace_invariant/interp_tr_heaplang /= !decide_True //.
+        by apply trace_invariant_step_yield. }
       eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. reflexivity. }
       eapply is_ctrace_load; first done.
@@ -1294,7 +1312,8 @@ Proof.
       rewrite list_insert_insert.
       by simpl_itree in Htr.
   - exists (ctrace_load σ1 (ctrace_store l (LitV (LitInt (i1 + i2))) σ1 (ctrace_step_yield tid' tr))). repeat split.
-    { rewrite /= !decide_True //. by apply trace_invariant_step_yield. }
+    { rewrite /trace_invariant/interp_tr_heaplang /= !decide_True //.
+      by apply trace_invariant_step_yield. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. reflexivity. }
     eapply is_ctrace_load; first done.
@@ -1433,38 +1452,20 @@ Lemma execution n e σ tp' σ' κ tx :
 Proof.
   intros Hsteps Hterm.
   apply has_trace with (tx := tx) in Hsteps as (tid&tr&Hinv&Htr); eauto.
+  destruct tid; last destruct Htr as [? [[=] _]].
   rewrite /trace_invariant in Hinv.
-  destruct (interp_tr_state σ (interp_tr (sequencify tr))) as [tr'|] eqn:Heq;
-    rewrite Heq // in Hinv.
-  apply threadpool_trace in Htr as (t1&Hint&Htr).
-  eapply demonic_trace in Htr as (t2&Hinst&Htr).
-  eapply state_trace with (s := σ) in Htr as (t3&Heval&Htr); last done.
-  eapply later_trace with (n := Some n) in Htr.
-  eapply insert_voidE_trace in Htr.
-  eapply ub_trace in Htr.
-  exists (ub_ifn (insert_voidE (later_ifn (Some n) t3))).
-  split.
-  - exists t1, t2, t3.
-    split.
-    { destruct (interleaves_lookup _ _ _ Hint) as [t Hidx].
-      destruct tid; last discriminate.
-      rewrite /compile_tp in Hint. simpl in Hint.
-      rewrite (bisimulation_is_eq _ _ (bind_ret_r (compile_expr_yield e))) in Hint.
-      apply Hint.
-    }
-    split; first done.
-    split; first done.
-    done.
-  - destruct tx.
-    * rewrite /tr_terminal in Hinv.
-      destruct (interp_tr_ub (insert_voidE_tr (interp_tr_later (Some n) tr'))) as [[[[σ_ [r|]]|]|] | | | ] eqn:Heq';
-        rewrite Heq' in Hinv; try contradiction.
-      exists σ_.
-      apply is_trace_Ret_inv in Htr as ->. by apply bool_decide_unpack in Hinv as ->.
-    * destruct u.
-      destruct (interp_tr_ub (insert_voidE_tr (interp_tr_later (Some n) tr'))) as [[[[σ_ [r|]]|]|] | | | ] eqn:Heq';
-        rewrite Heq' in Hinv; try contradiction.
-      apply is_trace_Ret_inv in Htr as ->. by destruct u.
+  destruct (interp_tr_heaplang σ (Some n) tr) as [tr'|] eqn:Heq; last contradiction.
+  rewrite /compile_tp in Htr. simpl_itree in Htr.
+  apply heaplang_trace with (tr' := tr') (σ := σ) (n := Some n) in Htr as (te&Hrel&Htr); eauto.
+  exists te. split; first done.
+  destruct tx.
+  - rewrite /tr_terminal in Hinv.
+    destruct tr' as [[[[σ_ [r|]]|]|] | | | ]; try contradiction.
+    exists σ_.
+    apply is_trace_Ret_inv in Htr as ->. by apply bool_decide_unpack in Hinv as ->.
+  - destruct u.
+    destruct tr' as [[[[σ_ [r|]]|]|] | | | ]; try contradiction.
+    apply is_trace_Ret_inv in Htr as ->. by destruct u.
 Qed.
 
 End adequacy.

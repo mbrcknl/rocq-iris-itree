@@ -67,3 +67,47 @@ Section adequacy.
     iIntros (?) "?". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
   Qed.
 End adequacy.
+
+Instance state_EqDecision :
+  EqDecision state.
+Proof.
+  intros [σ1 p1] [σ2 p2].
+  destruct (decide (σ1 = σ2)) as [Heq|Hneq].
+  - destruct (decide (p1 = p2)) as [Heq'|Hneq'].
+    * left. by f_equiv.
+    * right. intros Heq'. by injection Heq' as -> ->.
+  - right. intros Heq. by injection Heq as -> ->.
+Qed.
+
+Section trace.
+  Context {R : Type}.
+
+  (** Extract a trace for the interpreted ITree. *)
+  Definition interp_tr_heaplang σ n (tr : ctrace sequential_heaplangE R) : option (trace voidE ((state * (R + last_thread_killed)) + later_exhausted + ub_crash)) :=
+    (λ tr', interp_tr_ub (insert_voidE_tr (interp_tr_later n tr'))) <$> (interp_tr_state σ (interp_tr (sequencify tr))).
+
+  (** Construct a relational interpretation from a trace. *)
+  Lemma heaplang_trace (tr : ctrace sequential_heaplangE R) (t : itree heaplangE R) tr' σ n :
+    interp_tr_heaplang σ n tr = Some tr' →
+    is_ctrace tr 0 [t] →
+    ∃ (te : itree voidE ((state * (R + last_thread_killed)) + later_exhausted + ub_crash)),
+      heaplang_irel σ n t te ∧ is_trace tr' te.
+  Proof.
+    intros Heq Htr.
+    rewrite /interp_tr_heaplang in Heq.
+    destruct (interp_tr_state σ (interp_tr (sequencify tr))) as [tr''|] eqn:Heq'; try discriminate.
+    simpl in Heq. injection Heq as <-.
+    apply threadpool_trace in Htr as (t1&Hint&Htr).
+    eapply demonic_trace in Htr as (t2&Hinst&Htr).
+    apply state_trace with (s := σ) (tr' := tr'') in Htr as (t3&Heval&Htr); last done.
+    apply later_trace with (n := n) in Htr.
+    apply insert_voidE_trace in Htr.
+    apply ub_trace in Htr.
+    exists (ub_ifn (insert_voidE (later_ifn n t3))). split; last done.
+    exists t1, t2, t3.
+    split; first done.
+    split; first done.
+    split; first done.
+    done.
+  Qed.
+End trace.
