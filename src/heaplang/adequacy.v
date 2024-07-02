@@ -19,8 +19,11 @@ Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
   (exec: itree voidE ((state * (val + last_thread_killed)) + later_exhausted + ub_crash)) : Prop :=
   heaplang_irel σ n (compile_expr_yield e) exec.
 
-Definition totally_adequate {R} (σ : state) (t : itree heaplangE R) (φ : R → Prop) : Prop :=
-  ∀ te, heaplang_irel σ None t te → ∃ x, te ≈ Ret x ∧
+(** Intuitively, [e] is totally adequate with respect to heap [σ] and
+postcondition [φ] when any execution of [e] terminates without reaching [ub]
+with a return value satisfying [φ].  *)
+Definition totally_adequate (e : expr) (σ : state) (φ : val → Prop) : Prop :=
+  ∀ te, heaplang_eval e σ None te → ∃ x, te ≈ Ret x ∧
     match x with
     | inr UbCrash => False
     | inl (inr LaterExhausted) => False
@@ -28,8 +31,11 @@ Definition totally_adequate {R} (σ : state) (t : itree heaplangE R) (φ : R →
     | inl (inl (σ, inr _)) => True
     end.
 
-Definition partially_adequate {R} (σ : state) (t : itree heaplangE R) (φ : R → Prop) : Prop :=
-  ∀ n te x, heaplang_irel σ (Some n) t te ∧ te ≈ Ret x →
+(** Intuitively, [e] is partially adequate with respect to heap [σ] and
+postcondition [φ] when no execution of [e] reaches [ub], and any execution that
+that terminates returns a value satisfying [φ]. *)
+Definition partially_adequate (e : expr) (σ : state) (φ : val → Prop) : Prop :=
+  ∀ n te x, heaplang_eval e σ (Some n) te ∧ te ≈ Ret x →
     match x with
     | inr UbCrash => False
     | inl (inr LaterExhausted) => True
@@ -55,7 +61,7 @@ Proof.
 Section adequacy.
   Context {Σ} `{!invGS Σ} `{!heaplangHGS Σ}.
 
-  Lemma heaplang_adequacy_irel R t σ te (Φ : R → iProp Σ) n m :
+  Lemma wp_adequacy_irel R t σ te (Φ : R → iProp Σ) n m :
     heaplang_irel σ n t te →
     (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     state_interp σ -∗
@@ -80,7 +86,7 @@ Section adequacy.
     by rewrite Hte.
   Qed.
 
-  Lemma heaplang_adequacy_eval e σ te (Φ : val → iProp Σ) n m :
+  Lemma wp_adequacy_eval e σ te (Φ : val → iProp Σ) n m :
     heaplang_eval e σ n te →
     (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     state_interp σ -∗
@@ -95,7 +101,7 @@ Section adequacy.
       end.
   Proof.
     iIntros (?) "Hlc Hs Hinv Hwp".
-    iApply (heaplang_adequacy_irel with "Hlc Hs"); [done..|].
+    iApply (wp_adequacy_irel with "Hlc Hs"); [done..|].
     iApply wpi_bind. iApply wpi_wand. 2: { rewrite wp_heaplang_unfold. by iApply "Hwp". }
     iIntros (?) "?". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
   Qed.
@@ -104,14 +110,14 @@ End adequacy.
 Section soundness.
   Context {Σ} `{!invGpreS Σ} `{!heaplangHGpreS Σ}.
 
-  Lemma heaplang_partial_soundness e σ φ :
+  Lemma wp_partial_soundness e σ φ :
     (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Later; ⊤ {{ v, ⌜φ v⌝ }}) →
-    partially_adequate σ (compile_expr_yield e) φ.
+    partially_adequate e σ φ.
   Proof.
     intros Hwp n te x [Hirel Heutt].
     apply: (heaplang_soundness n). iIntros (? ?) "#Hinv Hst Hlc".
     iDestruct (Hwp _ _) as "Hwp".
-    iDestruct (heaplang_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
+    iDestruct (wp_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
     { apply Hirel. }
     { by iIntros ([]). }
     iMod "Had" as "[%y [%Heutt' Had]]".
@@ -124,14 +130,14 @@ Section soundness.
     - iApply step_fupdN_intro; first done. iModIntro. by iModIntro.
   Qed.
 
-  Lemma heaplang_total_soundness e σ φ :
+  Lemma wp_total_soundness e σ φ :
     (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Identity; ⊤ {{ v, ⌜φ v⌝ }}) →
-    totally_adequate σ (compile_expr_yield e) φ.
+    totally_adequate e σ φ.
   Proof.
     intros Hwp te Hirel.
     apply: (heaplang_soundness 0). iIntros (? ?) "#Hinv Hst Hlc".
     iDestruct (Hwp _ _) as "Hwp".
-    iDestruct (heaplang_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
+    iDestruct (wp_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
     { apply Hirel. }
     { iIntros ([=]). }
     iMod "Had" as "[%x [%Heutt Had]]".

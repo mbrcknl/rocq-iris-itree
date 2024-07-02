@@ -44,7 +44,7 @@ Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : e
 
 (** Partial soundness theorem for the interpreter. *)
 Lemma heaplang_interpreter_partial_soundness e σ fuel later_fuel φ :
-  partially_adequate σ (compile_expr_yield e) φ →
+  partially_adequate e σ φ →
   match heaplang_interpreter σ fuel (Some later_fuel) e with
   | inr Timeout => True
   | inl (inr UbCrash) => False
@@ -67,7 +67,7 @@ Qed.
 
 (** Total soundness theorem for the interpreter. *)
 Lemma heaplang_interpreter_total_soundness e σ φ :
-  totally_adequate σ (compile_expr_yield e) φ →
+  totally_adequate e σ φ →
   ∃ n, ∀ fuel, fuel ≥ n →
   match heaplang_interpreter σ fuel None e with
   | inr Timeout => False

@@ -16,11 +16,15 @@ Set Default Proof Using "Type*".
 
 (* This file proves that our weakest precondition [WP] defined in terms of
 ITrees is adequate with respect to the existing operational semantics of
-heaplang. The high level structure of the proof is a simulation. Specifically,
-in order to apply [heaplang_adequacy_eval]/[heaplang_adequacy_irel], we
-need to construct a relational interpretation. To do so, we invoke
-[heaplang_trace], which in turn takes a [ctrace sequential_heaplangE val]. Thus,
-we need to construct such a [ctrace] from a trace in the operational semantics. *)
+heaplang. By [wp_partial_soundness], it suffices to show that partial adequacy
+[partially_adequate] implies operational adequacy [adequate] (adequacy with
+respect to the operational semantics). The high level structure of the proof is
+a simulation. More specifically, from an operational semantics trace starting
+at [e], we need to construct a relational interpretation (an execution) of its
+semantic interpretation [compile_expr_yield e]. To do so, we invoke
+[heaplang_trace], which in turn takes a [ctrace sequential_heaplangE val].
+Thus, we need to construct such a [ctrace] from a trace in the operational
+semantics. This is done inductively. *)
 
 Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
   (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
@@ -1468,7 +1472,7 @@ Qed.
 From iris.program_logic Require Import adequacy.
 
 Lemma partially_adequate_opsem_adequate e σ φ :
-  partially_adequate σ (compile_expr_yield e) φ →
+  partially_adequate e σ φ →
   adequate NotStuck e σ (λ v _, φ v).
 Proof.
   intros Had.
@@ -1496,7 +1500,7 @@ Theorem wp_later_opsem_adequate Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ
   adequate NotStuck e σ (λ v _, φ v).
 Proof.
   intros Hwp.
-  eapply heaplang_partial_soundness in Hwp.
+  eapply wp_partial_soundness in Hwp.
   by apply partially_adequate_opsem_adequate in Hwp.
 Qed.
 
