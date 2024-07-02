@@ -63,7 +63,7 @@ Section adequacy.
   Proof.
     iIntros (?) "Hlc Hs Hinv Hwp".
     iApply (heaplang_adequacy_irel with "Hlc Hs"); [done..|].
-    iApply wpi_bind. iApply wpi_wand. 2: { rewrite wp_heaplang_eq. by iApply "Hwp". }
+    iApply wpi_bind. iApply wpi_wand. 2: { rewrite wp_heaplang_unfold. by iApply "Hwp". }
     iIntros (?) "?". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
   Qed.
 End adequacy.

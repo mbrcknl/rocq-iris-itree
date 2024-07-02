@@ -657,11 +657,11 @@ Section translation.
   interp f t @ H1 {{ Φ }}] for itrees [t]. The following statement gives you
   sufficient conditions for when one implies the other. *)
   Lemma wpi_translation_emp_mask {R} (t : itree E1 R) Φ :
-    □ (∀ A (e : E1 A) (k : A → itree E1 R) Q,
+    □ (∀ A (e : E1 A) (k : A → itree E1 R) Ψ,
          H1 A (subevent A e)
-           (λ a, WPi interp f (k a) @ H2; ∅ {{ Q }})
+           (λ a, WPi interp f (k a) @ H2; ∅ {{ Ψ }})
            (λ a, |={⊤, ∅}=> WPi interp f (k a) @ H2; ∅ {{ λ _, False }}) -∗
-         WPi ITree.bind (f A e) (λ a, interp f (k a)) @ H2; ∅ {{ Q }}
+         WPi ITree.bind (f A e) (λ a, interp f (k a)) @ H2; ∅ {{ Ψ }}
       ) -∗
     WPi t @ H1; ∅ {{ Φ }} -∗ WPi (interp f t) @ H2; ∅ {{ Φ }}.
   Proof.
@@ -678,17 +678,17 @@ Section translation.
   Qed.
 
   Lemma wpi_translation {R} (t : itree E1 R) M Φ :
-    □ (∀ A (e : E1 A) (k : A → itree E1 R) Q,
+    □ (∀ A (e : E1 A) (k : A → itree E1 R) Ψ,
          H1 A (subevent A e)
-           (λ a, WPi interp f (k a) @ H2; ∅ {{ Q }})
+           (λ a, WPi interp f (k a) @ H2; ∅ {{ Ψ }})
            (λ a, WPi interp f (k a) @ H2; ⊤ {{ λ _, False }}) -∗
-         WPi ITree.bind (f A e) (λ a, interp f (k a)) @ H2; ∅ {{ Q }}
+         WPi ITree.bind (f A e) (λ a, interp f (k a)) @ H2; ∅ {{ Ψ }}
       ) -∗
     WPi t @ H1; M {{ Φ }} -∗ WPi (interp f t) @ H2; M {{ Φ }}.
   Proof.
     iIntros "#Hwand Hwp". iApply wpi_clear_mask.
     iApply wpi_translation_emp_mask; last rewrite -wpi_clear_mask //.
-    iModIntro. iIntros (A e k Q) "HH".
+    iModIntro. iIntros (A e k Ψ) "HH".
     iApply wpi_update. iApply wpi_update_post.
     iApply wpi_wand; first last.
     - iApply "Hwand". iApply ihandler_mono; last done.
@@ -706,17 +706,41 @@ Section translation.
          H1 A (subevent A e)
            (λ a, ψ a)
            (λ _, True) -∗
-         WPi (f A e) @ H2; ∅ {{ v, ψ v }}
+         WPi (f A e) @ H2; ∅ {{ ψ }}
       ) -∗
     WPi t @ H1; M {{ Φ }} -∗ WPi (interp f t) @ H2; M {{ Φ }}.
   Proof.
     iIntros "#Hwand Hwp". iApply wpi_translation; last done.
-    iModIntro. iIntros (A e k Q) "HH". iApply wpi_bind. iApply "Hwand".
+    iModIntro. iIntros (A e k Ψ) "HH". iApply wpi_bind. iApply "Hwand".
     iApply ihandler_mono; last done.
     - by iIntros (a) "?".
     - iModIntro. by iIntros (a) "?".
   Qed.
 End translation.
+
+Section mono.
+  Context {Σ : gFunctors} `{!invGS_gen hlc Σ} {E : Type → Type}.
+  Context {H1 : iHandler Σ E} {H2 : iHandler Σ E}.
+  Context {Hwand : wandH H1 H2}.
+
+  Lemma wpi_wandH {R} M (t : itree E R) Φ :
+    WPi t @ H1; M {{ Φ }} -∗
+    WPi t @ H2; M {{ Φ }}.
+  Proof.
+    iIntros "Hwp".
+    (* FIXME: For some reason rewriting directly doesn't work, so we have to do
+    this BS. *)
+    pose (Heutt := interp_id_h t). apply eutt_weak in Heutt. symmetry in Heutt.
+    iApply wpi_proper; first apply Heutt. { reflexivity. }
+    Set Printing Implicit.
+    iApply (wpi_translation _ _ Φ); last done.
+    iIntros "!>" (A e k Ψ) "HH1". 
+    rewrite bind_trigger -wpi_vis'. iModIntro. iApply Hwand.
+    iApply ihandler_mono; last done.
+    - iIntros (a) "Hwp". by iApply wpi_update_post.
+    - iIntros "!>" (a) "Hwp". done.
+  Qed.
+End mono.
 
 Section inH.
   Context {Σ : gFunctors} `{!invGS_gen hlc Σ}.

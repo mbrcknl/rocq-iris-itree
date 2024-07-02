@@ -5,11 +5,11 @@ From iris.itree.threadpool Require Import handler.
 From iris.prelude Require Import prelude.
 From iris Require Import ghost_map.
 From iris Require Import invariants.
-From iris.heap_lang Require Export lang locations.
 From iris.base_logic.lib Require Import ghost_var.
 From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
+From iris.heap_lang Require Export lang locations.
 
 Definition sequential_heaplangE : Type → Type := demonicE +' stateE state +' laterE +' ubE.
 (** The event type for heaplang. *)
@@ -291,14 +291,14 @@ Section semantics.
         v0 ← compile_expr_yield e0;
         b ← (val_to_bool v0)?;
         if b then
-          (* [If true e1 e2 ~>* e1]. The [step] and [yield_if_not_val] here
+          (* [If true e1 e2 ~> e1]. The [step] and [yield_if_not_val] here
           follows the exact same reasoning as the comments for the [App e1 e2]
           case. *)
           step;;
           yield_if_not_val e1;;
           compile_expr' e1
         else
-          (* [If false e1 e2 ~>* e2]. *)
+          (* [If false e1 e2 ~> e2]. *)
           step;;
           yield_if_not_val e2;;
           compile_expr' e2
@@ -658,10 +658,20 @@ Global Existing Instance wp_heaplang.
 Section wp.
   Context `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
-  Lemma wp_heaplang_eq e m M Φ :
+  Lemma wp_heaplang_unfold e m M Φ :
     WP e @ m; M {{ Φ }} ⊣⊢
     (heap_inv -∗ WPi compile_expr e @ heaplangH m; M {{ Φ }}).
   Proof. by rewrite unlock. Qed.
+
+  (** The total WP implies the partial WP. *)
+  Lemma wp_later_weaken e M Φ :
+    WP e @ Identity; M {{ Φ }} -∗
+    WP e @ Later; M {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_heaplang_unfold. iIntros "#Hinv".
+    iApply (wpi_wandH (H1 := heaplangH Identity) (H2 := heaplangH Later)).
+    by iApply "Hwp".
+  Qed.
 
   (** Bind lemma for [WP].
 
@@ -680,16 +690,16 @@ Section wp.
     }} -∗
     WP fill K e @ m; ⊤ {{ Φ }}.
   Proof.
-    iIntros (Hs) "Hwp". rewrite !wp_heaplang_eq.
+    iIntros (Hs) "Hwp". rewrite !wp_heaplang_unfold.
     iIntros "#Hinv". iSpecialize ("Hwp" with "Hinv").
     destruct (decide (length K = 0)).
     - destruct K => //=. iApply wpi_update_post. iApply wpi_wand; last done.
-      iIntros (r) "Hwp". rewrite wp_heaplang_eq compile_expr_val -wpi_ret'.
+      iIntros (r) "Hwp". rewrite wp_heaplang_unfold compile_expr_val -wpi_ret'.
       by iApply "Hwp".
     - rewrite compile_expr_bind //. 2: lia. iApply wpi_bind.
       iApply wpi_compile_expr_yield.
       iApply wpi_wand; last done. iIntros (r) "Hwp".
-      rewrite wp_heaplang_eq. by iApply "Hwp".
+      rewrite wp_heaplang_unfold. by iApply "Hwp".
   Qed.
 
   (** Rule for changing the mask.
@@ -701,7 +711,7 @@ Section wp.
   Lemma wp_atomic m E1 E2 e Φ :
     (|={E1,E2}=> WP e @ m; E2 {{ v, |={E2,E1}=> Φ v }}) ⊢ WP e @ m; E1 {{ Φ }}.
   Proof.
-    iIntros "Hwp". rewrite !wp_heaplang_eq. iIntros "#Hinv".
+    iIntros "Hwp". rewrite !wp_heaplang_unfold. iIntros "#Hinv".
     setoid_rewrite <- wpi_clear_mask. iMod "Hwp". iMod ("Hwp" with "Hinv") as "Hwp".
     iApply wpi_wand; last done. iIntros (r) "HΦ". by iMod "HΦ".
   Qed.
@@ -710,10 +720,11 @@ Section wp.
 
   Lemma wp_Fork m e Φ :
     lat m (Φ (LitV LitUnit)) -∗
+    (* TODO: I think this postcondition is unecessarily strong *)
     WP e @ m; ⊤ {{ v, ⌜v = LitV LitUnit⌝ }} -∗
     WP Fork e @ m; ⊤ {{ Φ }}.
   Proof.
-    iIntros "HΦ Hwp". rewrite !wp_heaplang_eq. iIntros "#Hinv".
+    iIntros "HΦ Hwp". rewrite !wp_heaplang_unfold. iIntros "#Hinv".
     iSpecialize ("Hwp" with "Hinv").
     rewrite /compile_expr. wpi_norm/=.
     rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
@@ -735,7 +746,7 @@ Section wp.
     WP AllocN (Val (LitV (LitInt n))) (Val v) @ m; M {{ Φ }}.
   Proof.
     iIntros (Hpos Hmask) "Hwand".
-    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite wp_heaplang_unfold /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_open_invariant_timeless; eauto; first apply _. iIntros "[%σ' Hauth]".
     rewrite assert_True //. wpi_norm.
     iApply wpi_bind. iApply @wpi_get.
@@ -759,7 +770,6 @@ Section wp.
     iApply "Hpost". iApply big_sep_map_list_heap_array. rewrite Loc.add_0 //.
   Qed.
 
-
   Lemma wp_Load m M l v dq Φ :
     ↑heaplangH_inv_name ⊆ M →
     l ↦{dq} v -∗
@@ -767,7 +777,7 @@ Section wp.
     WP Load (Val $ LitV $ LitLoc l) @ m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite wp_heaplang_unfold /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done. iIntros (v' ->) "Hpointsto".
     iApply wpi_step_ret. iApply (lat_mono with "[Hpointsto]"); last done.
     iIntros "Hwand". by iApply "Hwand".
@@ -780,7 +790,7 @@ Section wp.
     WP Store (Val $ LitV $ LitLoc l) (Val v') @ m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    rewrite !wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite !wp_heaplang_unfold /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
@@ -794,7 +804,7 @@ Section wp.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
     iIntros (Hmask) "Hpointsto HΦ".
-    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite wp_heaplang_unfold /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store' with "Hinv Hpointsto"); first done.
     iIntros (r) "_ _". by iApply wpi_step_ret.
   Qed.
@@ -806,7 +816,7 @@ Section wp.
     WP Xchg (Val $ LitV (LitLoc l)) (Val v') @ m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite wp_heaplang_unfold /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.
     iIntros "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
@@ -821,7 +831,7 @@ Section wp.
     WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; M {{ Φ }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "Hpointsto Hwand".
-    rewrite wp_heaplang_eq  /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite wp_heaplang_unfold  /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
     rewrite /assert /= decide_True // decide_False //. wpi_norm/=.
@@ -838,7 +848,7 @@ Section wp.
     WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; M {{ Φ }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "Hpointsto Hwand".
-    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite wp_heaplang_unfold /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
     rewrite /assert /= decide_True // decide_True //. wpi_norm.
@@ -854,7 +864,7 @@ Section wp.
     WP FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2) @ m; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    rewrite wp_heaplang_eq /compile_expr. iIntros "#Hinv". wpi_norm/=.
+    rewrite wp_heaplang_unfold /compile_expr. iIntros "#Hinv". wpi_norm/=.
     iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
     iIntros (r ->) "Hpointsto".
     wpi_norm/=. iApply wpi_bind. iApply (wpi_store with "Hinv Hpointsto"); first done.

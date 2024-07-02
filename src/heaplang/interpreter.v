@@ -32,7 +32,7 @@ Definition heaplang_eval_itree σ later_fuel e : itree voidE ((state * (val + la
 (** Evaluate a heaplang expression [e] at state [σ] in [fuel] computation steps
 or less.
 
-There is also a paramter [later_fuel], which optionally controls the number of
+There is also a parameter [later_fuel], which optionally controls the number of
 [step]s we can encounter. While [fuel] is closer to a measure of the actual
 computational effort, [later_fuel] sets a limit for the number of opsem steps
 in the evaluation of [e]. *)

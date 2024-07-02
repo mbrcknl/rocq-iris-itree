@@ -83,6 +83,10 @@ Section handler.
   Proof.
     by iIntros (A [] Φ s) "HH".
   Qed.
+
+  Global Instance wandH_laterH :
+    wandH (laterH Identity) (laterH Later).
+  Proof. iIntros (A [] Φ s) "Hlat". by simpl. Qed.
 End handler.
 
 Section wpi.

@@ -35,10 +35,6 @@ Proof.
   - rewrite !Hmon. repeat f_equiv.
 Qed.
 
-(** [inH H1 H2] means that, on events [E1], [H1] is equivalent to [H2]. *)
-Class inH {Σ E1 E2} `{f : E1 -< E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :=
-  is_inH : ∀ A e Φ s, H1 A e Φ s ⊣⊢ H2 A (subevent A e) Φ s.
-
 (** An [iHandler] for sum events [E1 +' E2] delegating to respective [iHandler]s. *)
 Program Definition sumH {Σ E1 E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2)
   : iHandler Σ (E1 +' E2) :=
@@ -54,6 +50,10 @@ Next Obligation.
 Qed.
 Notation "H1 ⊕ H2" := (sumH H1 H2)
   (at level 59, right associativity) : type_scope.
+
+(** [inH H1 H2] means that, on events [E1], [H1] is equivalent to [H2]. *)
+Class inH {Σ E1 E2} `{f : E1 -< E2} (H1 : iHandler Σ E1) (H2 : iHandler Σ E2) :=
+  is_inH : ∀ A e Φ s, H1 A e Φ s ⊣⊢ H2 A (subevent A e) Φ s.
 
 Global Instance inH_reflexivity {Σ E} (H : iHandler Σ E) :
   inH H H.
@@ -74,6 +74,24 @@ Proof.
   intros Hin ????. iSplit.
   - iIntros "?". by iApply Hin.
   - iIntros "?". by iApply Hin.
+Qed.
+
+(** [wandH H1 H2] means that [H1] implies [H2]. *)
+Class wandH {Σ E} (H1 H2 : iHandler Σ E) :=
+  is_wandH : ∀ A e Φ s, H1 A e Φ s -∗ H2 A e Φ s.
+
+Global Instance wandH_reflexivity {Σ E} (H : iHandler Σ E) :
+  wandH H H.
+Proof. rewrite /wandH. eauto. Qed.
+
+Global Instance sumH_wandH {Σ E1 E2} (H1 H1' : iHandler Σ E1) (H2 H2' : iHandler Σ E2) :
+  wandH H1 H1' →
+  wandH H2 H2' →
+  wandH (H1 ⊕ H2) (H1' ⊕ H2').
+Proof.
+  intros Hwand1 Hwand2 ????. iIntros "H". destruct e; simpl.
+  - by iApply Hwand1.
+  - by iApply Hwand2.
 Qed.
 
 (** This class covers "sequential" [iHandler]s which are insensitive to the
