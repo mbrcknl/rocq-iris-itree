@@ -16,6 +16,19 @@ Fixpoint exec {R} (fuel : nat) (t : itree voidE R) : option R :=
     end
   end.
 
+Lemma exec_spec {R} fuel (t : itree voidE R) r :
+  exec fuel t = Some r →
+  t ≈ Ret r.
+Proof.
+  revert t. induction fuel; first discriminate. intros t Hexec.
+  simpl in Hexec.
+  case_match.
+  (* FIXME: make simplify_obs smarter so it can do this symmetry itself. *)
+  - symmetry in H. simplify_obs. by simplify_eq.
+  - symmetry in H. simplify_obs. apply tau_eutt_RR_l; eauto. apply _.
+  - destruct e.
+Qed.
+
 Lemma exec_stable {R} n m (t : itree voidE R) :
   n ≥ m →
   is_Some (exec m t) →

@@ -22,9 +22,6 @@ need to construct a relational interpretation. To do so, we invoke
 [heaplang_trace], which in turn takes a [ctrace sequential_heaplangE val]. Thus,
 we need to construct such a [ctrace] from a trace in the operational semantics. *)
 
-Section adequacy.
-Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
-
 Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
   (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
     match thread with
@@ -1348,7 +1345,7 @@ Lemma lt_gt n m :
 Proof. lia. Qed.
 
 (* TODO: Idea: make κ = [] *)
-Lemma has_trace n tp σ tp' σ' κ tx :
+Lemma simulation n tp σ tp' σ' κ tx :
   language.nsteps n (tp, σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
   length tp > 0 →
@@ -1440,7 +1437,7 @@ Proof.
       + done.
 Admitted.
 
-Lemma execution n e σ tp' σ' κ tx :
+Lemma execution_from_opsem_trace n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
   ∃ te,
@@ -1451,7 +1448,7 @@ Lemma execution n e σ tp' σ' κ tx :
     end.
 Proof.
   intros Hsteps Hterm.
-  apply has_trace with (tx := tx) in Hsteps as (tid&tr&Hinv&Htr); eauto.
+  apply simulation with (tx := tx) in Hsteps as (tid&tr&Hinv&Htr); eauto.
   destruct tid; last destruct Htr as [? [[=] _]].
   rewrite /trace_invariant in Hinv.
   destruct (interp_tr_heaplang σ (Some n) tr) as [tr'|] eqn:Heq; last contradiction.
@@ -1468,113 +1465,48 @@ Proof.
     apply is_trace_Ret_inv in Htr as ->. by destruct u.
 Qed.
 
-End adequacy.
-
-(* TODO: Don't redefine *)
-Notation TermUb := (inr UbCrash).
-Notation TermRet r := (inl r).
-
-Lemma execution_wpi Σ (Hinv : invGS_gen HasLc Σ) (Hhl : heaplangHGS Σ) Φ n e σ tp' σ' κ tx:
-  language.nsteps n ([e], σ) κ (tp', σ') →
-  tp_termination tp' σ' tx →
-  state_interp σ -∗
-  heap_inv -∗
-  WP e @ Identity ; ⊤ {{ Φ }} -∗
-  |={⊤}=> match tx with
-  | TermUb => False
-  | TermRet v => Φ v
-  end.
-Proof.
-  iIntros (Hstep Hstuck).
-  apply execution with (tx := tx) in Hstep as (te&Heval&Hterm); last done.
-  iIntros "Hstate #Hinv Hwp".
-  iDestruct (heaplang_adequacy_eval with "[] Hstate Hinv Hwp") as "HΦ".
-  { done. }
-  { iIntros ([=]). }
-  destruct tx.
-  - iMod "HΦ" as "[%r [%Heutt HΦ]]". destruct Hterm as [σ_ Heutt'].
-    rewrite Heutt in Heutt'. apply eqit_inv_Ret in Heutt' as ->.
-    by iMod "HΦ" as "[_ $]".
-  - iMod "HΦ" as "[%r [%Heutt HΦ]]". destruct u.
-    rewrite Heutt in Hterm. by apply eqit_inv_Ret in Hterm as ->.
-Qed.
-
-Lemma execution_wpi_later Σ (Hinv : invGS_gen HasLc Σ) (Hhl : heaplangHGS Σ) Φ n e σ tp' σ' κ tx :
-  language.nsteps n ([e], σ) κ (tp', σ') →
-  tp_termination tp' σ' tx →
-  £ n -∗
-  state_interp σ -∗
-  heap_inv -∗
-  WP e @ Later ; ⊤ {{ Φ }} -∗
-  |={⊤, ∅}=> match tx with
-  | TermUb => False
-  | TermRet v => |={∅, ⊤}=> Φ v
-  end.
-Proof.
-  iIntros (Hstep Hstuck).
-  apply execution with (tx := tx) in Hstep as (te&Heval&Hterm); last done.
-  iIntros "Hlc Hstate #Hinv Hwp".
-  iDestruct (heaplang_adequacy_eval with "[Hlc] Hstate Hinv Hwp") as "HΦ"; eauto.
-  destruct tx.
-  - iMod "HΦ" as "[%r [%Heutt HΦ]]". destruct Hterm as [σ_ Heutt'].
-    rewrite Heutt in Heutt'. apply eqit_inv_Ret in Heutt' as ->.
-    iModIntro. by iMod "HΦ" as "[_ $]".
-  - iMod "HΦ" as "[%r [%Heutt HΦ]]". destruct u.
-    rewrite Heutt in Hterm. by apply eqit_inv_Ret in Hterm as ->.
-Qed.
-
 From iris.program_logic Require Import adequacy.
 
+Lemma partially_adequate_opsem_adequate e σ φ :
+  partially_adequate σ (compile_expr_yield e) φ →
+  adequate NotStuck e σ (λ v _, φ v).
+Proof.
+  intros Had.
+  apply adequate_alt.
+  setoid_rewrite erased_steps_nsteps.
+  intros t2 σ2 (n&κs&Hsteps).
+  split.
+  - intros v2 t2' Heq.
+    opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&Heval&Hφ); eauto.
+    { rewrite Heq. apply tp_termination_TermRet. }
+    destruct Hφ as (σ'&Heutt).
+    by ospecialize (Had _ _ _ _).
+  - intros e2 _ [i Hidx]%elem_of_list_lookup.
+    destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
+    exfalso.
+    opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&Heval&Heutt); eauto.
+    { apply tp_termination_TermUb. econstructor. by eexists. }
+    simpl in Heutt.
+    by ospecialize (Had _ _ _ _).
+Qed.
+
 (* TODO: deduplicate these proofs *)
-Theorem heap_adequacy_later Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
+Theorem wp_later_opsem_adequate Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
   (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Later; ⊤ {{ v, ⌜φ v⌝ }}) →
   adequate NotStuck e σ (λ v _, φ v).
 Proof.
-  move => Hwp. apply adequate_alt => t2 σ2 /erased_steps_nsteps[n [κs Hsteps]].
-  constructor.
-  - move => ? ? Hval.
-    apply: (heaplang_soundness n). intros ? ?.
-    iDestruct (Hwp _ _) as "Hwp".
-    opose proof (execution_wpi_later _ _ _) as Had.
-    iIntros "Hinv Hs Hlc". iMod (Had with "Hlc Hs Hinv Hwp") as "Had"; eauto.
-    { rewrite Hval. apply tp_termination_TermRet. }
-    (* TODO: find a less hacky way to do this *)
-    simpl. iMod "Had". iApply fupd_mask_intro; first done. iIntros "_".
-    by iApply step_fupdN_intro.
-  - move => e2 _ /elem_of_list_lookup [? He2].
-    destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
-    exfalso.
-    apply: (heaplang_soundness n). intros ? ?.
-    iDestruct (Hwp _ _) as "Hwp".
-    opose proof (execution_wpi_later _ _ _) as Had.
-    iIntros "Hinv Hs Hlc". iMod (Had with "Hlc Hs Hinv Hwp") as "Had"; eauto.
-    { apply tp_termination_TermUb. econstructor. by eexists. }
-    done.
+  intros Hwp.
+  eapply heaplang_partial_soundness in Hwp.
+  by apply partially_adequate_opsem_adequate in Hwp.
 Qed.
 
 (* TODO: prove this via weakening *)
-Theorem heap_adequacy_no_later Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
+Theorem wp_total_opsem_adequate Σ `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ:
   (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Identity; ⊤ {{ v, ⌜φ v⌝ }}) →
   adequate NotStuck e σ (λ v _, φ v).
 Proof.
-  move => Hwp. apply adequate_alt => t2 σ2 /erased_steps_nsteps[n [κs Hsteps]].
-  constructor.
-  - move => ? ? Hval.
-    apply: (heaplang_soundness n). intros ? ?.
-    iDestruct (Hwp _ _) as "Hwp".
-    opose proof (execution_wpi _ _ _) as Had.
-    iIntros "Hinv Hs Hlc". iMod (Had with "Hs Hinv Hwp") as "Had"; eauto.
-    { rewrite Hval. apply tp_termination_TermRet. }
-    (* TODO: find a less hacky way to do this *)
-    simpl. iApply fupd_mask_intro; first done. iIntros "_".
-    by iApply step_fupdN_intro.
-  - move => e2 _ /elem_of_list_lookup [? He2].
-    destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
-    exfalso.
-    apply: (heaplang_soundness n). intros ? ?.
-    iDestruct (Hwp _ _) as "Hwp".
-    opose proof (execution_wpi _ _ _) as Had.
-    iIntros "Hinv Hs". iMod (Had with "Hs Hinv Hwp") as "Had"; eauto.
-    { apply tp_termination_TermUb. econstructor. by eexists. }
-    done.
+  intros Hwp.
+  eapply wp_later_opsem_adequate; eauto.
+  iIntros (? ?). iDestruct Hwp as "Hwp".
+  by iApply wp_later_weaken.
 Qed.

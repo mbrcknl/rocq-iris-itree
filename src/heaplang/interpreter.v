@@ -42,102 +42,48 @@ Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : e
   | Some x => inl x
   end.
 
-(** Adequacy theorem for the interpreter, a corollary to the adequacy theorems
-proven in [heaplang/adequacy.v].
-
-This is only partial adequacy, meaning that it does not provide any termination
-guarantee. This is instead proven in [heaplang_interpreter_adequacy_termination]. *)
-Lemma heaplang_interpreter_adequacy `{!invGS Σ} `{!heaplangHGS Σ} m e σ fuel later_fuel Φ :
-  (⌜m = Later⌝ → match later_fuel with Some n => £ n | None => False end) -∗
-  state_interp σ -∗
-  heap_inv -∗
-  WP e @ m; ⊤ {{ Φ }} -∗
-  |={⊤, ∅}=>
-    match heaplang_interpreter σ fuel later_fuel e with
-    | inr Timeout => True
-    | inl (inr UbCrash) => False
-    | inl (inl (inr LaterExhausted)) => ⌜is_Some later_fuel⌝
-    | inl (inl (inl (σ, r))) => state_interp σ ∗
-        match r with | inl v => Φ v | inr LastThreadKilled => True end
-    end.
-Proof.
-  iIntros "Hlc Hstate Hinv Hwp".
-  iMod (heaplang_adequacy_eval e σ (heaplang_eval_itree σ later_fuel e) with "[Hlc] Hstate Hinv Hwp") as "[%v [%Heval HΦ]]".
-  { apply heaplang_ifn_irel. }
-  { eauto. }
-  apply exec_ret in Heval as [n Heq].
-  rewrite /heaplang_interpreter. destruct (exec fuel (heaplang_eval_itree σ later_fuel e)) eqn:Heq'.
-  * apply exec_agree with (m := fuel) (r1 := s) in Heq as ->.
-    destruct v.
-    + destruct s.
-      -- iMod "HΦ". destruct p as [σ0 [v|[]]]; iApply fupd_mask_intro; eauto.
-      -- by destruct l.
-    + by destruct u.
-    + done.
-  * destruct v; eauto.
-Qed.
-
-(** A version of [heaplang_interpreter_adequacy] outside of the Iris logic. *)
-Lemma heaplang_interpreter_soundness `{!invGpreS Σ} `{!heaplangHGpreS Σ} m e σ fuel later_fuel φ :
-  (m = Later → is_Some later_fuel) →
-  (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ m; ⊤ {{ v, ⌜φ v⌝ }}) →
-  match heaplang_interpreter σ fuel later_fuel e with
+(** Partial soundness theorem for the interpreter. *)
+Lemma heaplang_interpreter_partial_soundness e σ fuel later_fuel φ :
+  partially_adequate σ (compile_expr_yield e) φ →
+  match heaplang_interpreter σ fuel (Some later_fuel) e with
   | inr Timeout => True
   | inl (inr UbCrash) => False
-  | inl (inl (inr LaterExhausted)) => is_Some later_fuel
+  | inl (inl (inr LaterExhausted)) => True
   | inl (inl (inl (σ, inl v))) => φ v
   (* TODO: This case is never reached. Maybe it would make sense to strengthen
   the [True] to [False], incurring extra proof effort. *)
   | inl (inl (inl (σ, inr LastThreadKilled))) => True
   end.
 Proof.
-  intros Hfuel Hwp. apply: (heaplang_soundness (default 0 later_fuel)).
-  iIntros (? ?) "#Hinv Hstate Hlc".
-  iDestruct Hwp as "Hwp".
-  iDestruct (heaplang_interpreter_adequacy m e σ fuel later_fuel with "[Hlc] Hstate Hinv Hwp") as "Hφ".
-  { iIntros (->). destruct later_fuel; first done. by odestruct (Hfuel _). }
-  repeat case_match.
-  - iMod "Hφ" as "[_ %Hφ]". iModIntro. by iApply step_fupdN_intro.
-  - iMod "Hφ" as "[_ %Hφ]". iModIntro. by iApply step_fupdN_intro.
-  - iMod "Hφ" as "%Hlater_fuel". iModIntro. by iApply step_fupdN_intro.
-  - iMod "Hφ" as "[]".
-  - iMod "Hφ". iModIntro. by iApply step_fupdN_intro.
+  intros Had.
+  specialize (Had later_fuel (heaplang_eval_itree σ (Some later_fuel) e)).
+  rewrite /heaplang_interpreter.
+  destruct (exec fuel (heaplang_eval_itree σ (Some later_fuel) e)) eqn:Heq; last done.
+  apply exec_spec in Heq.
+  ospecialize (Had _ _).
+  { split; last done. apply heaplang_ifn_irel. }
+  by repeat case_match.
 Qed.
 
-(** If you prove the [WP] of an expression [e] in the termination sensitive
-mode [m = Identity], the interpreter will eventually terminate, given enough
-fuel. *)
-Lemma heaplang_interpreter_adequacy_termination `{!invGS Σ} `{!heaplangHGS Σ} e σ Φ :
-  state_interp σ -∗
-  heap_inv -∗
-  WP e @ Identity; ⊤ {{ Φ }} -∗
-  |={⊤, ∅}=>
-    ⌜∃ n, ∀ fuel, fuel ≥ n →
-      match heaplang_interpreter σ fuel None e with
-      | inr Timeout => False
-      | inl _ => True
-      end⌝.
-Proof.
-  iIntros "Hstate Hinv Hwp".
-  iMod (heaplang_adequacy_eval e σ (heaplang_eval_itree σ None e) with "[] Hstate Hinv Hwp") as "[%v [%Heval HΦ]]".
-  { apply heaplang_ifn_irel. }
-  { iIntros ([=]). }
-  apply exec_ret in Heval as [fuel Heq].
-  iModIntro. iExists fuel. iIntros (fuel' Hlt).
-  rewrite /heaplang_interpreter (exec_stable fuel' fuel) // Heq //.
-Qed.
-
-(** A version of [heaplang_interpreter_adequacy_termination] outside of the
-Iris logic. *)
-Lemma heaplang_interpreter_soundness_termination `{!invGpreS Σ} `{!heaplangHGpreS Σ} e σ φ :
-  (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Identity; ⊤ {{ v, ⌜φ v⌝ }}) →
-  ∃ n, ∀ fuel, fuel ≥ n → match heaplang_interpreter σ fuel None e with
+(** Total soundness theorem for the interpreter. *)
+Lemma heaplang_interpreter_total_soundness e σ φ :
+  totally_adequate σ (compile_expr_yield e) φ →
+  ∃ n, ∀ fuel, fuel ≥ n →
+  match heaplang_interpreter σ fuel None e with
   | inr Timeout => False
-  | inl _ => True
+  | inl (inr UbCrash) => False
+  | inl (inl (inr LaterExhausted)) => False
+  | inl (inl (inl (σ, inl v))) => φ v
+  (* TODO: This case is never reached. Maybe it would make sense to strengthen
+  the [True] to [False], incurring extra proof effort. *)
+  | inl (inl (inl (σ, inr LastThreadKilled))) => True
   end.
 Proof.
-  intros Hwp. apply: (heaplang_soundness 0).
-  iIntros (? ?) "#Hinv Hstate Hlc".
-  iDestruct Hwp as "Hwp".
-  by iDestruct (heaplang_interpreter_adequacy_termination e σ with "Hstate Hinv Hwp") as "Hφ".
+  intros Had.
+  odestruct (Had (heaplang_eval_itree σ None e) _) as (x&Heutt&Hφ).
+  { apply heaplang_ifn_irel. }
+  apply exec_ret in Heutt as [fuel Heq].
+  exists fuel. intros fuel' Hlt.
+  rewrite /heaplang_interpreter (exec_stable fuel' fuel) // Heq //.
+  by repeat case_match.
 Qed.

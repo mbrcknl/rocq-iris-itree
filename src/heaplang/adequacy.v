@@ -19,6 +19,39 @@ Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
   (exec: itree voidE ((state * (val + last_thread_killed)) + later_exhausted + ub_crash)) : Prop :=
   heaplang_irel σ n (compile_expr_yield e) exec.
 
+Definition totally_adequate {R} (σ : state) (t : itree heaplangE R) (φ : R → Prop) : Prop :=
+  ∀ te, heaplang_irel σ None t te → ∃ x, te ≈ Ret x ∧
+    match x with
+    | inr UbCrash => False
+    | inl (inr LaterExhausted) => False
+    | inl (inl (σ, inl v)) => φ v
+    | inl (inl (σ, inr _)) => True
+    end.
+
+Definition partially_adequate {R} (σ : state) (t : itree heaplangE R) (φ : R → Prop) : Prop :=
+  ∀ n te x, heaplang_irel σ (Some n) t te ∧ te ≈ Ret x →
+    match x with
+    | inr UbCrash => False
+    | inl (inr LaterExhausted) => True
+    | inl (inl (σ, inl v)) => φ v
+    | inl (inl (σ, inr _)) => True
+    end.
+
+(* FIXME: would be nice to have (put LaterE as the last event and prove
+          the following intermediate lemma)
+Lemma remove_timeout {R E} (t : itree (LaterE +' E) R) n r :
+  later_ifn n t ≈ Ret(inl r) →
+  later_ifn None t ≈ Ret(inl r).
+Proof. ... Qed.
+Lemma totally_adequate_weaken {R} σ (t : itree heaplangE R) φ :
+  totally_adequate σ t φ →
+  partially_adequate σ t φ.
+Proof.
+  intros Htotal n te [[x|[]]|[]] [Hrel Heutt].
+  specialize (Htotal te Hrel).
+  - case_match. case_match; eauto.
+*)
+
 Section adequacy.
   Context {Σ} `{!invGS Σ} `{!heaplangHGS Σ}.
 
@@ -27,8 +60,8 @@ Section adequacy.
     (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     state_interp σ -∗
     WPi t @ heaplangH m; ⊤ {{ Φ }} -∗
-    |={⊤, ∅}=> ∃ v, ⌜te ≈ Ret v⌝ ∗
-      match v with
+    |={⊤, ∅}=> ∃ x, ⌜te ≈ Ret x⌝ ∗
+      match x with
       | inr UbCrash => False
       | inl (inr LaterExhausted) => ⌜is_Some n⌝
       | inl (inl σr) => |={∅, ⊤}=> let (σ, r) := σr in state_interp σ ∗
@@ -53,8 +86,8 @@ Section adequacy.
     state_interp σ -∗
     heap_inv -∗
     WP e @ m; ⊤ {{ Φ }} -∗
-    |={⊤, ∅}=> ∃ v, ⌜te ≈ Ret v⌝ ∗
-      match v with
+    |={⊤, ∅}=> ∃ x, ⌜te ≈ Ret x⌝ ∗
+      match x with
       | inr UbCrash => False
       | inl (inr LaterExhausted) => ⌜is_Some n⌝
       | inl (inl σr) => |={∅, ⊤}=> let (σ, r) := σr in state_interp σ ∗
@@ -67,6 +100,48 @@ Section adequacy.
     iIntros (?) "?". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
   Qed.
 End adequacy.
+
+Section soundness.
+  Context {Σ} `{!invGpreS Σ} `{!heaplangHGpreS Σ}.
+
+  Lemma heaplang_partial_soundness e σ φ :
+    (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Later; ⊤ {{ v, ⌜φ v⌝ }}) →
+    partially_adequate σ (compile_expr_yield e) φ.
+  Proof.
+    intros Hwp n te x [Hirel Heutt].
+    apply: (heaplang_soundness n). iIntros (? ?) "#Hinv Hst Hlc".
+    iDestruct (Hwp _ _) as "Hwp".
+    iDestruct (heaplang_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
+    { apply Hirel. }
+    { by iIntros ([]). }
+    iMod "Had" as "[%y [%Heutt' Had]]".
+    rewrite Heutt in Heutt'. apply eutt_inv_Ret in Heutt' as <-.
+    repeat case_match.
+    - iMod "Had" as "[_ Had]". iApply step_fupdN_intro; first done. 
+      iApply fupd_mask_intro; first done. by iIntros "_ !>".
+    - iApply step_fupdN_intro; first done. iModIntro. by iModIntro.
+    - iApply step_fupdN_intro; first done. iModIntro. by iModIntro.
+    - iApply step_fupdN_intro; first done. iModIntro. by iModIntro.
+  Qed.
+
+  Lemma heaplang_total_soundness e σ φ :
+    (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Identity; ⊤ {{ v, ⌜φ v⌝ }}) →
+    totally_adequate σ (compile_expr_yield e) φ.
+  Proof.
+    intros Hwp te Hirel.
+    apply: (heaplang_soundness 0). iIntros (? ?) "#Hinv Hst Hlc".
+    iDestruct (Hwp _ _) as "Hwp".
+    iDestruct (heaplang_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
+    { apply Hirel. }
+    { iIntros ([=]). }
+    iMod "Had" as "[%x [%Heutt Had]]".
+    iApply step_fupdN_intro; first done. 
+    iExists x. repeat case_match; eauto.
+    - iMod "Had" as "[_ %Hφ]".
+      iApply fupd_mask_intro; first done. by iIntros "_".
+    - iDestruct "Had" as "%Had". destruct Had as [? [=]].
+  Qed.
+End soundness.
 
 Instance state_EqDecision :
   EqDecision state.
