@@ -25,6 +25,8 @@ Qed.
 (** Return type to mark that we exceeded the limit for the number of steps. *)
 Variant timeout := Timeout.
 
+(* FIXME: Order arguments consistently. *)
+
 (** Convert an heaplang expression [e] to an ITree and evaluate it. *)
 Definition heaplang_eval_itree σ later_fuel e : itree voidE ((state * (val + last_thread_killed)) + later_exhausted + ub_crash) :=
   heaplang_ifn σ later_fuel (compile_expr_yield e).
@@ -42,6 +44,20 @@ Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : e
   | Some x => inl x
   end.
 
+(** The interpreter produces an execution. *)
+Lemma heaplang_interpreter_execution e σ fuel later_fuel x :
+  heaplang_interpreter σ fuel later_fuel e = inl x →
+  ∃ te, te ≈ Ret x ∧ heaplang_eval e σ later_fuel te.
+Proof.
+  intros Hint.
+  exists (heaplang_eval_itree σ later_fuel e).
+  rewrite /heaplang_interpreter in Hint.
+  case_match eqn:Heq'; last discriminate.
+  apply exec_spec in Heq'. simplify_eq.
+  split; first done.
+  apply heaplang_ifn_irel.
+Qed.
+
 (** Partial soundness theorem for the interpreter. *)
 Lemma heaplang_interpreter_partial_soundness e σ fuel later_fuel φ :
   partially_adequate e σ φ →
@@ -56,13 +72,10 @@ Lemma heaplang_interpreter_partial_soundness e σ fuel later_fuel φ :
   end.
 Proof.
   intros Had.
-  specialize (Had later_fuel (heaplang_eval_itree σ (Some later_fuel) e)).
-  rewrite /heaplang_interpreter.
-  destruct (exec fuel (heaplang_eval_itree σ (Some later_fuel) e)) eqn:Heq; last done.
-  apply exec_spec in Heq.
-  ospecialize (Had _ _).
-  { split; last done. apply heaplang_ifn_irel. }
-  by repeat case_match.
+  destruct (heaplang_interpreter _ _ _ _) as [x|] eqn:Heq; last by case_match.
+  apply heaplang_interpreter_execution in Heq as (te&Heutt&Heval).
+  ospecialize (Had later_fuel te x _); first eauto.
+  repeat case_match; eauto.
 Qed.
 
 (** Total soundness theorem for the interpreter. *)
