@@ -19,29 +19,26 @@ Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
   (exec: itree voidE ((state * (val + last_thread_killed)) + later_exhausted + ub_crash)) : Prop :=
   heaplang_irel σ n (compile_expr_yield e) exec.
 
+Definition relationally_adequate (n : option nat) (e : expr) (σ : state) (φ : val → Prop) : Prop :=
+  ∀ te, heaplang_eval e σ n te → ∃ x, te ≈ Ret x ∧
+    match x with
+    | inr UbCrash => False
+    | inl (inr LaterExhausted) => is_Some n
+    | inl (inl (σ, inl v)) => φ v
+    | inl (inl (σ, inr _)) => True
+    end.
+
 (** Intuitively, [e] is totally adequate with respect to heap [σ] and
 postcondition [φ] when any execution of [e] terminates without reaching [ub]
 with a return value satisfying [φ].  *)
 Definition totally_adequate (e : expr) (σ : state) (φ : val → Prop) : Prop :=
-  ∀ te, heaplang_eval e σ None te → ∃ x, te ≈ Ret x ∧
-    match x with
-    | inr UbCrash => False
-    | inl (inr LaterExhausted) => False
-    | inl (inl (σ, inl v)) => φ v
-    | inl (inl (σ, inr _)) => True
-    end.
+  relationally_adequate None e σ φ.
 
 (** Intuitively, [e] is partially adequate with respect to heap [σ] and
 postcondition [φ] when no execution of [e] reaches [ub], and any execution that
 that terminates returns a value satisfying [φ]. *)
 Definition partially_adequate (e : expr) (σ : state) (φ : val → Prop) : Prop :=
-  ∀ n te x, heaplang_eval e σ (Some n) te ∧ te ≈ Ret x →
-    match x with
-    | inr UbCrash => False
-    | inl (inr LaterExhausted) => True
-    | inl (inl (σ, inl v)) => φ v
-    | inl (inl (σ, inr _)) => True
-    end.
+  ∀ n, relationally_adequate (Some n) e σ φ.
 
 (* FIXME: would be nice to have (put LaterE as the last event and prove
           the following intermediate lemma)
@@ -114,20 +111,19 @@ Section soundness.
     (∀ `{!invGS Σ} `{!heaplangHGS Σ}, ⊢ WP e @ Later; ⊤ {{ v, ⌜φ v⌝ }}) →
     partially_adequate e σ φ.
   Proof.
-    intros Hwp n te x [Hirel Heutt].
+    intros Hwp n te Heval.
     apply: (heaplang_soundness n). iIntros (? ?) "#Hinv Hst Hlc".
     iDestruct (Hwp _ _) as "Hwp".
     iDestruct (wp_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
-    { apply Hirel. }
+    { apply Heval. }
     { by iIntros ([]). }
-    iMod "Had" as "[%y [%Heutt' Had]]".
-    rewrite Heutt in Heutt'. apply eutt_inv_Ret in Heutt' as <-.
-    repeat case_match.
-    - iMod "Had" as "[_ Had]". iApply step_fupdN_intro; first done. 
-      iApply fupd_mask_intro; first done. by iIntros "_ !>".
-    - iApply step_fupdN_intro; first done. iModIntro. by iModIntro.
-    - iApply step_fupdN_intro; first done. iModIntro. by iModIntro.
-    - iApply step_fupdN_intro; first done. iModIntro. by iModIntro.
+    iMod "Had" as "[%x [%Heutt Had]]".
+    iApply step_fupdN_intro; first done. 
+    iExists x.
+    repeat case_match; eauto.
+    iMod "Had" as "[_ %Had]".
+    iApply fupd_mask_intro; first done. iIntros "_ !>". iPureIntro.
+    simplify_eq. split; first done. by repeat case_match.
   Qed.
 
   Lemma wp_total_soundness e σ φ :

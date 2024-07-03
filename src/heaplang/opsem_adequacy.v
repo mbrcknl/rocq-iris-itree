@@ -1484,14 +1484,16 @@ Proof.
     opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&Heval&Hφ); eauto.
     { rewrite Heq. apply tp_termination_TermRet. }
     destruct Hφ as (σ'&Heutt).
-    by ospecialize (Had _ _ _ _).
+    odestruct (Had _ _ _) as (x&Heutt'&Hφ); first done.
+    rewrite Heutt in Heutt'. by apply eutt_inv_Ret in Heutt' as <-.
   - intros e2 _ [i Hidx]%elem_of_list_lookup.
     destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
     exfalso.
     opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&Heval&Heutt); eauto.
     { apply tp_termination_TermUb. econstructor. by eexists. }
     simpl in Heutt.
-    by ospecialize (Had _ _ _ _).
+    odestruct (Had _ _ _) as (x&Heutt'&Hφ); first done.
+    rewrite Heutt in Heutt'. by apply eutt_inv_Ret in Heutt' as <-.
 Qed.
 
 (* TODO: deduplicate these proofs *)

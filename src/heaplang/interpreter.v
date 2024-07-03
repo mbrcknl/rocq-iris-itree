@@ -74,7 +74,8 @@ Proof.
   intros Had.
   destruct (heaplang_interpreter _ _ _ _) as [x|] eqn:Heq; last by case_match.
   apply heaplang_interpreter_execution in Heq as (te&Heutt&Heval).
-  ospecialize (Had later_fuel te x _); first eauto.
+  odestruct (Had later_fuel te _) as (y&Heutt'&Hφ); first eauto.
+  rewrite Heutt in Heutt'. apply eutt_inv_Ret in Heutt' as <-.
   repeat case_match; eauto.
 Qed.
 
@@ -98,5 +99,5 @@ Proof.
   apply exec_ret in Heutt as [fuel Heq].
   exists fuel. intros fuel' Hlt.
   rewrite /heaplang_interpreter (exec_stable fuel' fuel) // Heq //.
-  by repeat case_match.
+  repeat case_match; eauto. by destruct Hφ.
 Qed.
