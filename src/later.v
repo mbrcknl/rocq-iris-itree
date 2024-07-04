@@ -27,41 +27,60 @@ Global Instance AnswerEqDecision_laterE :
   AnswerEqDecision laterE.
 Proof. intros A [] [] []. by left. Qed.
 
+(** Choice of modality for handling [ELater]. *)
+Variant later_modality : Set :=
+  (** No modality. *)
+  | Identity
+  (** Later modality [▷ P]. *)
+  | Later.
+
 Section lat.
-  (** Choice of modality for handling [ELater]. *)
-  Variant later_modality : Set :=
-    (** No modality. *)
-    | Identity
-    (** Later modality [▷ P]. *)
-    | Later.
+  Context `{Σ : gFunctors}.
 
   (** Apply a modality [later_modality] to an [iProp]. *)
-  Definition lat {Σ} (m : later_modality) (P : iProp Σ) : iProp Σ :=
+  Definition lat (m : later_modality) (P : iProp Σ) : iProp Σ :=
     match m with
     | Identity => P
     | Later => ▷ P
     end.
 
-  Lemma lat_mono {Σ} m (Φ Ψ : iProp Σ) :
+  Lemma lat_mono m (Φ Ψ : iProp Σ) :
     (Φ -∗ Ψ) -∗
     lat m Φ -∗ lat m Ψ.
   Proof.
     iIntros "Hwand HΦ". destruct m; by iApply "Hwand".
   Qed.
 
-  Lemma lat_intro {Σ} m (Φ : iProp Σ) :
+  Lemma lat_intro m (Φ : iProp Σ) :
     Φ -∗
     lat m Φ.
   Proof.
     iIntros "HΦ". by destruct m.
   Qed.
 
-  Lemma lat_sep {Σ} m (Φ Ψ : iProp Σ) :
+  Lemma lat_sep m (Φ Ψ : iProp Σ) :
     lat m Φ -∗
     lat m Ψ -∗
     lat m (Φ ∗ Ψ).
   Proof.
     iIntros "HΦ HΨ". destruct m; iFrame.
+  Qed.
+
+  Global Instance lat_proper_undirectional m :
+    Proper ((⊢) ==> (⊢)) (lat m).
+  Proof.
+    iIntros (Φ1 Φ2 HΦ) "HΦ1".
+    iApply lat_mono; last done.
+    by iDestruct HΦ as "Hwand".
+  Qed.
+
+  Global Instance lat_proper_bidirectional m :
+    Proper ((⊣⊢) ==> (⊣⊢)) (lat m).
+  Proof.
+    iIntros (Φ1 Φ2 HΦ).
+    iSplit.
+    - iApply lat_proper_undirectional. rewrite HΦ //.
+    - iApply lat_proper_undirectional. rewrite HΦ //.
   Qed.
 End lat.
 

@@ -718,6 +718,36 @@ Section wp.
 
   (* Proof rules for various operations: *)
 
+  Lemma wp_App m f_ x_ v e Φ :
+    lat m (WP (subst' x_ v  (subst' f_ (RecV f_ x_ e) e)) @ m; ⊤ {{ Φ }}) -∗
+    WP (App (Val (RecV f_ x_ e)) (Val v)) @ m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_heaplang_unfold. iIntros "#Hinv".
+    rewrite /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "Hwp". iDestruct ("Hwp" with "Hinv") as "Hwp".
+    iModIntro. iApply wpi_bind. iApply wpi_yield_if_not_val.
+    rewrite interp_recursive_call //.
+  Qed.
+
+  Lemma subst'_val x e v :
+    subst' x e (Val v) = Val v.
+  Proof.
+    rewrite /subst'. by case_match.
+  Qed.
+
+  Lemma wp_App_const m M f_ x_ v w Φ :
+    lat m (Φ w) -∗
+    WP (App (Val (RecV f_ x_ (Val w))) (Val v)) @ m; M {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_heaplang_unfold. iIntros "#Hinv".
+    rewrite /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "Hwp".
+    iModIntro. iApply wpi_bind. rewrite !subst'_val. iApply wpi_ret.
+    rewrite interp_recursive_call rec_as_interp /= interp_ret. by iApply wpi_ret.
+  Qed.
+
   Lemma wp_Fork m e Φ :
     lat m (Φ (LitV LitUnit)) -∗
     (* TODO: I think this postcondition is unecessarily strong *)
