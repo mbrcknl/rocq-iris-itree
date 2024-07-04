@@ -58,14 +58,6 @@ Section lat.
     iIntros "HΦ". by destruct m.
   Qed.
 
-  Lemma lat_sep m (Φ Ψ : iProp Σ) :
-    lat m Φ -∗
-    lat m Ψ -∗
-    lat m (Φ ∗ Ψ).
-  Proof.
-    iIntros "HΦ HΨ". destruct m; iFrame.
-  Qed.
-
   Global Instance lat_proper_undirectional m :
     Proper ((⊢) ==> (⊢)) (lat m).
   Proof.
