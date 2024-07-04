@@ -88,6 +88,15 @@ Section ifn.
       | VisF (inr1 e) k => ITree.map (λ x, inl (k x)) (trigger e)
       end) (ITree.map inl t).
 
+  (** Interpretation relation for [ubE] obtained from turning [ub_ifn] into a
+  relation. *)
+  Definition ub_irel {R E} (t : itree (ubE +' E) R) (t' : itree E (R + ub_crash)) : Prop :=
+    t' = ub_ifn t.
+
+  Lemma ub_ifn_irel {R E} (t : itree (ubE +' E) R) :
+    ub_irel t (ub_ifn t).
+  Proof. reflexivity. Qed.
+
   Lemma ub_ifn_ret {E R} (r : R) :
     ub_ifn (Ret r) ≅ (Ret (inl r) : itree E (R + ub_crash)).
   Proof.
@@ -231,7 +240,7 @@ Section ub_trace.
     end.
 
   (** [ub_ifn] preserves traces. *)
-  Lemma ub_trace (tr : trace (ubE +' E) R) t :
+  Lemma ub_ifn_trace (tr : trace (ubE +' E) R) t :
     is_trace tr t →
     is_trace (interp_tr_ub tr) (ub_ifn t).
   Proof.
@@ -248,4 +257,11 @@ Section ub_trace.
     - constructor.
     - rewrite ub_ifn_tau. constructor. by apply IHHtr.
   Qed.
+
+  (** A version of [ub_ifn_trace] that looks more like other lemmata such as
+  [demonic_trace]. *)
+  Lemma ub_trace (tr : trace (ubE +' E) R) t :
+    is_trace tr t →
+    ∃ t', ub_irel t t' ∧ is_trace (interp_tr_ub tr) t'.
+  Proof. intros Htr%ub_ifn_trace. exists (ub_ifn t). by split. Qed.
 End ub_trace.

@@ -7,19 +7,19 @@ From iris.itree.heaplang Require Import lang adequacy.
 
 (** Interpretation function for [heaplangE], obtained compositionally by
 composing interpretation functions for the various event types. *)
-Definition heaplang_ifn {R} (σ : state) (later_fuel : option nat) (t : itree heaplangE R) :
-  itree voidE ((state * (R + last_thread_killed)) + later_exhausted + ub_crash) :=
-  ub_ifn (insert_voidE (later_ifn later_fuel (state_ifn σ (demonic_ifn (threadpool_ifn t))))).
+Definition heaplang_ifn {R} (σ : state) (later_fuel : option nat) (t : itree heaplangE R) : Execution R :=
+  later_ifn later_fuel (insert_voidE (demonic_ifn (state_ifn σ (ub_ifn (threadpool_ifn t))))).
 
 (** The function [heaplang_ifn] instantiates the relation [heaplang_irel]. *)
 Lemma heaplang_ifn_irel {R} (t : itree heaplangE R) (σ : state) (later_fuel : option nat) :
   heaplang_irel σ later_fuel t (heaplang_ifn σ later_fuel t).
 Proof.
-  eexists. eexists. eexists.
+  eexists. eexists. eexists. eexists.
   split; first apply threadpool_ifn_irel.
-  split; first apply demonic_ifn_irel.
+  split; first apply ub_ifn_irel.
   split; first apply state_ifn_irel.
-  reflexivity.
+  split; first apply demonic_ifn_irel.
+  apply later_ifn_irel.
 Qed.
 
 (** Return type to mark that we exceeded the limit for the number of steps. *)
@@ -28,7 +28,7 @@ Variant timeout := Timeout.
 (* FIXME: Order arguments consistently. *)
 
 (** Convert an heaplang expression [e] to an ITree and evaluate it. *)
-Definition heaplang_eval_itree σ later_fuel e : itree voidE ((state * (val + last_thread_killed)) + later_exhausted + ub_crash) :=
+Definition heaplang_eval_itree σ later_fuel e : Execution val :=
   heaplang_ifn σ later_fuel (compile_expr_yield e).
 
 (** Evaluate a heaplang expression [e] at state [σ] in [fuel] computation steps
@@ -38,7 +38,7 @@ There is also a parameter [later_fuel], which optionally controls the number of
 [step]s we can encounter. While [fuel] is closer to a measure of the actual
 computational effort, [later_fuel] sets a limit for the number of opsem steps
 in the evaluation of [e]. *)
-Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : expr) : (state * (val + last_thread_killed)) + later_exhausted + ub_crash + timeout :=
+Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : expr) : Outcome val + timeout :=
   match exec fuel (heaplang_eval_itree σ later_fuel e) with
   | None => inr Timeout
   | Some x => inl x
@@ -63,12 +63,12 @@ Lemma heaplang_interpreter_partial_soundness e σ fuel later_fuel φ :
   partially_adequate e σ φ →
   match heaplang_interpreter σ fuel (Some later_fuel) e with
   | inr Timeout => True
-  | inl (inr UbCrash) => False
-  | inl (inl (inr LaterExhausted)) => True
-  | inl (inl (inl (σ, inl v))) => φ v
+  | inl (inr LaterExhausted) => True
+  | inl (inl (_, inr UbCrash)) => False
+  | inl (inl (σ, inl (inl v))) => φ v
   (* TODO: This case is never reached. Maybe it would make sense to strengthen
   the [True] to [False], incurring extra proof effort. *)
-  | inl (inl (inl (σ, inr LastThreadKilled))) => True
+  | inl (inl (σ, inl (inr LastThreadKilled))) => True
   end.
 Proof.
   intros Had.
@@ -85,12 +85,12 @@ Lemma heaplang_interpreter_total_soundness e σ φ :
   ∃ n, ∀ fuel, fuel ≥ n →
   match heaplang_interpreter σ fuel None e with
   | inr Timeout => False
-  | inl (inr UbCrash) => False
-  | inl (inl (inr LaterExhausted)) => False
-  | inl (inl (inl (σ, inl v))) => φ v
+  | inl (inr LaterExhausted) => False
+  | inl (inl (_, inr UbCrash)) => False
+  | inl (inl (σ, inl (inl v))) => φ v
   (* TODO: This case is never reached. Maybe it would make sense to strengthen
   the [True] to [False], incurring extra proof effort. *)
-  | inl (inl (inl (σ, inr LastThreadKilled))) => True
+  | inl (inl (σ, inl (inr LastThreadKilled))) => True
   end.
 Proof.
   intros Had.

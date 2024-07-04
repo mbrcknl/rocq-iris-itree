@@ -11,7 +11,7 @@ From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
 From iris.heap_lang Require Export lang locations.
 
-Definition sequential_heaplangE : Type → Type := demonicE +' stateE state +' laterE +' ubE.
+Definition sequential_heaplangE : Type → Type := ubE +' stateE state +' demonicE +' laterE.
 (** The event type for heaplang. *)
 Definition heaplangE : Type → Type := threadpoolE +' sequential_heaplangE.
 Global Hint Transparent sequential_heaplangE : itree_auto.
@@ -552,7 +552,7 @@ Section handler.
 
   (** The handler for [heaplangE]. *)
   Definition heaplangH m : iHandler Σ heaplangE :=
-    threadpoolH ⊕ demonicH ⊕ stateH state ⊕ laterH m ⊕ ubH.
+    threadpoolH ⊕ ubH ⊕ stateH state ⊕ demonicH ⊕ laterH m.
 
   Lemma big_sep_map_list_heap_array l n m v :
     ([∗ map] k↦v0 ∈ heap_array (l +ₗ Z.of_nat m) (replicate n v), k ↪[heaplangH_heap_name] v0) -∗

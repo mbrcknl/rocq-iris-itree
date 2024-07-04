@@ -431,10 +431,10 @@ Variant tp_termination : list expr → state → Terminal val → Prop :=
   | tp_termination_TermRet v tp σ :
     tp_termination (Val v :: tp) σ (TermRet v).
 
-Definition tr_terminal (tx : Terminal val) (tr : trace voidE (state * (val + last_thread_killed) + later_exhausted + ub_crash)) : bool :=
+Definition tr_terminal (tx : Terminal val) (tr : trace voidE (Outcome val)) : bool :=
   match tx, tr with
-  | TermUb, TRet (inr UbCrash) => true
-  | TermRet r, TRet (inl (inl (_, (inl r')))) => bool_decide (r = r')
+  | TermUb, TRet (inl (_, inr UbCrash)) => true
+  | TermRet r, TRet (inl (_, inl (inl r'))) => bool_decide (r = r')
   | _, _ => false
   end.
 
@@ -541,19 +541,26 @@ Proof.
   rewrite /ctrace_step_yield /=. by destruct (interp_tr_state _ _).
 Qed.
 
+Definition ctrace_get σ (tr : ctrace sequential_heaplangE val) :=
+  CTVis state (subevent _ EGetState) σ tr.
+Definition ctrace_set σ (tr : ctrace sequential_heaplangE val) :=
+  CTVis () (subevent _ (ESetState σ)) () tr.
+Definition ctrace_demonic (A : Type) `{EqDecision A} `{Inhabited A} (a : A) (tr : ctrace sequential_heaplangE val) :=
+  CTVis A (subevent _ (EDemonic A)) a tr.
+
 Definition ctrace_store' l x σ (tr : ctrace sequential_heaplangE val) :=
-  CTVis state (subevent _ EGetState) σ (CTVis () (subevent _ (ESetState (state_upd_heap <[l:=x]> σ))) () tr).
+  ctrace_get σ (ctrace_set (state_upd_heap <[l:=x]> σ) tr).
 Definition ctrace_store l x σ (tr : ctrace sequential_heaplangE val) :=
   ctrace_store' l (Some x) σ tr.
 Definition ctrace_load σ (tr : ctrace sequential_heaplangE val) :=
-  CTVis state (subevent _ EGetState) σ tr.
+  ctrace_get σ tr.
 
 Definition ctrace_store'_ub σ : ctrace sequential_heaplangE val :=
-  CTVis state (subevent _ EGetState) σ ctrace_ub.
+  ctrace_get σ ctrace_ub.
 Definition ctrace_store_ub σ :=
   ctrace_store'_ub σ.
 Definition ctrace_load_ub σ : ctrace sequential_heaplangE val:=
-  CTVis state (subevent _ EGetState) σ ctrace_ub.
+  ctrace_get σ ctrace_ub.
 
 Lemma is_ctrace_store' σ l x v tid tp tr k :
   σ.(heap) !! l = Some (Some v) →
@@ -637,13 +644,37 @@ Proof.
     { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
 Qed.
 
-Lemma trace_invariant_store' l x σ tx n tr :
-  trace_invariant (state_upd_heap <[l:=x]> σ) tx n tr →
-  trace_invariant σ tx n (ctrace_store' l x σ tr).
+Lemma trace_invariant_demonic σ tx n tr A a `{EqDecision A} `{Inhabited A} :
+  trace_invariant σ tx n tr →
+  trace_invariant σ tx n (ctrace_demonic A a tr).
+Proof.
+  intros Hinv.
+  rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
+  simpl. destruct (interp_tr_state σ _); repeat case_match; simplify_eq; eauto.
+  simpl in H1. simpl in H0. injection H0 as <-. by injection H1 as <-.
+Qed.
+
+Lemma trace_invariant_set σ tx n tr σ' :
+  trace_invariant σ' tx n tr →
+  trace_invariant σ tx n (ctrace_set σ' tr).
+Proof.
+  intros Hinv.
+  rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
+  simpl. by case_match.
+Qed.
+Lemma trace_invariant_get σ tx n tr :
+  trace_invariant σ tx n tr →
+  trace_invariant σ tx n (ctrace_get σ tr).
 Proof.
   intros Hinv.
   rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
   simpl. rewrite decide_True //.
+Qed.
+Lemma trace_invariant_store' l x σ tx n tr :
+  trace_invariant (state_upd_heap <[l:=x]> σ) tx n tr →
+  trace_invariant σ tx n (ctrace_store' l x σ tr).
+Proof.
+  intros Hinv. apply trace_invariant_get. by apply trace_invariant_set.
 Qed.
 Lemma trace_invariant_store l x σ tx n tr :
   trace_invariant (state_upd_heap <[l:=Some x]> σ) tx n tr →
@@ -654,11 +685,7 @@ Qed.
 Lemma trace_invariant_load σ tx n tr :
   trace_invariant σ tx n tr →
   trace_invariant σ tx n (ctrace_load σ tr).
-Proof.
-  intros Hinv.
-  rewrite /trace_invariant/interp_tr_heaplang. rewrite /trace_invariant/interp_tr_heaplang in Hinv.
-  simpl. rewrite decide_True //.
-Qed.
+Proof. apply trace_invariant_get. Qed.
 
 Lemma stuck_ub tp σ :
   tp_termination tp σ TermUb →
@@ -1210,8 +1237,8 @@ Proof.
   - destruct (AllocN_free_locations _ _ _ _ _ _ Hbase) as [ll <-].
     exists (CTVis state (subevent _ EGetState) σ1 (CTVis (free_locations n0 σ1) (subevent _ (EDemonic (free_locations n0 σ1))) ll (CTVis () (subevent _ (ESetState (state_init_heap (`ll) n0 v σ1))) () (ctrace_step_yield tid' tr)))).
     repeat split.
-    { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
-      by apply trace_invariant_step_yield. }
+    { apply trace_invariant_get. apply trace_invariant_demonic. apply trace_invariant_set.
+      by apply trace_invariant_step_yield.  }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
@@ -1444,12 +1471,14 @@ Admitted.
 Lemma execution_from_opsem_trace n e σ tp' σ' κ tx :
   language.nsteps n ([e], σ) κ (tp', σ') →
   tp_termination tp' σ' tx →
-  ∃ te,
+  ∃ te x,
     heaplang_eval e σ (Some n) te ∧
-    match tx with
-    | TermUb => te ≈ Ret (inr UbCrash)
-    | TermRet r => ∃ σ', te ≈ Ret (inl (inl (σ', inl r)))
-    end.
+    te ≈ Ret x ∧
+    ∃ σ',
+      match tx with
+      | TermUb => x = inl (σ', inr UbCrash)
+      | TermRet r => x = inl (σ', inl (inl r))
+      end.
 Proof.
   intros Hsteps Hterm.
   apply simulation with (tx := tx) in Hsteps as (tid&tr&Hinv&Htr); eauto.
@@ -1458,15 +1487,20 @@ Proof.
   destruct (interp_tr_heaplang σ (Some n) tr) as [tr'|] eqn:Heq; last contradiction.
   rewrite /compile_tp in Htr. simpl_itree in Htr.
   apply heaplang_trace with (tr' := tr') (σ := σ) (n := Some n) in Htr as (te&Hrel&Htr); eauto.
-  exists te. split; first done.
+  exists te.
   destruct tx.
   - rewrite /tr_terminal in Hinv.
-    destruct tr' as [[[[σ_ [r|]]|]|] | | | ]; try contradiction.
-    exists σ_.
-    apply is_trace_Ret_inv in Htr as ->. by apply bool_decide_unpack in Hinv as ->.
+    destruct tr' as [x | | | ]; try contradiction.
+    exists x.
+    split; first done.
+    split; first by apply is_trace_Ret_inv in Htr.
+    destruct x; last done. destruct p as [σ_ ?]. exists σ_.
+    case_match; last done. case_match; last done.
+    by apply bool_decide_unpack in Hinv as ->.
   - destruct u.
-    destruct tr' as [[[[σ_ [r|]]|]|] | | | ]; try contradiction.
-    apply is_trace_Ret_inv in Htr as ->. by destruct u.
+    destruct tr' as [[[σ_ [[r|]|]]|] | | | ]; try contradiction.
+    apply is_trace_Ret_inv in Htr.
+    eexists. split; last split; eauto. exists σ_. by destruct u.
 Qed.
 
 From iris.program_logic Require Import adequacy.
@@ -1483,17 +1517,17 @@ Proof.
   - intros v2 t2' Heq.
     opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&Heval&Hφ); eauto.
     { rewrite Heq. apply tp_termination_TermRet. }
-    destruct Hφ as (σ'&Heutt).
+    destruct Hφ as (σ'&Heutt&σ_&->).
     odestruct (Had _ _ _) as (x&Heutt'&Hφ); first done.
     rewrite Heutt in Heutt'. by apply eutt_inv_Ret in Heutt' as <-.
   - intros e2 _ [i Hidx]%elem_of_list_lookup.
     destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
     exfalso.
-    opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&Heval&Heutt); eauto.
+    opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&x&Heval&Heutt&σ'&Heq); eauto.
     { apply tp_termination_TermUb. econstructor. by eexists. }
-    simpl in Heutt.
-    odestruct (Had _ _ _) as (x&Heutt'&Hφ); first done.
-    rewrite Heutt in Heutt'. by apply eutt_inv_Ret in Heutt' as <-.
+    odestruct (Had _ _ _) as (x'&Heutt'&Hφ); first done.
+    rewrite Heutt in Heutt'. apply eutt_inv_Ret in Heutt' as <-.
+    rewrite Heq // in Hφ.
 Qed.
 
 (* TODO: deduplicate these proofs *)

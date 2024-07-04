@@ -157,6 +157,15 @@ Section ifn.
      | inr r => Ret r
      end.
   Proof. rewrite /later_ifn unfold_iter. f_equiv => -[[??]|//]. by rewrite tau_eutt. Qed.
+
+  (** Interpretation relation for [laterE] obtained from turning [later_ifn]
+  into a relation. *)
+  Definition later_irel {R E} (n : option nat) (t : itree (laterE +' E) R) (t' : itree E (R + later_exhausted)) : Prop :=
+    t' = later_ifn n t.
+
+  Lemma later_ifn_irel {R E} (n : option nat) (t : itree (laterE +' E) R) :
+    later_irel n t (later_ifn n t).
+  Proof. reflexivity. Qed.
 End ifn.
 
 Section adequacy.
@@ -290,7 +299,7 @@ Section trace.
       * rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. by apply IHHtr.
   Qed.
   (** Traces are preserved by [later_ifn]. *)
-  Lemma later_trace (tr : trace (laterE +' E) R) n t :
+  Lemma later_ifn_trace (tr : trace (laterE +' E) R) n t :
     is_trace tr t →
     is_trace (interp_tr_later n tr) (later_ifn n t).
   Proof.
@@ -310,5 +319,15 @@ Section trace.
         by constructor.
     * constructor.
     * rewrite later_ifn_unfold /later_ifn_loop /=. simpl_itree. by apply IHHtr.
+  Qed.
+
+  (** A version of [later_ifn_trace] that looks more like other lemmata such as
+  [demonic_trace]. *)
+  Lemma later_trace (tr : trace (laterE +' E) R) n t :
+    is_trace tr t →
+    ∃ t', later_irel n t t' ∧ is_trace (interp_tr_later n tr) t'.
+  Proof.
+    intros Htr. apply later_ifn_trace with (n := n) in Htr.
+    exists (later_ifn n t). by split.
   Qed.
 End trace.
