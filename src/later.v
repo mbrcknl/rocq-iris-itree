@@ -153,7 +153,7 @@ Section ifn.
   Lemma later_ifn_unfold R E n (t : itree (laterE +' E) R) :
     later_ifn n t ≈ r ← later_ifn_loop n t;
      match r with
-     | inl nt => later_ifn nt.1 nt.2
+     | inl (n, t) => later_ifn n t
      | inr r => Ret r
      end.
   Proof. rewrite /later_ifn unfold_iter. f_equiv => -[[??]|//]. by rewrite tau_eutt. Qed.
