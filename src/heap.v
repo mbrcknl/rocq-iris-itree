@@ -18,11 +18,10 @@ the memory cell at [l] is currently free. If [x = None], [l] gets
 deallocated. *)
 Definition store' `{!heapE V -< E} (l : loc) (x : option V) : itree E (option V) :=
   σ ← trigger EGetState;
-  match σ !! l with
-  | Some (Some v) =>
-    trigger (ESetState (<[l:=x]> σ));;
-    Ret (Some v)
-  | _ => Ret None
+  trigger (ESetState (<[l:=x]> σ));;
+  Ret match σ !! l with
+  | Some (Some v) => Some v
+  | _ => None
   end.
 (** Store [x] at memory cell [l] and return the old value. *)
 Definition store `{!heapE V -< E} (l : loc) (x : V) : itree E (option V) :=
@@ -126,12 +125,16 @@ Class heapHGS (Σ : gFunctors) (V : Type) := HeapHGS {
 }.
 Local Existing Instances heapH_inG.
 
-Definition pointsto `{!heapHGS Σ V} (l : loc) (v : V) (dq : dfrac) : iProp Σ :=
-  l ↪[ heapH_heap_name ]{dq} (Some v).
+Definition pointsto `{!heapHGS Σ V} (l : loc) (v : option V) (dq : dfrac) : iProp Σ :=
+  l ↪[ heapH_heap_name ]{dq} v.
 
-Global Notation "l ↦ v" := (pointsto l v (DfracOwn 1))
+Global Notation "l ↦? v" := (pointsto l v (DfracOwn 1))
+  (at level 20, format "l  ↦?  v") : bi_scope.
+Global Notation "l ↦{ dq }? v" := (pointsto l v dq)
+  (at level 20, format "l  ↦{ dq }?  v") : bi_scope.
+Global Notation "l ↦ v" := (pointsto l (Some v) (DfracOwn 1))
   (at level 20, format "l  ↦  v") : bi_scope.
-Global Notation "l ↦{ dq } v" := (pointsto l v dq)
+Global Notation "l ↦{ dq } v" := (pointsto l (Some v) dq)
   (at level 20, format "l  ↦{ dq }  v") : bi_scope.
 
 Section handler.
@@ -186,8 +189,8 @@ Section wp.
 
   Lemma wpi_store' M l v v' Φ :
     ↑heapH_inv_name ⊆ M →
-    l ↦ v -∗
-    (match v' with Some v' => l ↦ v' | None => True end -∗ Φ (Some v)) -∗
+    l ↦? v -∗
+    (l ↦? v' -∗ Φ v) -∗
     WPi store' l v' @ H; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand". iApply wpi_clear_mask.
@@ -205,17 +208,28 @@ Section wp.
     iDestruct (ghost_map_update v' with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
     iFrame "Hauth". iFrame "Hinv". repeat iApply wpi_ret. iModIntro.
     iMod "Hfupd". iMod ("Hclose" with "[Hauth']"); first by iExists _.
-    iApply "Hwand". by case_match.
+    case_match; by iApply "Hwand".
   Qed.
 
   Lemma wpi_store M l v v' Φ :
     ↑heapH_inv_name ⊆ M →
-    l ↦ v -∗
-    (l ↦ v' -∗ Φ (Some v)) -∗
+    l ↦? v -∗
+    (l ↦ v' -∗ Φ v) -∗
     WPi store l v' @ H; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
     iApply (wpi_store' with "Hpointsto"); first done.
     by iApply "Hwand".
   Qed.
+
+  Lemma wpi_alloc M v Φ :
+    ↑heapH_inv_name ⊆ M →
+    (∀ l, l ↦ v -∗ Φ l) -∗
+    WPi alloc v @ H; M {{ Φ }}.
+  Proof.
+    iIntros (Hmask) "Hwand".
+    iApply wpi_bind. iApply wpi_get. iIntros (σ) "[Hauth #Hinv]".
+    iMod (inv_acc_timeless _ with "Hinv") as "[H Hclose]"; first done.
+    iDestruct "H" as "[%σ' Hauth]".
+  Admitted.
 End wp.
