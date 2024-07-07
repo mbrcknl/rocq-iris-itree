@@ -102,7 +102,7 @@ Definition alloc `{!heapE V -< E} (v : V) : itree E loc :=
   (* Deterministically pick a free location on the heap. *)
   let l : free_locations 1 σ := inhabitant in
     (* Write the evaluated value [v] to every memory cell in that segment. *)
-    store (`l) v ;;
+    trigger (ESetState (<[`l:=Some v]> σ));;
     Ret (`l).
 
 Definition alloc_nondet `{!heapE V -< E} `{demonicE -< E} (v : V) : itree E loc :=
@@ -111,7 +111,7 @@ Definition alloc_nondet `{!heapE V -< E} `{demonicE -< E} (v : V) : itree E loc 
   (* Demonically pick a free location of the heap. *)
   l ← trigger (EDemonic (free_locations 1 σ));
   (* Write the evaluated value [v] to every memory cell in that segment. *)
-  store (`l) v ;;
+  trigger (ESetState (<[`l:=Some v]> σ));;
   Ret (`l).
 
 Class heapHGpreS (Σ : gFunctors) (V : Type) := HeapHGpreS {
@@ -227,9 +227,60 @@ Section wp.
     (∀ l, l ↦ v -∗ Φ l) -∗
     WPi alloc v @ H; M {{ Φ }}.
   Proof.
-    iIntros (Hmask) "Hwand".
-    iApply wpi_bind. iApply wpi_get. iIntros (σ) "[Hauth #Hinv]".
-    iMod (inv_acc_timeless _ with "Hinv") as "[H Hclose]"; first done.
-    iDestruct "H" as "[%σ' Hauth]".
-  Admitted.
+    iIntros (Hmask) "Hwand". iApply wpi_clear_mask.
+    iApply wpi_bind. iApply wpi_get.
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iIntros (σ) "[Hauth #Hinv]". iMod "Hfupd" as "_".
+    iMod (inv_acc_timeless _ with "Hinv") as "[[%σ' Hauth'] Hclose]"; first done.
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iFrame "Hauth' Hinv".
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iApply wpi_ret. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "[Hauth' _]".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iCombine "Hauth Hauth'" as "Hauth".
+    destruct (inhabitant : free_locations 1 σ) as [l Hfree].
+    simpl. apply bool_decide_unpack in Hfree.
+    iMod (ghost_map_insert l (Some v) with "Hauth") as "[Hauth Hpointsto]".
+    { replace l with (l +ₗ0) by apply Loc.add_0. by apply Hfree. }
+    iDestruct "Hauth" as "[Hauth Hauth']".
+    iFrame "Hinv". iFrame.
+    repeat iApply wpi_ret. iApply "Hwand". iModIntro. iMod "Hfupd".
+    iMod ("Hclose" with "[Hauth]") as "_".
+    { by iExists _. }
+    done.
+  Qed.
 End wp.
+
+Section wp_nondet.
+  Context {V : Type} {E : Type → Type} `{H : iHandler Σ E} `{heapE V -< E}.
+  Context `{!invGS_gen hlc Σ} `{!heapHGS Σ V} `{inH Σ (heapE V) E (heapH V) H}.
+  Context `{demonicE -< E} `{inH Σ demonicE E demonicH H}.
+
+  Lemma wpi_alloc_nondet M v Φ :
+    ↑heapH_inv_name ⊆ M →
+    (∀ l, l ↦ v -∗ Φ l) -∗
+    WPi alloc_nondet v @ H; M {{ Φ }}.
+  Proof.
+    iIntros (Hmask) "Hwand". iApply wpi_clear_mask.
+    iApply wpi_bind. iApply wpi_get.
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iIntros (σ) "[Hauth #Hinv]". iMod "Hfupd" as "_".
+    iMod (inv_acc_timeless _ with "Hinv") as "[[%σ' Hauth'] Hclose]"; first done.
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iFrame "Hauth' Hinv".
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iApply wpi_ret. iApply wpi_bind. iApply @wpi_demonic. iIntros ([l Hfree]). iApply wpi_ret.
+    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "[Hauth' _]".
+    iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
+    iCombine "Hauth Hauth'" as "Hauth".
+    simpl. apply bool_decide_unpack in Hfree.
+    iMod (ghost_map_insert l (Some v) with "Hauth") as "[Hauth Hpointsto]".
+    { replace l with (l +ₗ0) by apply Loc.add_0. by apply Hfree. }
+    iDestruct "Hauth" as "[Hauth Hauth']".
+    iFrame "Hinv". iFrame.
+    repeat iApply wpi_ret. iApply "Hwand". iModIntro. iMod "Hfupd".
+    iMod ("Hclose" with "[Hauth]") as "_".
+    { by iExists _. }
+    done.
+  Qed.
+End wp_nondet.
