@@ -7,11 +7,11 @@ From iris.itree.heaplang Require Import lang adequacy.
 
 (** Interpretation function for [heaplangE], obtained compositionally by
 composing interpretation functions for the various event types. *)
-Definition heaplang_ifn {R} (σ : state) (later_fuel : option nat) (t : itree heaplangE R) : Execution R :=
+Definition heaplang_ifn {R} (σ : heaplang_heap) (later_fuel : option nat) (t : itree heaplangE R) : Execution R :=
   later_ifn later_fuel (insert_voidE (demonic_ifn (state_ifn σ (ub_ifn (threadpool_ifn t))))).
 
 (** The function [heaplang_ifn] instantiates the relation [heaplang_irel]. *)
-Lemma heaplang_ifn_irel {R} (t : itree heaplangE R) (σ : state) (later_fuel : option nat) :
+Lemma heaplang_ifn_irel {R} (t : itree heaplangE R) (σ : heaplang_heap) (later_fuel : option nat) :
   heaplang_irel σ later_fuel t (heaplang_ifn σ later_fuel t).
 Proof.
   eexists. eexists. eexists. eexists.

@@ -39,24 +39,12 @@ Global Hint Resolve ub_to_translate : itree_auto.
 Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
   (match o with | Some x => Ret x | None => ub end)%itree.
 Notation "x ?" := (some_or_ub x) (at level 10, format "x ?") : itree_scope.
-(** Unwrap [Some (Some v)] to [v] or emit [EUb]. *)
-Definition some_some_or_ub {E R} `{!ubE -< E} (o : option (option R)) : itree E R :=
-  (match o with | Some (Some x) => Ret x | _ => ub end)%itree.
-Notation "x '?' '?'" := (some_some_or_ub x) (at level 10, format "x '?' '?'") : itree_scope.
 
 Lemma some_or_ub_to_translate {E1 E2 R} (o : option R) (HE1 : ubE -< E1) (HE2 : ubE -< E2) (Hin : E1 -< E2) :
   TranslateReSum Hin HE1 HE2 →
   ITreeToTranslate (o?) Hin (o?).
 Proof. move => ?. by destruct o => /=; [apply Ret_to_translate|apply ub_to_translate]. Qed.
 Global Hint Resolve some_or_ub_to_translate : itree_auto.
-Lemma some_some_or_ub_to_translate {E1 E2 R} (o : option (option R)) (HE1 : ubE -< E1) (HE2 : ubE -< E2) (Hin : E1 -< E2) :
-  TranslateReSum Hin HE1 HE2 →
-  ITreeToTranslate (o??) Hin (o??).
-Proof.
-  move => ?. rewrite /some_some_or_ub.
-  by repeat case_match; [apply Ret_to_translate|apply ub_to_translate..].
-Qed.
-Global Hint Resolve some_some_or_ub_to_translate : itree_auto.
 
 Section handler.
   Context {Σ : gFunctors}.

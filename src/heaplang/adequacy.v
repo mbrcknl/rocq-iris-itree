@@ -7,12 +7,12 @@ From iris.itree.heaplang Require Import lang.
 
 (** An execution outcome of a HeapLang program. *)
 Definition Outcome R : Type :=
-  (state * (R + last_thread_killed + ub_crash)) + later_exhausted.
+  (heap.heap val * (R + last_thread_killed + ub_crash)) + later_exhausted.
 (** An execution of a HeapLang program. *)
 Definition Execution R : Type :=
   itree voidE (Outcome R).
 
-Definition heaplang_irel {R} (σ : state) (n : option nat) (t : itree heaplangE R)
+Definition heaplang_irel {R} (σ : heaplang_heap) (n : option nat) (t : itree heaplangE R)
   (te : Execution R) : Prop :=
   ∃ t1 t2 t3 t4,
     threadpool_irel t t1 ∧
@@ -21,13 +21,13 @@ Definition heaplang_irel {R} (σ : state) (n : option nat) (t : itree heaplangE 
     demonic_irel t3 t4 ∧
     later_irel n (insert_voidE t4) te.
 
-Definition heaplang_eval (e : expr) (σ : state) (n : option nat)
+Definition heaplang_eval (e : expr) (σ : heaplang_heap) (n : option nat)
   (* TODO: Can remove the itree here? How would we represent diverging
   programs when not using later? *)
   (exec: Execution val) : Prop :=
   heaplang_irel σ n (compile_expr_yield e) exec.
 
-Definition relationally_adequate (n : option nat) (e : expr) (σ : state) (φ : val → Prop) : Prop :=
+Definition relationally_adequate (n : option nat) (e : expr) (σ : heaplang_heap) (φ : val → Prop) : Prop :=
   ∀ te, heaplang_eval e σ n te → ∃ x, te ≈ Ret x ∧
     match x with
     | inr LaterExhausted => is_Some n
@@ -39,13 +39,13 @@ Definition relationally_adequate (n : option nat) (e : expr) (σ : state) (φ : 
 (** Intuitively, [e] is totally adequate with respect to heap [σ] and
 postcondition [φ] when any execution of [e] terminates without reaching [ub]
 with a return value satisfying [φ].  *)
-Definition totally_adequate (e : expr) (σ : state) (φ : val → Prop) : Prop :=
+Definition totally_adequate (e : expr) (σ : heaplang_heap) (φ : val → Prop) : Prop :=
   relationally_adequate None e σ φ.
 
 (** Intuitively, [e] is partially adequate with respect to heap [σ] and
 postcondition [φ] when no execution of [e] reaches [ub], and any execution that
 that terminates returns a value satisfying [φ]. *)
-Definition partially_adequate (e : expr) (σ : state) (φ : val → Prop) : Prop :=
+Definition partially_adequate (e : expr) (σ : heaplang_heap) (φ : val → Prop) : Prop :=
   ∀ n, relationally_adequate (Some n) e σ φ.
 
 (* FIXME: would be nice to have (put LaterE as the last event and prove
@@ -98,7 +98,6 @@ Section adequacy.
     heaplang_eval e σ n te →
     (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     state_interp σ -∗
-    heap_inv -∗
     WP e @ m; ⊤ {{ Φ }} -∗
     |={⊤, ∅}=> ∃ x, ⌜te ≈ Ret x⌝ ∗
       match x with
@@ -108,7 +107,7 @@ Section adequacy.
       | inl (σ, inl (inr LastThreadKilled)) => |={∅, ⊤}=> state_interp σ
       end.
   Proof.
-    iIntros (?) "Hlc Hs Hinv Hwp".
+    iIntros (?) "Hlc Hs Hwp".
     iApply (wp_adequacy_irel with "Hlc Hs"); [done..|].
     iApply wpi_bind. iApply wpi_wand. 2: { rewrite wp_heaplang_unfold. by iApply "Hwp". }
     iIntros (?) "?". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
@@ -123,9 +122,9 @@ Section soundness.
     partially_adequate e σ φ.
   Proof.
     intros Hwp n te Heval.
-    apply: (heaplang_soundness n). iIntros (? ?) "#Hinv Hst Hlc".
+    apply: (heaplang_soundness n). iIntros (? ?) "Hst Hlc".
     iDestruct (Hwp _ _) as "Hwp".
-    iDestruct (wp_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
+    iDestruct (wp_adequacy_eval with "[Hlc] Hst Hwp") as "Had".
     { apply Heval. }
     { by iIntros ([]). }
     iMod "Had" as "[%x [%Heutt Had]]".
@@ -143,9 +142,9 @@ Section soundness.
     totally_adequate e σ φ.
   Proof.
     intros Hwp te Hirel.
-    apply: (heaplang_soundness 0). iIntros (? ?) "#Hinv Hst Hlc".
+    apply: (heaplang_soundness 0). iIntros (? ?) "Hst Hlc".
     iDestruct (Hwp _ _) as "Hwp".
-    iDestruct (wp_adequacy_eval with "[Hlc] Hst Hinv Hwp") as "Had".
+    iDestruct (wp_adequacy_eval with "[Hlc] Hst Hwp") as "Had".
     { apply Hirel. }
     { iIntros ([=]). }
     iMod "Had" as "[%x [%Heutt Had]]".
@@ -157,17 +156,6 @@ Section soundness.
     - iDestruct "Had" as "%Had". destruct Had as [? [=]].
   Qed.
 End soundness.
-
-Instance state_EqDecision :
-  EqDecision state.
-Proof.
-  intros [σ1 p1] [σ2 p2].
-  destruct (decide (σ1 = σ2)) as [Heq|Hneq].
-  - destruct (decide (p1 = p2)) as [Heq'|Hneq'].
-    * left. by f_equiv.
-    * right. intros Heq'. by injection Heq' as -> ->.
-  - right. intros Heq. by injection Heq as -> ->.
-Qed.
 
 Section trace.
   Context {R : Type}.

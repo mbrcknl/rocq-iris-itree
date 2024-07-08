@@ -1,4 +1,5 @@
-From iris.itree Require Import wpi choice ub state handler itree later.
+From iris.itree Require Import wpi choice ub handler itree later.
+From iris.itree Require Export state.
 From iris.heap_lang Require Export locations.
 From ITree Require Import ITree.
 From stdpp Require Import gmap.
@@ -11,7 +12,7 @@ From iris.proofmode Require Import proofmode.
 deallocated locations. *)
 Notation heap V := (gmap loc (option V)).
 (** [HeapE V] is the event type for manipulating a heap. *)
-Definition heapE V : Type → Type := stateE (heap V).
+Notation heapE V := (stateE (heap V)).
 
 (** Store [x] at memory cell [l] and return the old value. It exhibits UB if
 the memory cell at [l] is currently free. If [x = None], [l] gets
@@ -35,17 +36,17 @@ Definition load `{!heapE V -< E} (l : loc) : itree E (option V) :=
   end.
 
 Section free_locations.
-  (** Version of [Decision_range] using [Z] inequalities instead of [nat]
-  inequalities. *)
-  Lemma Decision_range_Z P n :
+  (** If [P i] is decidable for all [i], then whether it holds in a finite range
+  is also decidable. *)
+  Lemma Decision_range P n :
     (∀ i, Decision (P i)) →
-    Decision (∀ i, (0 ≤ i)%Z → (i < Z.of_nat n)%Z → P i).
+    Decision (∀ i, 0 ≤ i → i < n → P i).
   Proof.
     intros HPdec.
     induction n.
     - left. intros i Hlower Hupper. lia.
     - destruct (decide (P n)) as [Heq|Hneq].
-      * destruct (decide (∀ i : Z, (0 ≤ i)%Z → (i < n)%Z → P i)) as [HP|HP].
+      * destruct (decide (∀ i : nat, 0 ≤ i → i < n → P i)) as [HP|HP].
         + left. intros i Hlower Hupper.
           destruct (decide (i = n)) as [->|Hi]; first done.
           apply HP; lia.
@@ -55,27 +56,15 @@ Section free_locations.
           apply HP'; lia.
       * right. intros HP. apply Hneq. apply HP; lia.
   Qed.
-  (** If [P i] is decidable for all [i], then whether it holds in a finite range
-  is also decidable. *)
-  Lemma Decision_range P n :
-    (∀ i, Decision (P i)) →
-    Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → P i).
-  Proof.
-    intros HP.
-    destruct (decide (n < 0)%Z) as [Hleq|Hleq].
-    * left. intros i Hlower Hupper. lia.
-    * replace n with (Z.of_nat (Z.to_nat n)); first by apply Decision_range_Z.
-      lia.
-  Qed.
 
   (** Whether a range of the heap is free is decidable. *)
   Instance free_locations_dec {V} n l (σ : heap V) :
-    Decision (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ !! (l +ₗ i) = None)).
+    Decision (∀ i, 0 ≤ i → i < n → (σ !! (l +ₗ i) = None)).
   Proof. apply Decision_range. apply _. Qed.
   (** Available locations in heap [σ] for allocating a block of [n] adjacent
   memory cells. *)
   Definition free_locations {V} n (σ : heap V) : Set :=
-    {l : loc | bool_decide (∀ i, (0 ≤ i)%Z → (i < n)%Z → (σ !! (l +ₗ i) = None))}.
+    {l : loc | bool_decide (∀ i, 0 ≤ i → i < n → (σ !! (l +ₗ i) = None))}.
   Global Hint Transparent free_locations : itree_auto.
   (** The heap always has more space. *)
   Global Instance free_locations_Inhabited {V} n (σ : heap V) :
@@ -84,7 +73,7 @@ Section free_locations.
     constructor. apply exist with (x := Loc.fresh (dom σ)).
     apply bool_decide_pack.
     intros i Hlower Hupper.
-    rewrite -not_elem_of_dom. by apply Loc.fresh_fresh.
+    rewrite -not_elem_of_dom. apply Loc.fresh_fresh. lia.
   Defined.
   Instance free_locations_EqDecision {V} n (σ : heap V) :
     EqDecision (free_locations n σ).
@@ -128,12 +117,13 @@ Proof.
 Qed.
 
 Lemma heap_array_map_disjoint {V} (h : gmap loc (option V)) (l : loc) (vs : list V) :
-  (∀ i, (0 ≤ i)%Z → (i < length vs)%Z → h !! (l +ₗ i) = None) →
+  (∀ (i : nat), 0 ≤ i → i < length vs → h !! (l +ₗ i) = None) →
   (heap_array l vs) ##ₘ h.
 Proof.
   intros Hdisj. apply map_disjoint_spec=> l' v1 v2.
   intros (j&w&?&->&?&Hj%lookup_lt_Some%inj_lt)%heap_array_lookup.
-  move: Hj. rewrite Z2Nat.id // => ?. by rewrite Hdisj.
+  move: Hj. rewrite Z2Nat.id // => ?.
+  replace j with (Z.of_nat (Z.to_nat j)) by lia. rewrite Hdisj //; lia.
 Qed.
 
 Definition allocN `{!heapE V -< E} (n : nat) (v : V) : itree E loc :=
@@ -142,7 +132,7 @@ Definition allocN `{!heapE V -< E} (n : nat) (v : V) : itree E loc :=
   (* Deterministically pick a free location on the heap. *)
   let l : free_locations n σ := inhabitant in
     (* Write the evaluated value [v] to every memory cell in that segment. *)
-    trigger (ESetState ((heap_array (`l) (replicate (Z.to_nat n) v)) ∪ σ));;
+    trigger (ESetState ((heap_array (`l) (replicate n v)) ∪ σ));;
     Ret (`l).
 
 Definition allocN_nondet `{!heapE V -< E} `{demonicE -< E} (n : nat) (v : V) : itree E loc :=
@@ -151,7 +141,7 @@ Definition allocN_nondet `{!heapE V -< E} `{demonicE -< E} (n : nat) (v : V) : i
   (* Demonically pick a free location of the heap. *)
   l ← trigger (EDemonic (free_locations n σ));
   (* Write the evaluated value [v] to every memory cell in that segment. *)
-  trigger (ESetState ((heap_array (`l) (replicate (Z.to_nat n) v)) ∪ σ));;
+  trigger (ESetState ((heap_array (`l) (replicate n v)) ∪ σ));;
   Ret (`l).
 
 Definition alloc `{!heapE V -< E} (v : V) : itree E loc :=
@@ -204,7 +194,7 @@ Section handler.
 End handler.
 
 Lemma heapH_init V `{!invGS_gen hlc Σ} `{!heapHGpreS Σ V} σ :
-  ⊢ |={∅}=> ∃ _ : heapHGS Σ V, heap_inv V ∗ state_interp σ ∗ [∗ map] k↦v ∈ σ, k ↪[heapH_heap_name] v.
+  ⊢ |={∅}=> ∃ _ : heapHGS Σ V, heap_inv V ∗ state_interp σ ∗ [∗ map] k↦v ∈ σ, k ↦? v.
 Proof.
   iDestruct (ghost_map_alloc (K := loc) (V := option V) σ) as "Hgmap".
   iMod "Hgmap" as "[%γ [[Hauth' Hauth] Hfrag]]".
