@@ -736,11 +736,8 @@ Section soundness.
     move => Hwp.
     eapply uPred.pure_soundness.
     eapply (step_fupdN_soundness_lc _ n n) => ?/=.
-  Admitted.
-  (* WTF:
     iIntros "Hlc". iMod (fupd_mask_subseteq ∅) as "Hm"; [done|].
-    iMod heaplangH_init as (?) "[? [??]]".
-    iMod "Hm". iApply (Hwp with "[$] [$] [$]").
+    iMod heaplangH_init as (?) "[? ?]".
+    iMod "Hm". iApply (Hwp with "[$] [$]").
   Qed.
-  *)
 End soundness.
