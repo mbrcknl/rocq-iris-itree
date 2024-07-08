@@ -9,6 +9,7 @@ INSTALLDEFAULTROOT = iris
 
 src/axioms.v
 src/choice.v
+src/angelic_choice.v
 src/ub.v
 src/halt.v
 src/later.v
