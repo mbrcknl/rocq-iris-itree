@@ -9,7 +9,7 @@ From iris.base_logic.lib Require Import ghost_var.
 From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
-From iris.heap_lang Require Export lang locations.
+From iris.itree.heaplang Require Export definition.
 
 Definition sequential_heaplangE : Type → Type := ubE +' heapE val +' demonicE +' laterE.
 (** The event type for heaplang. *)
@@ -366,55 +366,40 @@ Section semantics.
     compile_expr (Val v) ≈ Ret v.
   Proof. rewrite /compile_expr/compile_expr'. by eutt_norm. Qed.
 
-  Definition supported_subset_ectx (Ki : ectx_item) : Prop :=
-    match Ki with
-    | ResolveLCtx _ _ _ => False
-    | ResolveMCtx _ _ => False
-    | ResolveRCtx _ _ => False
-    | _ => True
-    end.
-
   (** Intermediate statement for proving [compile_expr_bind]. *)
   Lemma compile_expr_bind_item (Ki : ectx_item) (e : expr) :
-    supported_subset_ectx Ki →
     compile_expr (fill_item Ki e) ≈
       v ← compile_expr_yield e;
       compile_expr (fill_item Ki (Val v)).
   Proof.
-    intros Hsubset. destruct Ki; simpl; rewrite /compile_expr_yield/compile_expr;
+    destruct Ki; simpl; rewrite /compile_expr_yield/compile_expr;
     try contradiction; eutt_norm; simpl; by eutt_norm.
   Qed.
   (** Intermediate statement for proving [compile_expr_bind]. *)
   Lemma compile_expr_bind_ind K e l :
-    Forall supported_subset_ectx K →
     length K = l →
     l > 0 →
     compile_expr (fill K e) ≈
       v ← compile_expr_yield e;
       compile_expr (fill K (Val v)).
   Proof.
-    revert K. induction l as [|n IH]; intros K Hsubset Hlen Hne.
+    revert K. induction l as [|n IH]; intros K Hlen Hne.
     { apply nil_length_inv in Hlen. lia. }
     destruct n as [|n'].
-    { apply list_singleton in Hlen as [x ->]. simpl. rewrite compile_expr_bind_item //.
-      by rewrite Forall_singleton in Hsubset. }
+    { apply list_singleton in Hlen as [x ->]. simpl. rewrite compile_expr_bind_item //. }
     unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
-    apply Forall_app in Hsubset as [HsubsetK' HsubsetKi].
-    rewrite Forall_singleton in HsubsetKi. rewrite app_length /= in Hlen.
+    rewrite app_length /= in Hlen.
+    rewrite Nat.add_comm in Hlen.
+    injection Hlen as Hlen.
     rewrite fill_app /= compile_expr_bind_item // /compile_expr_yield IH // /compile_expr_yield; try lia.
     eutt_norm.
     f_equiv. intros v. rewrite fill_app /=. f_equiv. intros _.
     rewrite compile_expr_bind_item // /compile_expr_yield. eutt_norm. f_equiv. intros v'.
-    rewrite !fill_not_val //.
-    - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
-      rewrite Hlen. lia.
-    - replace (length K' + 1) with (S (length K')) in Hlen by lia. injection Hlen as Hlen.
-      rewrite Hlen. lia.
+    rewrite !fill_not_val // Hlen; lia.
   Qed.
   (** A semantic bind lemma. This breaks the computation of [K[e]] into a
   computation of [e] to a value [v] and then a computation of [K[v]]. *)
   Lemma compile_expr_bind K e :
-    Forall supported_subset_ectx K →
     (* The lemma would not hold with the empty context [K = []], because there
     would be a [yield] too much on the right side of the [≈]. *)
     length K > 0 →
@@ -425,12 +410,11 @@ Section semantics.
       v ← compile_expr_yield e;
       compile_expr (fill K (Val v)).
   Proof.
-    intros Hsubset Hne. by apply compile_expr_bind_ind with (l := length K).
+    intros Hne. by apply compile_expr_bind_ind with (l := length K).
   Qed.
 
   (** A version of [compile_expr_bind] that also works for the empty context. *)
   Lemma compile_expr_bind' K e :
-    Forall supported_subset_ectx K →
     compile_expr (fill K e) ≈
       v ← compile_expr e;
       if (decide (length K = 0)) then
@@ -439,7 +423,6 @@ Section semantics.
         yield_if_not_val e;;
         compile_expr (fill K (Val v)).
   Proof.
-    intros Hsubset.
     destruct (decide _) as [Heq|Hneq].
     - apply nil_length_inv in Heq as ->.
       by eutt_norm.
@@ -524,13 +507,12 @@ Section wp.
   perspective is that we need [⊤] mask to account for the [yield] in the
   "semantic bind lemma" [compile_expr_bind]. *)
   Lemma wp_bind_K m K e Φ :
-    Forall supported_subset_ectx K →
     WP e @ m; ⊤ {{ v,
       WP fill K (Val v) @ m; ⊤ {{ Φ }}
     }} -∗
     WP fill K e @ m; ⊤ {{ Φ }}.
   Proof.
-    iIntros (Hs) "Hwp". rewrite !wp_heaplang_unfold.
+    iIntros "Hwp". rewrite !wp_heaplang_unfold.
     destruct (decide (length K = 0)).
     - destruct K => //=. iApply wpi_update_post. iApply wpi_wand; last done.
       iIntros (r) "Hwp". rewrite wp_heaplang_unfold compile_expr_val -wpi_ret'.

@@ -1,5 +1,4 @@
 From iris.prelude Require Import prelude.
-From iris.heap_lang Require Import lang locations.
 From iris.itree.heaplang Require Import lang.
 
 Lemma of_to_val_iff e v:
@@ -9,12 +8,12 @@ Proof. split; [apply of_to_val| by move => <-]. Qed.
 Fixpoint expr_depth (e : expr) : nat :=
   match e with
   | Val v => 0
-  | Var _ | Rec _ _ _ | NewProph => 1
+  | Var _ | Rec _ _ _ (* | NewProph *) => 1
   | Fst e | Snd e | InjL e | InjR e | Free e
   | Load e | Fork e | UnOp _ e => S (expr_depth e)
   | App e1 e2 | Pair e1 e2 | AllocN e1 e2 | Store e1 e2
   | Xchg e1 e2 | FAA e1 e2 | BinOp _ e1 e2 => S (expr_depth e1 `max` expr_depth e2)
-  | Case e1 e2 e3 | CmpXchg e1 e2 e3 | Resolve e1 e2 e3
+  | Case e1 e2 e3 | CmpXchg e1 e2 e3 (* | Resolve e1 e2 e3 *)
   | If e1 e2 e3 => S (expr_depth e1 `max` expr_depth e2 `max` expr_depth e3)
   end.
 
@@ -83,6 +82,7 @@ Fixpoint split_expr_ectx_item (e : expr) : option (ectx_item * expr) :=
       | _, Some v2 => Some (FaaLCtx v2, e1)
       | _, _ => Some (FaaRCtx e1, e2)
       end
+  (*
   | Resolve e1 e2 e3 =>
       match to_val e1, to_val e2, to_val e3 with
       | Some _, Some _, Some _ => None
@@ -91,6 +91,7 @@ Fixpoint split_expr_ectx_item (e : expr) : option (ectx_item * expr) :=
       | _, _, Some v3 => Some (ResolveMCtx e1 v3, e2)
       | _, _, _ => Some (ResolveRCtx e1 e2, e3)
       end
+  *)
   | _ => None
   end.
 
@@ -107,19 +108,23 @@ Proof.
   induction hypothesis are cleared by the clear. We need to clear them
   as otherwise naive_solver diverges. *)
   all: try (clear; naive_solver).
+  (*
   - move => ? ? ? ? [[? ?] [? ?]]. simplify_eq/=.
     f_equal. by apply IHe1.
   - move => ? ? ? ? ?. simplify_eq/=. by destruct Ki.
   - move => ? ? ? ? ?. simplify_eq/=. eexists (_, _). split; [|done].
     by apply IHe1.
+  *)
 Qed.
 
 Lemma split_expr_ectx_item_correct2 e Ki e' :
   split_expr_ectx_item e = Some (Ki, e') → to_val e' = None.
 Proof.
   elim: e Ki e' => //= *; repeat case_match => //; simplify_eq/= => //.
+  (*
   revert select (_ <$> _ = Some _) => /fmap_Some[[? ?] [? ?]].
   naive_solver.
+  *)
 Qed.
 
 Lemma split_expr_ectx_item_correct e Ki e' :
@@ -271,8 +276,6 @@ Next Obligation.
   move => /= ? ? ? ? ? ? ? ? ? ? Hr [?[?[?[? Hs]]]]. inv Hs. simplify_option_eq.
   by apply Hr.
 Qed.
-Next Obligation. Admitted.
-Next Obligation. Admitted.
 
 Global Program Instance reducible_dec (e : expr) (σ : state) : Decision (reducible e σ) :=
   cast_if (decide (base_reducible (split_expr_ectx (expr_depth e) e).2 σ)).
