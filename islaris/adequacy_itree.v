@@ -323,8 +323,7 @@ Proof.
     * move => ?? [?[??]]. simplify_map_eq. }
   { iFrame "His". } { iFrame "Hbm Hm1". }
 
-  rewrite -wpi_clear_mask. iMod "Hwp" as "$". iModIntro.
-  iSplitL "Hs2".
+  iFrame "Hwp". iModIntro. iSplitL "Hs2".
   - repeat iSplit => //. iExists _. rewrite spec_trace_raw_eq. by iFrame.
   - iIntros (?????) "_ _ !>". done.
 Qed.

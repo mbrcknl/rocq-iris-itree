@@ -3,13 +3,9 @@ From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.itree Require Import wpi choice ub heap handler itree later.
 From iris.itree.threadpool Require Import handler.
 From iris.prelude Require Import prelude.
-From iris Require Import ghost_map.
-From iris Require Import invariants.
-From iris.base_logic.lib Require Import ghost_var.
-From iris.proofmode Require Import proofmode.
-From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
 From iris.itree.heaplang Require Export definition.
+From iris.proofmode Require Import proofmode.
 
 Definition sequential_heaplangE : Type → Type := ubE +' heapE val +' demonicE +' laterE.
 (** The event type for heaplang. *)

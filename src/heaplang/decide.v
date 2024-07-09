@@ -22,7 +22,7 @@ Lemma expr_depth_fill_item Ki e:
 Proof. elim: Ki => //=; lia. Qed.
 
 
-Fixpoint split_expr_ectx_item (e : expr) : option (ectx_item * expr) :=
+Definition split_expr_ectx_item (e : expr) : option (ectx_item * expr) :=
   match e with
   | App e1 e2 =>
       match to_val e1, to_val e2 with

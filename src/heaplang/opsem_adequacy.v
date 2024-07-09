@@ -8,7 +8,7 @@ From iris.program_logic Require Import language.
 From iris.itree.heaplang Require Import decide.
 From iris.itree Require Import later handler void.
 From iris.itree.threadpool Require Import handler interleaving.
-From iris.itree.heaplang Require Import lang adequacy.
+From iris.itree.heaplang Require Import lang program_logic adequacy.
 From Paco Require Import paco.
 From Paco Require Import paco2.
 
