@@ -700,16 +700,16 @@ Section wpi_adequate.
   Qed.
 
   Theorem wpi_adequate (Φ : R → iProp Σ) (H : iHandler Σ E) (EH : eHandler E E R)
-    (A : eHandlerAdequate H EH) t s C :
+    (A : eHandlerAdequate H EH) t s C m :
     exec EH t s C →
-    WPi t @ H; ∅ {{Φ}} -∗
+    WPi t @ H; m {{Φ}} -∗
     A.(ehandler_inv) s [] -∗
-    |={∅}=> ∃ t' s' Ms' M', ⌜C t' s'⌝ ∗
+    |={m, ∅}=> ∃ t' s' Ms' M', ⌜C t' s'⌝ ∗
          A.(ehandler_inv) s' Ms' ∗
          bi_close (eutt eq) (λ t', (∀ P, M' P ={∅}=∗ P t')) t' ∗
-         WPi_tp (M'::Ms') @ H {{Φ}}.
+         WPi_tp (M'::Ms') @ H {{ v, |={∅,m}=> Φ v}}.
   Proof.
-    iIntros (Hexec) "Hwpi Hinv".
+    iIntros (Hexec) "Hwpi Hinv". rewrite -wpi_clear_mask. iMod "Hwpi".
     iApply (wpi_adequate_ind with "[Hwpi] Hinv"); [done|done| |].
     - by iApply wpi_tp_intro.
     - by iIntros (?) "$".
@@ -719,16 +719,16 @@ End wpi_adequate.
 Section wpi_adequate_pure.
   Context {Σ : gFunctors} {E : Type → Type} {R : Type} `{!invGpreS Σ}.
 
-  Theorem wpi_adequate_pure hlc n (EH : eHandler E E R) t s C Ψ:
+  Theorem wpi_adequate_pure hlc n m (EH : eHandler E E R) t s C Ψ:
     exec EH t s C →
     (∀ Hinv : invGS_gen hlc Σ,
-      ⊢ £ n -∗ |={⊤, ∅}=> ∃ (H : iHandler Σ E) (A : eHandlerAdequate H EH) (Φ : R → iProp Σ),
-       WPi t @ H;∅ {{Φ}} ∗
+      ⊢ £ n -∗ |={⊤, m}=> ∃ (H : iHandler Σ E) (A : eHandlerAdequate H EH) (Φ : R → iProp Σ),
+       WPi t @ H;m {{Φ}} ∗
        A.(ehandler_inv) s [] ∗
        (∀ t' s' Ms' M', ⌜C t' s'⌝ -∗
          A.(ehandler_inv) s' Ms' -∗
          bi_close (eutt eq) (λ t', (∀ P, M' P ={∅}=∗ P t')) t' ∗
-         WPi_tp (M'::Ms') @ H {{Φ}} ={∅}=∗ ⌜Ψ⌝)) → Ψ.
+         WPi_tp (M'::Ms') @ H {{v, |={∅,m}=> Φ v}} ={∅}=∗ ⌜Ψ⌝)) → Ψ.
   Proof.
     move => Hexec Hwp.
     eapply uPred.pure_soundness.
