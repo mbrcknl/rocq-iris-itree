@@ -296,3 +296,202 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 End wp.
+
+(** Pure reductions *)
+
+(** Mirrors Iris' [PureExec]: a witness of a head reduction from
+[e1] to [e2].
+
+TODO: It would probably be better to state this on the level
+of itrees, e.g.
+[φ → compile_expr e1 ≈ (later.step;; compile_expr e2)].
+That would factor out a lot of common parts from the proofs below.
+The issue is that this does not hold e.g. for beta reduction
+due to a different number of yields on both sides. *)
+Class PureExec (φ : Prop) (e1 e2 : expr) :=
+  pure_exec `{!invGS_gen hlc Σ} `{!heaplangHGS Σ} m Φ :
+    φ → lat m (WP e2 @ m; ⊤ {{ Φ }}) ⊢ WP e1 @ m; ⊤ {{ Φ }}.
+
+(* Unfortunately, this lemma does not hold.
+We would need the inverse of [wp_bind_K] to make it hold. *)
+Lemma wp_bind_pure `{!invGS_gen hlc Σ} `{!heaplangHGS Σ} φ e1 e2 m Φ K :
+  PureExec φ e1 e2 →
+  φ → lat m (WP fill K e2 @ m; ⊤ {{ Φ }}) ⊢ WP fill K e1 @ m; ⊤ {{ Φ }}.
+Proof.
+ iIntros (Hexec Hφ).
+Abort.
+
+(** * Instances of the [PureExec] class *)
+(** The behavior of the various [wp_] tactics with regard to lambda differs in
+the following way:
+
+- [wp_pures] does *not* reduce lambdas/recs that are hidden behind a definition.
+- [wp_rec] and [wp_lam] reduce lambdas/recs that are hidden behind a definition.
+
+To realize this behavior, we define the class [AsRecV v f x erec], which takes a
+value [v] as its input, and turns it into a [RecV f x erec] via the instance
+[AsRecV_recv : AsRecV (RecV f x e) f x e]. We register this instance via
+[Hint Extern] so that it is only used if [v] is syntactically a lambda/rec, and
+not if [v] contains a lambda/rec that is hidden behind a definition.
+
+To make sure that [wp_rec] and [wp_lam] do reduce lambdas/recs that are hidden
+behind a definition, we activate [AsRecV_recv] by hand in these tactics. *)
+Class AsRecV (v : val) (f x : binder) (erec : expr) :=
+  as_recv : v = RecV f x erec.
+Global Hint Mode AsRecV ! - - - : typeclass_instances.
+Definition AsRecV_recv f x e : AsRecV (RecV f x e) f x e := eq_refl.
+Global Hint Extern 0 (AsRecV (RecV _ _ _) _ _ _) =>
+  apply AsRecV_recv : typeclass_instances.
+
+
+Global Instance pure_recc f x (erec : expr) :
+  PureExec True (Rec f x erec) (Val $ RecV f x erec).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+Global Instance pure_pairc (v1 v2 : val) :
+  PureExec True (Pair (Val v1) (Val v2)) (Val $ PairV v1 v2).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+Global Instance pure_injlc (v : val) :
+  PureExec True (InjL $ Val v) (Val $ InjLV v).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+Global Instance pure_injrc (v : val) :
+  PureExec True (InjR $ Val v) (Val $ InjRV v).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+
+Global Instance pure_beta f x (erec : expr) (v1 v2 : val) `{!AsRecV v1 f x erec} :
+  PureExec True (App (Val v1) (Val v2)) (subst' x v2 (subst' f v1 erec)).
+Proof.
+  unfold AsRecV in *.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  subst v1. wpi_norm/=.
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update.
+  iApply lat_mono; last done. iIntros "He".
+  iApply wpi_bind. iApply wpi_yield_if_not_val.
+  rewrite interp_recursive_call. wpi_norm/=. done.
+Qed.
+
+Global Instance pure_unop op v v' :
+  PureExec (un_op_eval op v = Some v') (UnOp op (Val v)) (Val v').
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. rewrite Hφ. wpi_norm/=.
+  iApply wpi_ret. iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+
+Global Instance pure_binop op v1 v2 v' :
+  PureExec (bin_op_eval op v1 v2 = Some v') (BinOp op (Val v1) (Val v2)) (Val v') | 10.
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. rewrite Hφ. wpi_norm/=.
+  iApply wpi_ret. iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+(* Lower-cost instance for [EqOp]. *)
+Global Instance pure_eqop v1 v2 :
+  PureExec (vals_compare_safe v1 v2)
+    (BinOp EqOp (Val v1) (Val v2))
+    (Val $ LitV $ LitBool $ bool_decide (v1 = v2)) | 1.
+Proof.
+  intros ???? m Φ Hcompare.
+  cut (bin_op_eval EqOp v1 v2 = Some $ LitV $ LitBool $ bool_decide (v1 = v2)).
+  { intros. eapply pure_binop. done. }
+  rewrite /bin_op_eval /= decide_True //.
+Qed.
+
+Global Instance pure_if_true e1 e2 :
+  PureExec True (If (Val $ LitV $ LitBool true) e1 e2) e1.
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update.
+  iApply lat_mono; last done. iIntros "He".
+  iApply wpi_bind. iApply wpi_yield_if_not_val. done.
+Qed.
+Global Instance pure_if_false e1 e2 :
+  PureExec True (If (Val $ LitV  $ LitBool false) e1 e2) e2.
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update.
+  iApply lat_mono; last done. iIntros "He".
+  iApply wpi_bind. iApply wpi_yield_if_not_val. done.
+Qed.
+
+Global Instance pure_fst v1 v2 :
+  PureExec True (Fst (Val $ PairV v1 v2)) (Val v1).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+Global Instance pure_snd v1 v2 :
+  PureExec True (Snd (Val $ PairV v1 v2)) (Val v2).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update. done.
+Qed.
+
+Global Instance pure_case_inl v e1 e2 :
+  PureExec True (Case (Val $ InjLV v) e1 e2) (App e1 (Val v)).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update.
+  iApply lat_mono; last done. iIntros "He".
+  iApply wpi_bind. iApply @wpi_yield.
+  rewrite interp_recursive_call. wpi_norm/=. done.
+Qed.
+Global Instance pure_case_inr v e1 e2 :
+  PureExec True (Case (Val $ InjRV v) e1 e2) (App e2 (Val v)).
+Proof.
+  iIntros (???? m Φ Hφ) "He".
+  rewrite !wp_heaplang_unfold.
+  rewrite /compile_expr.
+  wpi_norm/=. wpi_norm/= in "He".
+  iApply wpi_bind. iApply @wpi_step. rewrite wpi_update.
+  iApply lat_mono; last done. iIntros "He".
+  iApply wpi_bind. iApply @wpi_yield.
+  rewrite interp_recursive_call. wpi_norm/=. done.
+Qed.

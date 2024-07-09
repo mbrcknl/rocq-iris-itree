@@ -800,3 +800,19 @@ Ltac wpi_norm :=
   notypeclasses refine (tac_wpi_norm _ _ _ _ _ _ _ _ _); [solve_normalize_itree|].
 Tactic Notation "wpi_norm/=" :=
   repeat (simpl; wpi_norm).
+
+Ltac wpi_norm_in_context :=
+  match goal with
+  | |- context [ (WPi ?t @ ?H; ?M {{ ?Φ }})%I ] =>
+    let T := type of t in
+    let t' := mk_evar T in
+    let Hnorm := fresh "Hnorm" in
+    let Heq := fresh "Heq" in
+    assert (NormalizeITree true t t') as [Hnorm] by solve_normalize_itree;
+    assert (WPi t @ H; M {{ Φ }} ⊣⊢ WPi t' @ H; M {{ Φ }})%I as Heq by (by rewrite Hnorm);
+    rewrite Heq;
+    clear Heq Hnorm
+  end.
+
+Tactic Notation "wpi_norm/=" "in" constr(H) :=
+  iEval (repeat (simpl; wpi_norm_in_context)) in H.
