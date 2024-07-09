@@ -443,7 +443,7 @@ no base steps (i.e., surface reductions) are taken. This means that contextual
 closure will reduce [Resolve (CmpXchg #l #n (#n + #1)) #p #v] into [Resolve
 (CmpXchg #l #n #(n+1)) #p #v], but it cannot context-step any further. *)
 
-Fixpoint fill_item (Ki : ectx_item) (e : expr) : expr :=
+Definition fill_item (Ki : ectx_item) (e : expr) : expr :=
   match Ki with
   | AppLCtx v2 => App e (of_val v2)
   | AppRCtx e1 => App e1 e

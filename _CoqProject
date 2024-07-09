@@ -29,6 +29,7 @@ src/exec.v
 src/heaplang/definition.v
 src/heaplang/lang.v
 src/heaplang/decide.v
+src/heaplang/program_logic.v
 src/heaplang/adequacy.v
 src/heaplang/opsem_adequacy.v
 src/heaplang/interpreter.v

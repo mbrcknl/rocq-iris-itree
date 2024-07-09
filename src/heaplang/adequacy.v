@@ -1,9 +1,9 @@
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts TranslateFacts Eqit.
 From iris Require Import invariants ghost_map.
 From iris.proofmode Require Import proofmode.
-From iris.itree Require Import wpi ub itree choice state later handler void.
+From iris.itree Require Import wpi ub itree choice state later handler void heap.
 From iris.itree.threadpool Require Import ctrace handler interleaving.
-From iris.itree.heaplang Require Import lang.
+From iris.itree.heaplang Require Import lang program_logic.
 
 (** An execution outcome of a HeapLang program. *)
 Definition Outcome R : Type :=
@@ -62,6 +62,34 @@ Proof.
   specialize (Htotal te Hrel).
   - case_match. case_match; eauto.
 *)
+
+
+Section soundness.
+  (** Lemma for initializing the ghost state for [WP]. *)
+  Lemma heaplangH_init `{!invGS_gen hlc Σ} `{!heaplangHGpreS Σ} σ :
+    ⊢ |={∅}=> ∃ _ : heaplangHGS Σ, state_interp σ ∗ [∗ map] k↦v ∈ σ, k ↦? v.
+  Proof.
+    iMod (heapH_init) as "[%HS [#Hinv [Hst Hpointsto]]]".
+    iExists (HeapLangHGS Σ HS).
+    by iFrame.
+  Qed.
+
+  (** Lemma useful for extract a proposition in classical logic [P] from a
+  proof inside the program logic. *)
+  Lemma heaplang_soundness n (σ : heaplang_heap) `{!invGpreS Σ} `{!heaplangHGpreS Σ} P:
+    (∀ {HG : invGS Σ} {HS : heaplangHGS Σ},
+      ⊢ state_interp σ -∗ £ n ={⊤,∅}=∗ |={∅}▷=>^n ⌜P⌝) →
+    P.
+  Proof.
+    move => Hwp.
+    eapply uPred.pure_soundness.
+    eapply (step_fupdN_soundness_lc _ n n) => ?/=.
+    iIntros "Hlc". iMod (fupd_mask_subseteq ∅) as "Hm"; [done|].
+    iMod heaplangH_init as (?) "[? ?]".
+    iMod "Hm". iApply (Hwp with "[$] [$]").
+  Qed.
+End soundness.
+
 
 Section adequacy.
   Context {Σ} `{!invGS Σ} `{!heaplangHGS Σ}.
