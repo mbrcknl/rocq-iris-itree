@@ -539,6 +539,48 @@ Section wp.
 
   (* Proof rules for various operations: *)
 
+  Lemma wp_UnOp m M op v v' Φ :
+    un_op_eval op v = Some v' →
+    lat m (Φ v') -∗
+    WP (UnOp op (Val v)) @ m; M {{ Φ }}.
+  Proof.
+    iIntros (Heq) "HΦ". rewrite !wp_heaplang_unfold.
+    rewrite /compile_expr. wpi_norm/=. rewrite Heq. wpi_norm/=.
+    by iApply wpi_step_ret.
+  Qed.
+
+  Lemma wp_BinOp m M op v1 v2 v' Φ :
+    bin_op_eval op v1 v2 = Some v' →
+    lat m (Φ v') -∗
+    WP (BinOp op (Val v1) (Val v2)) @ m; M {{ Φ }}.
+  Proof.
+    iIntros (Heq) "HΦ". rewrite !wp_heaplang_unfold.
+    rewrite /compile_expr. wpi_norm/=. rewrite Heq. wpi_norm/=.
+    by iApply wpi_step_ret.
+  Qed.
+
+  Lemma wp_IfTrue m e1 e2 Φ :
+    lat m (WP e1 @ m; ⊤ {{ Φ }}) -∗
+    WP If (Val (LitV (LitBool true))) e1 e2 @ m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "HΦ". rewrite !wp_heaplang_unfold.
+    rewrite /compile_expr. wpi_norm/=. iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done.
+    iIntros "Hwp". iApply wpi_bind. iApply wpi_yield_if_not_val.
+    iModIntro. rewrite rec_as_interp //.
+  Qed.
+
+  Lemma wp_IfFalse m e1 e2 Φ :
+    lat m (WP e2 @ m; ⊤ {{ Φ }}) -∗
+    WP If (Val (LitV (LitBool false))) e1 e2 @ m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "HΦ". rewrite !wp_heaplang_unfold.
+    rewrite /compile_expr. wpi_norm/=. iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done.
+    iIntros "Hwp". iApply wpi_bind. iApply wpi_yield_if_not_val.
+    iModIntro. rewrite rec_as_interp //.
+  Qed.
+
   Lemma wp_App m f_ x_ v e Φ :
     lat m (WP (subst' x_ v  (subst' f_ (RecV f_ x_ e) e)) @ m; ⊤ {{ Φ }}) -∗
     WP (App (Val (RecV f_ x_ e)) (Val v)) @ m; ⊤ {{ Φ }}.
