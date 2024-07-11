@@ -1,7 +1,7 @@
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.algebra Require Import dfrac_agree.
 From iris.base_logic.lib Require Import ghost_map ghost_var.
-From iris.itree Require Import itree exec handler wpi later halt ub.
+From iris.itree Require Import itree exec handler wpi step halt ub.
 Require Import isla.adequacy.
 Require Export isla.opsem.
 Require Export isla.opsem_itree.
@@ -19,7 +19,7 @@ Proof.
 Qed.
 
 Definition islaEH Pκs : seHandler islaE :=
-  (demonicEH ⊕ₑₛ specEH Pκs ⊕ₑₛ stateEH seq_state ⊕ₑₛ laterEH Later ⊕ₑₛ haltEH ⊕ₑₛ ubEH).
+  (demonicEH ⊕ₑₛ specEH Pκs ⊕ₑₛ stateEH seq_state ⊕ₑₛ stepEH Later ⊕ₑₛ haltEH ⊕ₑₛ ubEH).
 
 Local Notation isla_estate κs ls σ n := ((), (κs, ({| seq_local := ls; seq_global := σ |}, (n, ((), ()))))).
 

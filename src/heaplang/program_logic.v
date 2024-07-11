@@ -8,7 +8,7 @@ From iris.proofmode Require Import proofmode.
 From iris.bi.lib Require Import fractional.
 From elpi.apps Require Import locker.
 
-From iris.itree Require Import wpi choice ub heap handler itree later.
+From iris.itree Require Import wpi choice ub heap handler itree step.
 From iris.itree.heaplang Require Export definition lang.
 
 Class heaplangHGpreS (Σ : gFunctors) := HeapLangHGpreS {
@@ -25,7 +25,7 @@ Section handler.
 
   (** The handler for [heaplangE]. *)
   Definition heaplangH m : iHandler Σ heaplangE :=
-    threadpoolH ⊕ ubH ⊕ heapH val ⊕ demonicH ⊕ laterH m.
+    threadpoolH ⊕ ubH ⊕ heapH val ⊕ demonicH ⊕ stepH m.
 
   Lemma wpi_yield_if_not_val m e Φ :
     Φ tt -∗
@@ -48,7 +48,7 @@ Section handler.
     lat m (Φ r) -∗
     WPi step_ret r @ heaplangH m; M {{ Φ }}.
   Proof.
-    iIntros "HΦ". iApply wpi_bind. iApply @wpi_later. iApply lat_mono; last done.
+    iIntros "HΦ". iApply wpi_bind. iApply @wpi_step. iApply lat_mono; last done.
     iIntros "HΦ". by iApply wpi_ret.
   Qed.
 End handler.
@@ -355,7 +355,7 @@ End wp.
 
 TODO: It would probably be better to state this on the level
 of itrees, e.g.
-[φ → compile_expr e1 ≈ (later.step;; compile_expr e2)].
+[φ → compile_expr e1 ≈ (step.step;; compile_expr e2)].
 That would factor out a lot of common parts from the proofs below.
 The issue is that this does not hold e.g. for beta reduction
 due to a different number of yields on both sides. *)

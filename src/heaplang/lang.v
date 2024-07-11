@@ -1,12 +1,12 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
-From iris.itree Require Import wpi choice ub heap handler itree later.
+From iris.itree Require Import wpi choice ub heap handler itree step.
 From iris.itree.threadpool Require Import handler.
 From iris.prelude Require Import prelude.
 From elpi.apps Require Import locker.
 From iris.itree.heaplang Require Export definition.
 
-Definition sequential_heaplangE : Type → Type := ubE +' heapE val +' demonicE +' laterE.
+Definition sequential_heaplangE : Type → Type := ubE +' heapE val +' demonicE +' stepE.
 (** The event type for heaplang. *)
 Definition heaplangE : Type → Type := threadpoolE +' sequential_heaplangE.
 Global Hint Transparent sequential_heaplangE : itree_auto.
@@ -40,7 +40,7 @@ Qed.
 
 This appears many times in the below specification of the semantics of
 heaplang. The reason is explained later by example. *)
-Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} `{laterE -< E} : itree E () :=
+Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} `{stepE -< E} : itree E () :=
   match to_val e with
   | Some _ => Ret ()
   | None => yield
@@ -123,8 +123,8 @@ Section semantics.
 
   (** Do a step and then return [v]. This is used to ensure that the
   postcondition is asserted under a later modality. *)
-  Definition step_ret {E} `{laterE -< E} (v : val) : itree E val :=
-    later.step ;; Ret v.
+  Definition step_ret {E} `{stepE -< E} (v : val) : itree E val :=
+    step.step ;; Ret v.
 
   (** The semantic interpretation of [e], before rectifying the recursive
   calls.
@@ -140,7 +140,7 @@ Section semantics.
     [do]. *)
     let yield := do yield in
     let yield_if_not_val e := do (yield_if_not_val e) in
-    let step := do later.step in
+    let step := do step.step in
     let store'_or_ub l x := do (store'_or_ub l x) in
     let store_or_ub l x := do (store_or_ub l x) in
     let load_or_ub l := do (load_or_ub l) in

@@ -6,7 +6,7 @@ From iris.bi.lib Require Import fixpoint.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic.lib Require Import invariants.
-From iris.itree Require Import itree wpi handler ub state choice halt later.
+From iris.itree Require Import itree wpi handler ub state choice halt step.
 From iris.itree.threadpool Require Import handler.
 
 Local Unset Program Cases.
@@ -958,13 +958,13 @@ Lemma exec_assume (P : Prop) E (EH : eHandler E E P) `{!haltE -< E} f1 f2 `{!inE
 Proof. move => ??. rewrite /assume. case_decide; [apply exec_stop; naive_solver|done]. Qed.
 
 (** * [later] *)
-Program Definition laterEH lat : seHandler laterE :=
-  SEHandler nat (λ A e s, match e with | ELater =>
+Program Definition stepEH lat : seHandler stepE :=
+  SEHandler nat (λ A e s, match e with | EStep =>
      λ C, ∃ s', s = S s' ∧ C tt (if lat is Later then s' else s) end) _.
 Next Obligation. move => /= *. case_match; naive_solver. Qed.
 
-Global Program Instance laterEH_adequate {Σ} `{!invGS Σ} lat :
-  seHandlerAdequate (laterH lat) (laterEH lat) := {| sehandler_inv s := £ s |}.
+Global Program Instance stepEH_adequate {Σ} `{!invGS Σ} lat :
+  seHandlerAdequate (stepH lat) (stepEH lat) := {| sehandler_inv s := £ s |}.
 Next Obligation.
   move => /= ?? lat ?????? HP.
   iIntros "Hp Hs". case_match.

@@ -56,7 +56,7 @@
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.base_logic.lib Require Import ghost_var.
 From iris.proofmode Require Import tactics.
-From iris.itree Require Import wpi choice ub state handler itree halt later.
+From iris.itree Require Import wpi choice ub state handler itree halt step.
 From isla Require Export lifting opsem_itree ghost_state spec_itree.
 Set Default Proof Using "Type".
 Import uPred.
@@ -101,7 +101,7 @@ End state_link.
 Global Instance isla_state_interp `{!stateG Σ} : stateInterp Σ seq_state := state_link.
 
 Definition islaH {Σ} `{!stateG Σ} `{!islaG Σ}  : iHandler Σ islaE :=
-  demonicH ⊕ specH ⊕ stateH seq_state ⊕ laterH Later ⊕ haltH ⊕ ubH.
+  demonicH ⊕ specH ⊕ stateH seq_state ⊕ stepH Later ⊕ haltH ⊕ ubH.
 
 Definition wp_asm_def `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} (e : isla_trace) : iProp Σ :=
   (∀ σ,

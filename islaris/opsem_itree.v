@@ -1,5 +1,5 @@
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
-From iris.itree Require Import wpi choice ub state handler itree halt later.
+From iris.itree Require Import wpi choice ub state handler itree halt step.
 Require Export isla.opsem.
 Require Import isla.spec_itree.
 
@@ -204,7 +204,7 @@ Record seq_state := {
 }.
 Global Instance eta_seq_state : Settable _ := settable! Build_seq_state <seq_local; seq_global>.
 
-Definition islaE : Type → Type := demonicE +' specE +' stateE seq_state +' laterE +' haltE +' ubE.
+Definition islaE : Type → Type := demonicE +' specE +' stateE seq_state +' stepE +' haltE +' ubE.
 Global Hint Transparent islaE : itree_auto.
 
 
@@ -280,7 +280,7 @@ Global Hint Resolve read_mem_checked_to_translate : itree_auto.
 
 Definition compile_trace' (t : isla_trace) :
   itree (callE isla_trace void +' islaE) void :=
-  later.step;;
+  step.step;;
   match t with
   | Smt (DeclareConst x ty) ann :t: es =>
       v ← (match ty with
@@ -373,7 +373,7 @@ Global Arguments compile_trace !_ /.
 
 Definition compile_trace_direct_translation' (t : isla_trace) :
   itree (callE isla_trace void +' islaE) void :=
-  later.step;;
+  step.step;;
   match t with
   | Smt (DeclareConst x (Ty_BitVec b)) ann :t: es =>
       n ← trigger (EDemonic Z);

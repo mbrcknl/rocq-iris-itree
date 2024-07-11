@@ -1,25 +1,25 @@
 From ITree Require Import ITree Eqit.
 From iris Require Import invariants ghost_map.
 From iris.proofmode Require Import proofmode.
-From iris.itree Require Import wpi ub itree choice state later handler void interpreter.
+From iris.itree Require Import wpi ub itree choice state handler void interpreter step.
 From iris.itree.threadpool Require Import handler interleaving scheduler.
 From iris.itree.heaplang Require Import lang adequacy.
 
 (** Interpretation function for [heaplangE], obtained compositionally by
 composing interpretation functions for the various event types. *)
-Definition heaplang_ifn {R} (σ : heaplang_heap) (later_fuel : option nat) (t : itree heaplangE R) : Execution R :=
-  later_ifn later_fuel (insert_voidE (demonic_ifn (state_ifn σ (ub_ifn (threadpool_ifn t))))).
+Definition heaplang_ifn {R} (σ : heaplang_heap) (step_fuel : option nat) (t : itree heaplangE R) : Execution R :=
+  step_ifn step_fuel (insert_voidE (demonic_ifn (state_ifn σ (ub_ifn (threadpool_ifn t))))).
 
 (** The function [heaplang_ifn] instantiates the relation [heaplang_irel]. *)
-Lemma heaplang_ifn_irel {R} (t : itree heaplangE R) (σ : heaplang_heap) (later_fuel : option nat) :
-  heaplang_irel σ later_fuel t (heaplang_ifn σ later_fuel t).
+Lemma heaplang_ifn_irel {R} (t : itree heaplangE R) (σ : heaplang_heap) (step_fuel : option nat) :
+  heaplang_irel σ step_fuel t (heaplang_ifn σ step_fuel t).
 Proof.
   eexists. eexists. eexists. eexists.
   split; first apply threadpool_ifn_irel.
   split; first apply ub_ifn_irel.
   split; first apply state_ifn_irel.
   split; first apply demonic_ifn_irel.
-  apply later_ifn_irel.
+  apply step_ifn_irel.
 Qed.
 
 (** Return type to mark that we exceeded the limit for the number of steps. *)
@@ -28,29 +28,29 @@ Variant timeout := Timeout.
 (* FIXME: Order arguments consistently. *)
 
 (** Convert an heaplang expression [e] to an ITree and evaluate it. *)
-Definition heaplang_eval_itree σ later_fuel e : Execution val :=
-  heaplang_ifn σ later_fuel (compile_expr_yield e).
+Definition heaplang_eval_itree σ step_fuel e : Execution val :=
+  heaplang_ifn σ step_fuel (compile_expr_yield e).
 
 (** Evaluate a heaplang expression [e] at state [σ] in [fuel] computation steps
 or less.
 
-There is also a parameter [later_fuel], which optionally controls the number of
+There is also a parameter [step_fuel], which optionally controls the number of
 [step]s we can encounter. While [fuel] is closer to a measure of the actual
-computational effort, [later_fuel] sets a limit for the number of opsem steps
+computational effort, [step_fuel] sets a limit for the number of opsem steps
 in the evaluation of [e]. *)
-Definition heaplang_interpreter σ (fuel : nat) (later_fuel : option nat) (e : expr) : Outcome val + timeout :=
-  match exec fuel (heaplang_eval_itree σ later_fuel e) with
+Definition heaplang_interpreter σ (fuel : nat) (step_fuel : option nat) (e : expr) : Outcome val + timeout :=
+  match exec fuel (heaplang_eval_itree σ step_fuel e) with
   | None => inr Timeout
   | Some x => inl x
   end.
 
 (** The interpreter produces an execution. *)
-Lemma heaplang_interpreter_execution e σ fuel later_fuel x :
-  heaplang_interpreter σ fuel later_fuel e = inl x →
-  ∃ te, te ≈ Ret x ∧ heaplang_eval e σ later_fuel te.
+Lemma heaplang_interpreter_execution e σ fuel step_fuel x :
+  heaplang_interpreter σ fuel step_fuel e = inl x →
+  ∃ te, te ≈ Ret x ∧ heaplang_eval e σ step_fuel te.
 Proof.
   intros Hint.
-  exists (heaplang_eval_itree σ later_fuel e).
+  exists (heaplang_eval_itree σ step_fuel e).
   rewrite /heaplang_interpreter in Hint.
   case_match eqn:Heq'; last discriminate.
   apply exec_spec in Heq'. simplify_eq.
@@ -59,11 +59,11 @@ Proof.
 Qed.
 
 (** Partial soundness theorem for the interpreter. *)
-Lemma heaplang_interpreter_partial_soundness e σ fuel later_fuel φ :
+Lemma heaplang_interpreter_partial_soundness e σ fuel step_fuel φ :
   partially_adequate e σ φ →
-  match heaplang_interpreter σ fuel (Some later_fuel) e with
+  match heaplang_interpreter σ fuel (Some step_fuel) e with
   | inr Timeout => True
-  | inl (inr LaterExhausted) => True
+  | inl (inr StepExhausted) => True
   | inl (inl (_, inr UbCrash)) => False
   | inl (inl (σ, inl (inl v))) => φ v
   (* TODO: This case is never reached. Maybe it would make sense to strengthen
@@ -74,7 +74,7 @@ Proof.
   intros Had.
   destruct (heaplang_interpreter _ _ _ _) as [x|] eqn:Heq; last by case_match.
   apply heaplang_interpreter_execution in Heq as (te&Heutt&Heval).
-  odestruct (Had later_fuel te _) as (y&Heutt'&Hφ); first eauto.
+  odestruct (Had step_fuel te _) as (y&Heutt'&Hφ); first eauto.
   rewrite Heutt in Heutt'. apply eutt_inv_Ret in Heutt' as <-.
   repeat case_match; eauto.
 Qed.
@@ -85,7 +85,7 @@ Lemma heaplang_interpreter_total_soundness e σ φ :
   ∃ n, ∀ fuel, fuel ≥ n →
   match heaplang_interpreter σ fuel None e with
   | inr Timeout => False
-  | inl (inr LaterExhausted) => False
+  | inl (inr StepExhausted) => False
   | inl (inl (_, inr UbCrash)) => False
   | inl (inl (σ, inl (inl v))) => φ v
   (* TODO: This case is never reached. Maybe it would make sense to strengthen
