@@ -1,5 +1,4 @@
-From iris.itree Require Import handler.
-From iris.itree Require Import wpi.
+From iris.itree Require Import handler wpi itree.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic.lib Require Export fancy_updates.
@@ -62,22 +61,20 @@ Next Obligation.
   - by iIntros "?".
 Qed.
 
+(** Spawn a new thread executing [t]. *)
+Definition spawn `{threadpoolE -< E} (t : itree E ()) : itree E () :=
+    thread ← trigger EFork;
+    match thread with
+    | CurrentThread => Ret ()
+    | NewThread =>
+        t ;;
+        kill_thread
+    end.
+
 (** Stepping lemmata for the threadpool [WPi]. *)
 Section wp_threadpool.
   Context `{!invGS_gen hlc Σ} {E : Type → Type} {H : iHandler Σ E}.
   Context `{threadpoolE -< E} `{inH Σ threadpoolE E threadpoolH H}.
-
-  Lemma wpi_fork {R} (k : thread → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    WPi (k CurrentThread) @ H; M {{ Φ }} ∗ WPi (k NewThread) @ H; ⊤ {{ _, False }} -∗
-    WPi (vis EFork k) @ H; M {{ Φ }}.
-  Proof.
-    iIntros "[Hwpcur Hwpnew]". iApply wpi_vis.
-    rewrite /threadpoolH. iFrame.
-    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iApply is_inH. simpl. iSplitL "Hwpcur Hfupd".
-    - rewrite -wpi_clear_mask. iApply wpi_update. iMod "Hfupd". iMod "Hwpcur". by iModIntro.
-    - done.
-  Qed.
 
   (** Note here crucially that the mask has to be full for the rule to apply.
   This means that you cannot step over an [EYield] if there are open
@@ -98,5 +95,30 @@ Section wp_threadpool.
   Proof.
     iApply wpi_vis. iApply is_inH. simpl.
     by iApply fupd_mask_intro_subseteq; first done.
+  Qed.
+
+  Lemma wpi_fork {R} (k : thread → itree E R) (M : coPset) (Φ : R → iProp Σ) :
+    WPi (k CurrentThread) @ H; M {{ Φ }} ∗ WPi (k NewThread) @ H; ⊤ {{ _, False }} -∗
+    WPi (vis EFork k) @ H; M {{ Φ }}.
+  Proof.
+    iIntros "[Hwpcur Hwpnew]". iApply wpi_vis.
+    rewrite /threadpoolH. iFrame.
+    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
+    iApply is_inH. simpl. iSplitL "Hwpcur Hfupd".
+    - rewrite -wpi_clear_mask. iApply wpi_update. iMod "Hfupd". iMod "Hwpcur". by iModIntro.
+    - done.
+  Qed.
+
+  Lemma wpi_spawn t (M : coPset) (Φ : () → iProp Σ) :
+    Φ () -∗
+    WPi t @ H; ⊤ {{ _, True }} -∗
+    WPi (spawn t) @ H; M {{ Φ }}.
+  Proof.
+    iIntros "HΦ Hwp".
+    rewrite /spawn.
+    rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
+    - by iApply wpi_ret.
+    - iApply wpi_bind. iApply wpi_wand; last done. iIntros (r _).
+      by iApply @wpi_kill.
   Qed.
 End wp_threadpool.
