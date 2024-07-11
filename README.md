@@ -2,9 +2,9 @@
 
 This is the Coq code associated to our paper "Program logics à la carte".
 
-**Important note:** the `islaris` folder come from a fork of pre-existing open-source software, and
-copyright notices and author names they contain have to do with their original authors (they were
-not updated by us).
+**Important note:** `islaris` and other folders in the root come from a fork of pre-existing
+open-source software, and copyright notices and author names they contain have to do with their
+original authors (they were not updated by us).
 
 ## Building from source
 

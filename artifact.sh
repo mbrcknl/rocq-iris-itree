@@ -19,7 +19,7 @@ function clone_repo {
     DIR=$3
 
     ## Clone enough history so that we're likely to have the commit
-    git clone --quiet --depth 20 ${URL} "${DIR}"
+    git clone --quiet ${URL} "${DIR}"
     (cd "${DIR}" && git checkout --quiet ${COMMIT})
     rm -rf "${DIR}/.git*"
 }
@@ -36,20 +36,8 @@ rm -rf ${ARTIFACT_DIR} ${ARTIFACT_FILE}
 clone_repo ${ARTIFACT_REPO_URL} ${ARTIFACT_REPO_COMMIT} ${ARTIFACT_DIR}
 cd ${ARTIFACT_DIR}
 
-# Extract and fetch required version of Iris (avoiding "+" which does not work on MacOS :( *)
-IRIS_COMMIT=$(grep -F '"coq-iris"' < "coq-iris-itree.opam" | sed 's/.*"dev\.[0-9][0-9.-]*\.\([0-9a-z][0-9a-z]*\)".*/\1/')
-if test -z "$IRIS_COMMIT"; then echo "Could not find Iris dependency version" && exit 1; fi
-echo "Iris commit: $IRIS_COMMIT"
-clone_repo "https://gitlab.mpi-sws.org/iris/iris/" $IRIS_COMMIT iris/
-
-# Extract and fetch required version of std++
-STDPP_COMMIT=$(grep -F '"coq-stdpp"' < "iris/coq-iris.opam" | sed 's/.*"dev\.[0-9][0-9.-]*\.\([0-9a-z][0-9a-z]*\)".*/\1/')
-if test -z "$STDPP_COMMIT"; then echo "Could not find std++ dependency version" && exit 1; fi
-echo "std++ commit: $STDPP_COMMIT"
-clone_repo "https://gitlab.mpi-sws.org/iris/stdpp/" $STDPP_COMMIT stdpp/
-
-# Add appendix
-cp "$ROOTDIR"/appendix/appendix.pdf .
+# Remove artifact script
+rm artifact.sh
 
 # Write artifact version
 GENDATA=.version

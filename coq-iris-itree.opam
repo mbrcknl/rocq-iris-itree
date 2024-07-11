@@ -1,4 +1,5 @@
 opam-version: "1.0"
+maintainer: "anonymized"
 
 synopsis: "A framework for modularly defining program logics."
 
