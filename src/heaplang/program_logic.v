@@ -44,9 +44,9 @@ Section handler.
     iIntros (r) "HΦ". iApply wpi_bind. iApply wpi_yield_if_not_val. by iApply wpi_ret.
   Qed.
 
-  Lemma wpi_step_ret m M r Φ :
+  Lemma wpi_step_ret m E r Φ :
     lat m (Φ r) -∗
-    WPi step_ret r @ heaplangH m; M {{ Φ }}.
+    WPi step_ret r @ heaplangH m; E {{ Φ }}.
   Proof.
     iIntros "HΦ". iApply wpi_bind. iApply @wpi_step. iApply lat_mono; last done.
     iIntros "HΦ". by iApply wpi_ret.
@@ -55,16 +55,16 @@ End handler.
 
 (** Weakest precondition abstraction for heaplang expressions. *)
 lock Definition wp_heaplang `{!invGS_gen hlc Σ} `{!heaplangHGS Σ} :
-  Wp (iProp Σ) expr val later_modality := λ m M e Φ,
-    (WPi compile_expr e @ heaplangH m; M {{ Φ }})%I.
+  Wp (iProp Σ) expr val later_modality := λ m E e Φ,
+    (WPi compile_expr e @ heaplangH m; E {{ Φ }})%I.
 Global Existing Instance wp_heaplang.
 
 Section wp.
   Context `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
 
-  Lemma wp_heaplang_unfold e m M Φ :
-    WP e @ m; M {{ Φ }} ⊣⊢
-    WPi compile_expr e @ heaplangH m; M {{ Φ }}.
+  Lemma wp_heaplang_unfold e m E Φ :
+    WP e @ m; E {{ Φ }} ⊣⊢
+    WPi compile_expr e @ heaplangH m; E {{ Φ }}.
   Proof. by rewrite unlock. Qed.
 
   (** The total WP implies the partial WP. *)
@@ -127,22 +127,22 @@ Section wp.
     by iApply wpi_wand.
   Qed.
 
-  (* Proof rules for various operations: *)
+  (** Proof rules for pure operations: *)
 
-  Lemma wp_UnOp m M op v v' Φ :
+  Lemma wp_UnOp m E op v v' Φ :
     un_op_eval op v = Some v' →
     lat m (Φ v') -∗
-    WP (UnOp op (Val v)) @ m; M {{ Φ }}.
+    WP (UnOp op (Val v)) @ m; E {{ Φ }}.
   Proof.
     iIntros (Heq) "HΦ". rewrite !wp_heaplang_unfold.
     rewrite /compile_expr. wpi_norm/=. rewrite Heq. wpi_norm/=.
     by iApply wpi_step_ret.
   Qed.
 
-  Lemma wp_BinOp m M op v1 v2 v' Φ :
+  Lemma wp_BinOp m E op v1 v2 v' Φ :
     bin_op_eval op v1 v2 = Some v' →
     lat m (Φ v') -∗
-    WP (BinOp op (Val v1) (Val v2)) @ m; M {{ Φ }}.
+    WP (BinOp op (Val v1) (Val v2)) @ m; E {{ Φ }}.
   Proof.
     iIntros (Heq) "HΦ". rewrite !wp_heaplang_unfold.
     rewrite /compile_expr. wpi_norm/=. rewrite Heq. wpi_norm/=.
@@ -189,9 +189,9 @@ Section wp.
     rewrite /subst'. by case_match.
   Qed.
 
-  Lemma wp_App_const m M f_ x_ v w Φ :
+  Lemma wp_App_const m E f_ x_ v w Φ :
     lat m (Φ w) -∗
-    WP (App (Val (RecV f_ x_ (Val w))) (Val v)) @ m; M {{ Φ }}.
+    WP (App (Val (RecV f_ x_ (Val w))) (Val v)) @ m; E {{ Φ }}.
   Proof.
     iIntros "Hwp". rewrite !wp_heaplang_unfold.
     rewrite /compile_expr. wpi_norm/=.
@@ -200,6 +200,98 @@ Section wp.
     iModIntro. iApply wpi_bind. rewrite !subst'_val. iApply wpi_ret.
     rewrite interp_recursive_call rec_as_interp /= interp_ret. by iApply wpi_ret.
   Qed.
+
+  Lemma wp_Rec m E f x erec Φ :
+    lat m $ Φ (RecV f x erec) -∗
+    WP Rec f x erec @ m; E {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He".
+    iApply wpi_ret. done.
+  Qed.
+
+  Lemma wp_Pair m E v1 v2 Φ :
+    lat m $ Φ (PairV v1 v2) -∗
+    WP Pair (Val v1) (Val v2) @ m; E {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He".
+    iApply wpi_ret. done.
+  Qed.
+
+  Lemma wp_Fst m E v1 v2 Φ :
+    lat m $ Φ v1 -∗
+    WP Fst (Val $ PairV v1 v2) @ m; E {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He".
+    iApply wpi_ret. done.
+  Qed.
+
+  Lemma wp_Snd m E v1 v2 Φ :
+    lat m $ Φ v2 -∗
+    WP Snd (Val $ PairV v1 v2) @ m; E {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He".
+    iApply wpi_ret. done.
+  Qed.
+
+  Lemma wp_InjL m E v Φ :
+    lat m $ Φ (InjLV v) -∗
+    WP InjL $ Val v @ m; E {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He".
+    iApply wpi_ret. done.
+  Qed.
+
+  Lemma wp_InjR m E v Φ :
+    lat m $ Φ (InjRV v) -∗
+    WP InjR $ Val v @ m; E {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He".
+    iApply wpi_ret. done.
+  Qed.
+
+  Lemma wp_CaseL m v e1 e2 Φ :
+    lat m $ WP App e1 (Val v) @ m; ⊤ {{ Φ }} -∗
+    WP Case (Val $ InjLV v) e1 e2 @ m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite !wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He". iModIntro.
+    iApply wpi_bind. iApply @wpi_yield.
+    rewrite interp_recursive_call. done.
+  Qed.
+
+  Lemma wp_CaseR m v e1 e2 Φ :
+    lat m $ WP App e2 (Val v) @ m; ⊤ {{ Φ }} -∗
+    WP Case (Val $ InjRV v) e1 e2 @ m; ⊤ {{ Φ }}.
+  Proof.
+    iIntros "HΦ".
+    rewrite !wp_heaplang_unfold /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_step.
+    iApply lat_mono; last done. iIntros "He". iModIntro.
+    iApply wpi_bind. iApply @wpi_yield.
+    rewrite interp_recursive_call. done.
+  Qed.
+
+  (** Proof rule for Fork *)
 
   Lemma wp_Fork m e Φ :
     lat m (Φ (LitV LitUnit)) -∗
@@ -217,15 +309,17 @@ Section wp.
       simpl_itree. wpi_norm. rewrite bind_trigger. by iApply @wpi_kill.
   Qed.
 
+  (** Proof rule for heap operations *)
+
   (* TODO: adapt the following lemmas to use WP instead of WPi *)
-  Lemma wp_AllocN m M v n Φ :
+  Lemma wp_AllocN m E v n Φ :
     (0 < n)%Z →
-    ↑heapH_inv_name ⊆ M →
+    ↑heapH_inv_name ⊆ E →
     lat m (∀ l,
        ([∗ list] i ∈ seq 0 (Z.to_nat n), (l +ₗ (i : nat)) ↦ v) -∗
        Φ (LitV (LitLoc l))
     ) -∗
-    WP AllocN (Val (LitV (LitInt n))) (Val v) @ m; M {{ Φ }}.
+    WP AllocN (Val (LitV (LitInt n))) (Val v) @ m; E {{ Φ }}.
   Proof.
     iIntros (Hpos Hmask) "Hwand".
     rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
@@ -236,11 +330,11 @@ Section wp.
     iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wp_Load m M l v dq Φ :
-    ↑heapH_inv_name ⊆ M →
+  Lemma wp_Load m E l v dq Φ :
+    ↑heapH_inv_name ⊆ E →
     l ↦{dq} v -∗
     lat m (l ↦{dq} v -∗ Φ v) -∗
-    WP Load (Val $ LitV $ LitLoc l) @ m; M {{ Φ }}.
+    WP Load (Val $ LitV $ LitLoc l) @ m; E {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
     rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
@@ -250,11 +344,11 @@ Section wp.
     iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wp_Store m M l v v' Φ :
-    ↑heapH_inv_name ⊆ M →
+  Lemma wp_Store m E l v v' Φ :
+    ↑heapH_inv_name ⊆ E →
     l ↦ v -∗
     lat m (∀ r, ⌜r = LitV (LitUnit)⌝ -∗ l ↦ v' -∗ Φ r) -∗
-    WP Store (Val $ LitV $ LitLoc l) (Val v') @ m; M {{ Φ }}.
+    WP Store (Val $ LitV $ LitLoc l) (Val v') @ m; E {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
     rewrite !wp_heaplang_unfold /compile_expr. wpi_norm/=.
@@ -264,11 +358,11 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wp_Free m M l v Φ :
-    ↑heapH_inv_name ⊆ M →
+  Lemma wp_Free m E l v Φ :
+    ↑heapH_inv_name ⊆ E →
     l ↦ v -∗
     lat m (Φ (LitV LitUnit)) -∗
-    WP Free (Val $ LitV $ LitLoc l) @ m; M {{ Φ }}.
+    WP Free (Val $ LitV $ LitLoc l) @ m; E {{ Φ }}.
   (* Very slight variant of the proof of [wpi_Store]: *)
   Proof.
     iIntros (Hmask) "Hpointsto HΦ".
@@ -278,11 +372,11 @@ Section wp.
     iIntros "_". wpi_norm/=. by iApply wpi_step_ret.
   Qed.
 
-  Lemma wp_Xchg m M l v v' Φ :
-    ↑heapH_inv_name ⊆ M →
+  Lemma wp_Xchg m E l v v' Φ :
+    ↑heapH_inv_name ⊆ E →
     l ↦ v -∗
     lat m (l ↦ v' -∗ Φ v) -∗
-    WP Xchg (Val $ LitV (LitLoc l)) (Val v') @ m; M {{ Φ }}.
+    WP Xchg (Val $ LitV (LitLoc l)) (Val v') @ m; E {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
     rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
@@ -292,13 +386,13 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wp_CmpXchg_fail m M l dq v' v1 v2 Φ :
-    ↑heapH_inv_name ⊆ M →
+  Lemma wp_CmpXchg_fail m E l dq v' v1 v2 Φ :
+    ↑heapH_inv_name ⊆ E →
     v' ≠ v1 →
     vals_compare_safe v' v1 →
     l ↦{dq} v' -∗
     lat m (l ↦{dq} v' -∗ Φ (PairV v' (LitV $ LitBool false))) -∗
-    WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; M {{ Φ }}.
+    WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; E {{ Φ }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "Hpointsto Hwand".
     rewrite wp_heaplang_unfold  /compile_expr. wpi_norm/=.
@@ -310,13 +404,13 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wp_CmpXchg_suc m M l v' v1 v2 Φ :
-    ↑heapH_inv_name ⊆ M →
+  Lemma wp_CmpXchg_suc m E l v' v1 v2 Φ :
+    ↑heapH_inv_name ⊆ E →
     v' = v1 →
     vals_compare_safe v' v1 →
     l ↦ v' -∗
     lat m (l ↦ v2 -∗ Φ (PairV v' (LitV $ LitBool true))) -∗
-    WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; M {{ Φ }}.
+    WP CmpXchg (Val $ LitV $ LitLoc l) (Val v1) (Val v2) @ m; E {{ Φ }}.
   Proof.
     iIntros (Hmask Hneq Hcmp) "Hpointsto Hwand".
     rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
@@ -330,11 +424,11 @@ Section wp.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
 
-  Lemma wp_FAA m M l i1 i2 Φ :
-    ↑heapH_inv_name ⊆ M →
+  Lemma wp_FAA m E l i1 i2 Φ :
+    ↑heapH_inv_name ⊆ E →
     l ↦ LitV (LitInt i1) -∗
     lat m (l ↦ LitV (LitInt (i1 + i2)) -∗ Φ (LitV (LitInt i1))) -∗
-    WP FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2) @ m; M {{ Φ }}.
+    WP FAA (Val $ LitV $ LitLoc l) (Val $ LitV $ LitInt i2) @ m; E {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
     rewrite wp_heaplang_unfold /compile_expr. wpi_norm/=.
@@ -346,6 +440,7 @@ Section wp.
     iIntros "Hpointsto". wpi_norm/=. iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done. iIntros "Hwand". by iApply "Hwand".
   Qed.
+
 End wp.
 
 (** Pure reductions *)
