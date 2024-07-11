@@ -1,6 +1,10 @@
-# Iris ITree
+# Compositional program logics via Iris and ITrees
 
-Very smart theory is going to appear here any minute now.
+This is the Coq code associated to our paper "Program logics à la carte".
+
+**Important note:** the `islaris` folder come from a fork of pre-existing open-source software, and
+copyright notices and author names they contain have to do with their original authors (they were
+not updated by us).
 
 ## Building from source
 
