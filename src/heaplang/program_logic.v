@@ -118,6 +118,15 @@ Section wp.
     iApply wpi_wand; last done. iIntros (r) "HΦ". by iMod "HΦ".
   Qed.
 
+  (** Wand rule for [WP]. *)
+  Lemma wp_wand m E e Φ Ψ :
+    (∀ v, Φ v -∗ Ψ v) -∗
+    WP e @ m; E {{ Φ }} -∗ WP e @ m; E {{ Ψ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_heaplang_unfold.
+    by iApply wpi_wand.
+  Qed.
+
   (* Proof rules for various operations: *)
 
   Lemma wp_UnOp m M op v v' Φ :
