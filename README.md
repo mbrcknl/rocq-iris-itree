@@ -1,6 +1,7 @@
 # Compositional program logics via Iris and ITrees
 
-This is the Coq code associated to our paper "Program logics à la carte".
+This is the Coq code associated to our paper "Program logics à la carte". A mapping between the
+paper and the Coq code can be found in `coq_vs_paper.md`.
 
 **Important note:** `islaris` and other folders in the root come from a fork of pre-existing
 open-source software, and copyright notices and author names they contain have to do with their

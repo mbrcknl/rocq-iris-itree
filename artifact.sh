@@ -38,6 +38,9 @@ cd ${ARTIFACT_DIR}
 
 # Remove artifact script
 rm artifact.sh
+rm .version
+rm .gitignore
+rm .gitlab-ci.yaml
 
 # Write artifact version
 GENDATA=.version
