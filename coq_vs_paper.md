@@ -1,30 +1,29 @@
 # Overview
 - The definition of what is a logical effect handler (with concurrency) is found in `handler.v`
   under the name `iHandler`.
-- `wpi` (with concurrency and masks) and associated generic proof rules is defined in `wpi.v`.
+- `wpi` (with concurrency and masks) and associated generic proof rules are defined in `wpi.v`.
   * Many lemmata are proven by first establishing a maskless version with postfix `_emp_mask` and
     then lifting them to a masked version, which is the lemma statement we expose outwards.
   * `WpiSubsume` is `wpi_inH` and the `⊆` relation is controlled by the `inH` typeclass defined in
     `handler.v`.
 - Every effect has a corresponding library in a file with corresponding name (except for `fail` and
-  `threadpool`; see below) in the `src/` directory (except for concurrency which is spread out in
-  the directory `threadpool`). Assuming the effect had name `effect`, we use the following naming
-  conventions:
+  `threadpool`; see below) in the `src/` directory. Assuming the effect had name `effect`, we use the
+  following naming conventions:
   * Its event type is called `eventE`.
   * Its logical effect handler is called `effectH`.
   * Its interpretation relation is called `effect_irel`.
   * Its interpretation function is called `effect_ifn`.
-  * Its (interpretational) adequacy theorem is called `effect_adequacy` (or `later_adequacy_empty`
+  * Its (interpretational) adequacy theorem is called `effect_adequacy` (or `effect_adequacy_empty`
     if the adeuqacy theorem is restricted to the empty mask).
 - The effect "Fail" in the paper is called `ub` in our Coq formalization. See `ub.v`.
 - The effect "Conc" in the paper is called `threadpool` in our Coq formalization.
-  * The threadpool event and handler is found in `threadpool/handler.v`.
+  * The threadpool event and handler are found in `threadpool/handler.v`.
   * The concurrency adequacy theorem `ConcAdequate` is proven and thoroughly explained in
-    `threadpool/interleaving.v`.
-- The infrastructure for the transition adequacy is in `exec.v`:
+    `threadpool/interleaving.v` (lemma name: `threadpool_adequacy`).
+- The infrastructure for state machine adequacy is in `exec.v`:
   * The multi-step relation is called `exec`. Note that this relation and other definitions in this
     file are more complex than described in the paper to support concurrency.
-  * The single step relation is called `seHandler` (a simplified version of the more complex
+  * The single step relation is called `seHandler` (this is a simplified version of the more complex
     `eHandler` that supports concurrency).
   * `sound(H, I)` is called `seHandlerAdequate` (or `eHandlerAdequate` for concurrent handlers). The
     invariant `I` is called `sehandler_inv` (resp. `ehandler_inv`).
@@ -62,7 +61,7 @@ The files not ending in `_itree.v` are the original files from Islaris, while we
 ending in `_itree.v`. 
 
 **All author names in these files belong to the original authors of Islaris. We did not change them
-for this work.***
+for this work.**
 
 - `spec_itree.v` defines the `SpecE` event and the corresponding handlers.
 - The definition of `IslarisE` (called `islaE`) together with our ITree semantics of Islaris is in
