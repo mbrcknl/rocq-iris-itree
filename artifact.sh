@@ -5,7 +5,7 @@ ROOTDIR=$(dirname "$(readlink -e "$0")")/..
 #### CONFIGURATION #######################################################
 
 ARTIFACT_DIR="artifact"
-ARTIFACT_FILE="${ARTIFACT_DIR}.zip"
+ARTIFACT_FILE="${ARTIFACT_DIR}.tar.gz"
 
 ARTIFACT_REPO_URL=git@gitlab.inf.ethz.ch:ou-plf/iris-itree.git
 ARTIFACT_REPO_COMMIT=HEAD
@@ -38,9 +38,9 @@ cd ${ARTIFACT_DIR}
 
 # Remove artifact script
 rm artifact.sh
-rm .version
+rm -rf .git/
 rm .gitignore
-rm .gitlab-ci.yaml
+rm .gitlab-ci.yml
 
 # Write artifact version
 GENDATA=.version
@@ -54,7 +54,7 @@ cd ..
 #### FINALIZING ##############################################################
 
 # Packaging the artifact.
-zip -r ${ARTIFACT_FILE} ${ARTIFACT_DIR}
+tar -czvf ${ARTIFACT_FILE} ${ARTIFACT_DIR} --owner=anon --group=anon
 
 # Final message.
 echo -e "Artifact created as file [\e[32m${ARTIFACT_FILE}\e[0m]."
