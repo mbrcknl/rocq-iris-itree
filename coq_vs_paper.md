@@ -21,7 +21,7 @@
   * The threadpool event and handler is found in `threadpool/handler.v`.
   * The concurrency adequacy theorem `ConcAdequate` is proven and thoroughly explained in
     `threadpool/interleaving.v`.
-- The infrastructure for the transition adequacy is in `exec.v`:
+- The infrastructure for the state machine adequacy is in `exec.v`:
   * The multi-step relation is called `exec`. Note that this relation and other definitions in this
     file are more complex than described in the paper to support concurrency.
   * The single step relation is called `seHandler` (a simplified version of the more complex
