@@ -28,7 +28,7 @@
     `eHandler` that supports concurrency).
   * `sound(H, I)` is called `seHandlerAdequate` (or `eHandlerAdequate` for concurrent handlers). The
     invariant `I` is called `sehandler_inv` (resp. `ehandler_inv`).
-  * The theorem `TransitionAdeqate` corresponds to `wpi_adequate`.
+  * The theorem `StateMachineAdeqate` corresponds to `wpi_adequate`.
 
 # HeapLang
 All the files pertaining to our HeapLang case study are in the `src/heaplang/` directory.
