@@ -18,6 +18,3 @@ dependencies.  This requires the following two repositories:
 Once you got opam set up, run `make build-dep` to install the right versions of the dependencies.
 
 Run `make -jN` to build the full development, where `N` is the number of your CPU cores.
-
-To update, do `git pull`.  After an update, the development may fail to compile because of outdated
-dependencies.  To fix that, please run `opam update` followed by `make build-dep`.
