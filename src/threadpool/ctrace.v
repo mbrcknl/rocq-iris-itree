@@ -318,6 +318,34 @@ Section is_ctrace.
     rewrite list_lookup_insert in Ht'; last by apply lookup_lt_is_Some_1.
     by injection Ht' as <-.
   Qed.
+
+  Lemma is_ctrace_eutt_last tr tid tp t1 t2 :
+    t1 ≈ t2 →
+    is_ctrace tr tid (tp ++ [t1]) →
+    is_ctrace tr tid (tp ++ [t2]).
+  Proof.
+    intros Heutt Htr.
+    apply (is_ctrace_eutt true true _ _ (tp ++ [t1])).
+    - f_equiv. by constructor.
+    - done.
+  Qed.
+
+  Lemma is_ctrace_CTFork tid tp tr' k k_new' :
+    tp !! tid = Some (Vis (inl1 EFork) k) →
+    k_new' ≈ k NewThread →
+    is_ctrace tr' tid (<[tid := k CurrentThread]>tp ++ [k_new']) →
+    is_ctrace (CTFork k_new' tr') tid tp.
+  Proof.
+    intros Htp Heutt Htr.
+    eapply is_ctrace_eutt_last with (t2 := k NewThread) in Htr; last done.
+    econstructor. split; first done.
+    destruct Htr as (t'&Ht'&Htr).
+    constructor; first done.
+    apply lookup_lt_Some in Htp.
+    rewrite lookup_app_l in Ht'; last rewrite insert_length //.
+    rewrite list_lookup_insert // in Ht'.
+    injection Ht' as Heq. rewrite Heq. by rewrite Heq in Htr.
+  Qed.
 End is_ctrace.
 
 (** Strip away all [threadpoolE] events to get a [trace]. *)

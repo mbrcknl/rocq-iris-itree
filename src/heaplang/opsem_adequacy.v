@@ -27,18 +27,13 @@ Thus, we need to construct such a [ctrace] from a trace in the operational
 semantics. This is done inductively. *)
 
 Lemma compile_Fork {R} e (k : val → itree heaplangE R) :
-  (v ← compile_expr (Fork e) ; k v)%itree ≈ vis EFork (λ thread,
-    match thread with
-    | CurrentThread => step.step ;; k (LitV LitUnit)
-    | NewThread => compile_expr_kill e
-    end
-  )%itree.
+  (v ← compile_expr (Fork e) ; k v)%itree ≈ 
+    (spawn (compile_expr_yield e ;; Ret ()) ;; step.step ;; k (LitV LitUnit))%itree.
 Proof.
-  rewrite /compile_expr_kill/compile_expr_yield/compile_expr. eutt_norm/=. simpl. eutt_norm.
-  rewrite -bind_trigger. f_equiv. intros [|].
-  - eutt_norm. rewrite /step_ret. by eutt_norm.
-  - eutt_norm. f_equiv. intros v. rewrite /kill_thread.
-    f_equiv. intros _. rewrite -!bind_trigger. eutt_norm. by f_equiv.
+  rewrite /compile_expr_kill/compile_expr_yield/compile_expr/step_ret. eutt_norm/=.
+  f_equiv.
+  - f_equiv. by eutt_norm/=.
+  - intros []. rewrite /step_ret. by eutt_norm/=.
 Qed.
 
 Lemma trace_base_Fork {R} tid (tp : list (itree heaplangE R)) tr e k :
@@ -47,14 +42,19 @@ Lemma trace_base_Fork {R} tid (tp : list (itree heaplangE R)) tr e k :
   is_ctrace (CTFork (compile_expr_kill e) tr) tid tp.
 Proof.
   intros Htp Htr. eapply is_ctrace_insert; first done; first apply compile_Fork; eauto.
-  eexists. split. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1. }
-  constructor.
-  rewrite /compile_expr //. rewrite list_insert_insert.
-  destruct Htr as (t'&Ht'&Htr).
-  simpl in Ht'.
-  rewrite lookup_app_l in Ht'; last rewrite insert_length -lookup_lt_is_Some //.
-  rewrite list_lookup_insert in Ht'; last by apply lookup_lt_is_Some_1.
-  by injection Ht' as <-.
+  rewrite /spawn. is_ctrace_norm/=.
+  rewrite bind_trigger.
+  apply lookup_lt_Some in Htp. 
+  eapply is_ctrace_CTFork.
+  - rewrite list_lookup_insert //.
+  - simpl. rewrite /compile_expr_kill. eutt_norm/=. f_equiv. intros v.
+    by rewrite kill_thread_bind.
+  - rewrite list_insert_insert.
+    eapply is_ctrace_insert.
+    * rewrite lookup_app_l; last rewrite insert_length //.
+      rewrite list_lookup_insert //.
+    * by eutt_norm.
+    * rewrite -insert_app_l // list_insert_insert insert_app_l //.
 Qed.
 
 Lemma base_UnOp op v v' :

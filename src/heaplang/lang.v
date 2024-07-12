@@ -267,19 +267,8 @@ Section semantics.
             call (App e2 (Val v))
         end
     | Fork e =>
-        thread ← trigger EFork;
-        match thread with
-        | CurrentThread => step_ret (LitV LitUnit)
-        | NewThread =>
-            (* We use [compile_expr_yield] here instead of [compile_expr]
-            (which would be morally the same), because it makes some things in
-            [heaplang/opsem_adequacy.v] easier (technical explanation: in the
-            simulated trace, we never execute [kill_thread], instead we just
-            yield and never yield back to the thread that reached a value,
-            which is closer to how completed threads are modeled in the opsem). *)
-            v ← compile_expr_yield e;
-            kill_thread
-        end
+        spawn (compile_expr_yield e ;; Ret ()) ;;
+        step_ret (LitV LitUnit)
     | AllocN ne e =>
         (* Evaluate the arguments. *)
         v ← compile_expr_yield e;

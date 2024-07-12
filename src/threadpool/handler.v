@@ -2,7 +2,7 @@ From iris.itree Require Import handler wpi itree.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic.lib Require Export fancy_updates.
-From ITree Require Import ITree Eqit.
+From ITree Require Import ITree Eqit Recursion RecursionFacts TranslateFacts.
 
 (** Thread continuation. *)
 Variant thread :=
@@ -31,10 +31,27 @@ Proof.
   rewrite /kill_thread. rewrite bind_vis. do 2 f_equiv. intros [].
 Qed.
 
+Lemma kill_thread_to_translate {E1 E2 R} (HE1 : threadpoolE -< E1) (HE2 : threadpoolE -< E2) (Hin : E1 -< E2) :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (kill_thread (R := R)) Hin (kill_thread (R := R)).
+Proof.
+  (* FIXME: This proof is poor style. *)
+  intros Hresum. rewrite /kill_thread. inversion Hresum.
+  constructor. rewrite translate_vis. setoid_rewrite translate_resum.
+  f_equiv. f_equiv. intros [].
+Qed.
+Global Hint Resolve kill_thread_to_translate : itree_auto.
+
 (** Yield control to another (demonically chosen) thread in the thread-pool
 or the current thread. *)
 Definition yield `{threadpoolE -< E} : itree E () :=
   trigger EYield.
+
+Lemma yield_to_translate {E1 E2} (HE1 : threadpoolE -< E1) (HE2 : threadpoolE -< E2) (Hin : E1 -< E2) :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate yield Hin yield.
+Proof. move => ?. rewrite /yield. by apply trigger_to_translate. Qed.
+Global Hint Resolve yield_to_translate : itree_auto.
 
 (** [iHandler] for [threadpoolE]. *)
 Program Definition threadpoolH {Σ} `{!invGS_gen hlc Σ} : iHandler Σ threadpoolE :=
@@ -61,15 +78,37 @@ Next Obligation.
   - by iIntros "?".
 Qed.
 
-(** Spawn a new thread executing [t]. *)
-Definition spawn `{threadpoolE -< E} (t : itree E ()) : itree E () :=
-    thread ← trigger EFork;
-    match thread with
-    | CurrentThread => Ret ()
-    | NewThread =>
-        t ;;
-        kill_thread
-    end.
+Section spawn.
+  (** Spawn a new thread executing [t]. *)
+  Definition spawn `{threadpoolE -< E} (t : itree E ()) : itree E () :=
+      thread ← trigger EFork;
+      match thread with
+      | CurrentThread => Ret ()
+      | NewThread =>
+          t ;;
+          kill_thread
+      end.
+
+  Global Instance spawn_proper `{threadpoolE -< E} b1 b2 :
+    Proper ((eqit (=) b1 b2) ==> (eqit (=) b1 b2)) (spawn (E := E)).
+  Proof.
+    intros Heqit t1 t2.
+    rewrite /spawn. f_equiv. intros [|]; first done.
+    by f_equiv.
+  Qed.
+
+  Lemma spawn_interp_recursive `{threadpoolE -< E} {A B} (t : itree (callE A B +' E) ()) f :
+    interp (recursive f) (spawn t) ≈ spawn (interp (recursive f) t).
+  Proof.
+    rewrite /spawn. eutt_norm/=. f_equiv. intros thread. case_match; by eutt_norm.
+  Qed.
+End spawn.
+
+Lemma normalize_itree_spawn_interp_recursive `{threadpoolE -< E} {A B} (t : itree (callE A B +' E) ()) f t' p :
+  NormalizeITree p (interp (recursive f) t) t' →
+  NormalizeITree true (interp (recursive f) (spawn t)) (spawn t').
+Proof. move => [Heq]. constructor. by rewrite -Heq spawn_interp_recursive. Qed.
+Global Hint Resolve normalize_itree_spawn_interp_recursive : itree_auto.
 
 (** Stepping lemmata for the threadpool [WPi]. *)
 Section wp_threadpool.

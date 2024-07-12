@@ -301,12 +301,12 @@ Section wp.
   Proof.
     iIntros "HΦ Hwp". rewrite !wp_heaplang_unfold.
     rewrite /compile_expr. wpi_norm/=.
-    rewrite bind_trigger. iApply @wpi_fork. iSplitL "HΦ".
-    - wpi_norm. by iApply wpi_step_ret.
-    - wpi_norm. rewrite rec_as_interp. iApply wpi_bind.
+    iApply wpi_bind. iApply (@wpi_spawn with "[HΦ]").
+    - by iApply wpi_step_ret.
+    - iApply wpi_bind. rewrite rec_as_interp.
       iApply wpi_wand; last done. iIntros (r ->).
       iApply wpi_bind. iApply wpi_yield_if_not_val.
-      simpl_itree. wpi_norm. rewrite bind_trigger. by iApply @wpi_kill.
+      by iApply wpi_ret.
   Qed.
 
   (** Proof rule for heap operations *)
