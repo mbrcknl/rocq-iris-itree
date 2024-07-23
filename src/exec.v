@@ -6,8 +6,7 @@ From iris.bi.lib Require Import fixpoint.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic.lib Require Import invariants.
-From iris.itree Require Import itree wpi handler ub state choice halt step.
-From iris.itree.threadpool Require Import handler.
+From iris.itree Require Import itree wpi handler.
 
 Local Unset Program Cases.
 
@@ -309,7 +308,12 @@ Next Obligation.
   by apply: HC.
 Qed.
 
+(* se_to_eHandler does not satisfy the uniform inheritance condition
+since seHandler does not restrict GE and R. The coercion seems to
+work nevertheless. *)
+Local Set Warnings "-uniform-inheritance".
 Coercion se_to_eHandler : seHandler >-> eHandler.
+Local Set Warnings "uniform-inheritance".
 
 
 (** * [inEH] *)
@@ -460,6 +464,7 @@ End exec.
 
 (** * [bind rule for exec] *)
 Class eHandlerBind {E1 E R S} (EH : eHandler E1 E R) (EHb : eHandler E1 E S) := {
+(* TODO: unbundle eh_state such that these conversion functions become unnecessary? *)
   ebind_to_b : EH.(eh_state) → EHb.(eh_state);
   ebind_from_b : EHb.(eh_state) → EH.(eh_state);
   ebind_from_to_b s : ebind_to_b (ebind_from_b s) = s;
@@ -886,224 +891,6 @@ Section handler_adequate.
       iDestruct "Hwp" as (?) "[? $]". iModIntro. iExists (_, _) => /=. by iFrame.
   Qed.
 End handler_adequate.
-
-
-(** * [ub] *)
-Program Definition ubEH : seHandler ubE :=
-  SEHandler unit (λ A e s C, True) _.
-Next Obligation. done. Qed.
-
-Global Program Instance ubEH_adequate {Σ} `{!invGS_gen hlc Σ} :
-    seHandlerAdequate ubH ubEH := {| sehandler_inv s := True%I |}.
-Next Obligation. move => ??????????. by iIntros (?). Qed.
-
-
-Lemma exec_some_or_ub E R (EH : eHandler E E R) `{!ubE -< E} f1 f2 `{!inEH ubEH EH f1 f2} (o : option R) s C:
-  (∀ x, o = Some x → C (Ret x) s) →
-  exec EH (o?) s C.
-Proof. move => ?. destruct o => /=; [apply exec_stop; naive_solver|]. by apply: exec_vis. Qed.
-
-Lemma exec_assert E (EH : eHandler E E unit) `{!ubE -< E} f1 f2 `{!inEH ubEH EH f1 f2} P `{!Decision P} s C:
-  (P → C (Ret tt) s) →
-  exec EH (assert P) s C.
-Proof. move => ?. rewrite /assert. case_decide; [apply exec_stop; naive_solver|]. by apply: exec_vis. Qed.
-
-
-(** * [state] *)
-Program Definition stateEH S : seHandler (stateE S) :=
-  SEHandler S (λ A e s,
-      match e with
-      | EGetState    => λ C, C s s
-      | ESetState s' => λ C, C tt s'
-      end) _.
-Next Obligation. move => /= *. case_match; naive_solver. Qed.
-
-Global Program Instance stateEH_adequate {Σ} `{!invGS_gen hlc Σ} S `{!stateInterp Σ S} :
-    seHandlerAdequate (stateH S) (stateEH S) := {| sehandler_inv s := state_interp s |}.
-Next Obligation.
-  move => ??????????? HEH.
-  iIntros "HH Hs". rewrite /stateH/=. case_match.
-  - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
-  - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
-Qed.
-
-
-(** * [demonic] *)
-Program Definition demonicEH : seHandler demonicE :=
-  SEHandler unit (λ A e s, match e with | EDemonic A => λ C, ∃ x, C x tt end) _.
-Next Obligation. move => /= *. case_match; naive_solver. Qed.
-
-Global Program Instance demonicEH_adequate {Σ} `{!invGS_gen hlc Σ} :
-    seHandlerAdequate demonicH demonicEH := {| sehandler_inv s := True%I |}.
-Next Obligation.
-  move => ????????? HP. iIntros "Hwp _".
-  rewrite /demonicH/=. case_match => /=. simplify_eq/=. destruct HP as [??].
-  iModIntro. iExists _, _. iSplit; [done|]. iSplit; [done|]. iApply "Hwp".
-Qed.
-
-
-(** * [halt] *)
-Program Definition haltEH : seHandler haltE :=
-  SEHandler unit (λ A e s C, False) _.
-Next Obligation. done. Qed.
-
-Global Program Instance haltEH_adequate {Σ} `{!invGS_gen hlc Σ} :
-    seHandlerAdequate haltH haltEH := {| sehandler_inv s := True%I |}.
-Next Obligation. move => ????????? HP. done. Qed.
-
-Lemma exec_assume (P : Prop) E (EH : eHandler E E P) `{!haltE -< E} f1 f2 `{!inEH haltEH EH f1 f2} `{!Decision P} s C:
-  P →
-  (∀ HP, C (Ret HP) s) →
-  exec EH (assume P) s C.
-Proof. move => ??. rewrite /assume. case_decide; [apply exec_stop; naive_solver|done]. Qed.
-
-(** * [later] *)
-Program Definition stepEH lat : seHandler stepE :=
-  SEHandler nat (λ A e s, match e with | EStep =>
-     λ C, ∃ s', s = S s' ∧ C tt (if lat is Later then s' else s) end) _.
-Next Obligation. move => /= *. case_match; naive_solver. Qed.
-
-Global Program Instance stepEH_adequate {Σ} `{!invGS Σ} lat :
-  seHandlerAdequate (stepH lat) (stepEH lat) := {| sehandler_inv s := £ s |}.
-Next Obligation.
-  move => /= ?? lat ?????? HP.
-  iIntros "Hp Hs". case_match.
-  destruct HP as [? [??]]; subst.
-  destruct lat => /=.
-  - iModIntro. by iFrame.
-  - rewrite lc_succ. iDestruct "Hs" as "[Hl $]". iApply (lc_fupd_elim_later with "[$]").
-    iModIntro. by iFrame.
-Qed.
-
-
-(** * [threadpool] *)
-Program Definition threadpoolEH {GE R} : eHandler threadpoolE GE R :=
-  EHandler (nat * list (option (itree GE R)))
-    (prod_relation (=) (Forall2 (option_Forall2 (eutt eq)))) (λ A e s,
-      match e with
-      | EFork => λ k C, C (k CurrentThread) (s.1, s.2 ++ [Some (k NewThread)])
-      | EYield => λ k C,
-          let tp' := <[s.1 := Some (k tt)]>s.2 in
-          ∃ i t', tp' !! i = Some (Some t') ∧ C t' (i, <[i := None]>tp')
-      | EKillThread => λ k C,
-          (* No need to set s.1 to None since it is already None *)
-          let tp' := s.2 in
-          ∃ i t', tp' !! i = Some (Some t') ∧ C t' (i, <[i := None]>tp')
-      end) _ _ _.
-Next Obligation. move => ???????? Hmono /=. case_match; naive_solver. Qed.
-Next Obligation.
-  move => /= * [tid1 ?] [tid2 ?] [Ht Hs] ?? Hk ?? HC Hh. case_match; simplify_eq/=.
-  - apply: HC; [..|done].
-    + apply: Hk.
-    + constructor; [done|] => /=. apply Forall2_app; [done|].
-      apply Forall2_cons. split; [|done]. constructor. apply Hk.
-  - move: Hh => [i [y' [ ]]].
-    move: (Hs) => /Forall2_length?.
-    move => /list_lookup_insert_Some[[?[??]]|[??]] ?; simplify_eq.
-    + eexists i, _. rewrite list_lookup_insert. 2: lia. split; [done|].
-      apply: HC; [apply Hk|..|done].
-      constructor; [done|] => /=. apply Forall2_insert. 2: by constructor.
-      apply Forall2_insert; [done|]. by constructor.
-    + ogeneralize* Forall2_lookup_l; [done..|] => -[? [? ]]. inv 1.
-      eexists i, _. rewrite list_lookup_insert_ne //. split; [done|].
-      apply: HC; [done|..|done].
-      constructor; [done|] => /=. apply Forall2_insert. 2: by constructor.
-      apply Forall2_insert; [done|]. by constructor.
-  - move: Hh => [i [y' [ ]]].
-    move: (Hs) => /Forall2_length? ??.
-    ogeneralize* Forall2_lookup_l; [done..|] => -[? [? ]]. inv 1.
-    eexists i, _. split; [done|].
-    apply: HC; [done|..|done].
-    constructor; [done|] => /=. apply Forall2_insert. 2: by constructor.
-    done.
-Qed.
-
-Lemma big_sepL2_omap_id_insert {Σ A B} x (l : list (option A)) (Ms : list B) (P : A → B → iProp Σ) i M:
-  l !! i = Some None →
-  ([∗ list] t;M∈omap id l;Ms, P t M) -∗
-  P x M -∗
-  ∃ Ms', ⌜Ms' ≡ₚ M :: Ms⌝ ∗ ([∗ list] t;M∈omap id (<[i:=Some x]>l);Ms', P t M).
-Proof.
-  iIntros (Hi) "Hs Hp".
-  erewrite <-(take_drop_middle l i). 2: done.
-  rewrite omap_app. csimpl.
-  iDestruct (big_sepL2_app_inv_l with "Hs") as (Ms1 Ms2 ?) "[Hs1 Hs2]". subst.
-  iExists (Ms1 ++ M :: Ms2). iSplit.
-  - iPureIntro. by rewrite Permutation_middle.
-  - move: (Hi) => /(lookup_lt_Some _ _ _)?.
-    rewrite insert_app_r_alt take_length_le // ?Nat.sub_diag/= ?omap_app; csimpl.
-    2,3:lia.
-    iApply (big_sepL2_app with "Hs1"). iFrame.
-Qed.
-
-Lemma big_sepL2_omap_id_delete {Σ A B} x (l : list (option A)) (Ms : list B) (P : A → B → iProp Σ) i:
-  l !! i = Some (Some x) →
-  ([∗ list] t;M∈omap id l;Ms, P t M) -∗
-  ∃ M Ms', ⌜Ms ≡ₚ M :: Ms'⌝ ∗ P x M ∗ ([∗ list] t;M∈omap id (<[i:=None]>l);Ms', P t M).
-Proof.
-  iIntros (Hi) "Hs".
-  erewrite <-(take_drop_middle l i). 2: done.
-  rewrite omap_app. csimpl.
-  iDestruct (big_sepL2_app_inv_l with "Hs") as (Ms1 Ms2' ?) "[Hs1 Hs2]".
-  iDestruct (big_sepL2_cons_inv_l with "Hs2") as (M Ms2 ?) "[Hx Hs2]".  subst.
-  iExists M, (Ms1 ++ Ms2). iFrame. iSplit.
-  - iPureIntro. by rewrite Permutation_middle.
-  - move: (Hi) => /(lookup_lt_Some _ _ _)?.
-    rewrite insert_app_r_alt take_length_le // ?Nat.sub_diag/= ?omap_app; csimpl.
-    2,3:lia.
-    iApply (big_sepL2_app with "Hs1"). iFrame.
-Qed.
-
-Global Program Instance threadpoolEH_adequate {Σ GE R} `{!invGS_gen hlc Σ} :
-  eHandlerAdequate (GE:=GE) (R:=R) (threadpoolH) (threadpoolEH) := {|
-    ehandler_inv ts Ms := (⌜ts.2 !! ts.1 = Some None⌝ ∗
-     [∗ list] t;M∈(omap id ts.2);Ms,
-        bi_close (eutt eq) (λ t, ⌜M = λ P, |={⊤,∅}=> P t⌝) t)%I
-  |}.
-Next Obligation.
-  move => ??????? e s Ms C k He.
-  iIntros "HH [% Hs]". rewrite /threadpoolH/=. case_match; simplify_eq/=.
-  - iDestruct "HH" as "[Hc Hn]".
-    iModIntro. iExists _, _, _, _,
-      [λ P, P (k CurrentThread); λ P, |={⊤,∅}=> P (k NewThread)]%I => /=.
-    iSplit; [done|] => /=. iFrame => /=.
-    iSplit; [|iSplitL; [iSplit|]].
-    + iPureIntro. f_equiv. by rewrite Permutation_cons_append.
-    + iPureIntro. rewrite lookup_app_l //. by apply: lookup_lt_Some.
-    + rewrite omap_app /=. iApply big_sepL2_snoc. iFrame. by iApply bi_close_intro.
-    + iApply bi_close_intro. by iIntros (?) "$".
-  - destruct He as (?&?&Hl&?). iMod "HH". iApply fupd_mask_intro; [done|].
-    iDestruct (big_sepL2_omap_id_insert (k ()) with "Hs []") as (? Hperm1) "Hs"; [done|..].
-    { iApply bi_close_intro. done. }
-    iDestruct (big_sepL2_omap_id_delete with "Hs") as (?? Hperm2) "[Hx Hs]"; [done|].
-    iIntros "Hmask". iExists _, _, _, _,
-      [λ P, |={⊤,∅}=> P (k ())]%I => /=.
-    iSplit; [done|] => /=. iFrame => /=.
-    iSplit; [| iSplit].
-    * iPureIntro. by rewrite -Hperm1 Hperm2.
-    * iPureIntro. rewrite list_lookup_insert // insert_length.
-      move: Hl => /(lookup_lt_Some _ _ _). by rewrite insert_length.
-    * iDestruct "Hx" as %(?&->&->). iApply bi_close_intro. iIntros (?) "HP". by iMod "Hmask".
-  - destruct He as (?&?&Hl&?). iMod "HH". iApply fupd_mask_intro; [done|].
-    iDestruct (big_sepL2_omap_id_delete with "Hs") as (???) "[Hx Hs]"; [done|].
-    iIntros "Hmask". iExists _, _, _, _, []%I => /=.
-    iSplit; [done|] => /=. iFrame => /=.
-    iSplit; [| iSplit].
-    * iPureIntro. by rewrite H1.
-    * iPureIntro. rewrite list_lookup_insert //. by apply: lookup_lt_Some.
-    * iDestruct "Hx" as %(?&->&->). iApply bi_close_intro. iIntros (?) "HP". by iMod "Hmask".
-Qed.
-Next Obligation.
-  move => ????? [??] [??] [Htid Hs] ? Ms ->. simplify_eq/=.
-  iIntros "[%Hl HM]". iSplit.
-  - iPureIntro. ogeneralize* Forall2_lookup_l; [done..|].
-    move => [? [? ]]. by inv 1.
-  - clear Hl. iInduction Hs as [|? ? ? ? Ho] "IH" forall (Ms); [done|].
-    inv Ho; csimpl.
-    + iDestruct (big_sepL2_cons_inv_l with "[$]") as (?? ->) "[Hx Hs]" => /=.
-      iSplitL "Hx"; [by rewrite H|]. by iApply "IH".
-    + by iApply "IH".
-Qed.
 
 (** * [tactics] *)
 Lemma tac_exec_norm {E R} EH p (t : itree E R) t' s C :

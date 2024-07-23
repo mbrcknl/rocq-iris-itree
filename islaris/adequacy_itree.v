@@ -1,7 +1,7 @@
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
 From iris.algebra Require Import dfrac_agree.
 From iris.base_logic.lib Require Import ghost_map ghost_var.
-From iris.itree Require Import itree exec handler wpi step halt ub.
+From iris.itree Require Import itree exec handler wpi choice state step halt ub.
 Require Import isla.adequacy.
 Require Export isla.opsem.
 Require Export isla.opsem_itree.

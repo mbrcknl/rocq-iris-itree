@@ -109,7 +109,7 @@ Proof.
   intros Heqit. apply eqit_flip. eapply eqit_mon; last apply Heqit; eauto. by intros.
 Qed.
 
-Lemma eutt_weak {E R} b1 b2 (t1 t2 : itree E R) :
+Lemma eutt_weak {E R} {b1 b2} {t1 t2 : itree E R} :
   eqit (=) b1 b2 t1 t2 →
   t1 ≈ t2.
 Proof.

@@ -7,6 +7,7 @@ From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
 From iris.itree Require Import trace.
+From iris.itree Require Import exec.
 From iris.bi Require Import fixpoint.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
@@ -298,3 +299,16 @@ Section trace.
         + by constructor.
   Qed.
 End trace.
+
+(** Definitions for exec *)
+Program Definition demonicEH : seHandler demonicE :=
+  SEHandler unit (λ A e s, match e with | EDemonic A => λ C, ∃ x, C x tt end) _.
+Next Obligation. move => /= *. case_match; naive_solver. Qed.
+
+Global Program Instance demonicEH_adequate {Σ} `{!invGS_gen hlc Σ} :
+    seHandlerAdequate demonicH demonicEH := {| sehandler_inv s := True%I |}.
+Next Obligation.
+  move => ????????? HP. iIntros "Hwp _".
+  rewrite /demonicH/=. case_match => /=. simplify_eq/=. destruct HP as [??].
+  iModIntro. iExists _, _. iSplit; [done|]. iSplit; [done|]. iApply "Hwp".
+Qed.

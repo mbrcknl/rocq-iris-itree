@@ -728,13 +728,10 @@ Section mono.
     WPi t @ H2; M {{ Φ }}.
   Proof.
     iIntros "Hwp".
-    (* FIXME: For some reason rewriting directly doesn't work, so we have to do
-    this BS. *)
-    pose (Heutt := interp_id_h t). apply eutt_weak in Heutt. symmetry in Heutt.
-    iApply wpi_proper; first apply Heutt. { reflexivity. }
-    Set Printing Implicit.
+    (* TODO: declare ≳ as a rewrite relation such that eutt_weak is not necessary?*)
+    rewrite -{2}(eutt_weak (interp_id_h t)).
     iApply (wpi_translation _ _ Φ); last done.
-    iIntros "!>" (A e k Ψ) "HH1". 
+    iIntros "!>" (A e k Ψ) "HH1".
     rewrite bind_trigger -wpi_vis'. iModIntro. iApply Hwand.
     iApply ihandler_mono; last done.
     - iIntros (a) "Hwp". by iApply wpi_update_post.

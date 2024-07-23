@@ -6,6 +6,7 @@ From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
 From iris.itree Require Import trace.
+From iris.itree Require Import exec.
 From ITree Require Import ITree.
 From Paco Require Import paco.
 From Paco Require Import paco3.
@@ -351,3 +352,21 @@ Section trace.
     by eapply state_trace_preserved.
   Qed.
 End trace.
+
+(** Definitions for exec *)
+Program Definition stateEH S : seHandler (stateE S) :=
+  SEHandler S (λ A e s,
+      match e with
+      | EGetState    => λ C, C s s
+      | ESetState s' => λ C, C tt s'
+      end) _.
+Next Obligation. move => /= *. case_match; naive_solver. Qed.
+
+Global Program Instance stateEH_adequate {Σ} `{!invGS_gen hlc Σ} S `{!stateInterp Σ S} :
+    seHandlerAdequate (stateH S) (stateEH S) := {| sehandler_inv s := state_interp s |}.
+Next Obligation.
+  move => ??????????? HEH.
+  iIntros "HH Hs". rewrite /stateH/=. case_match.
+  - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
+  - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
+Qed.

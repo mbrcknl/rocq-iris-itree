@@ -123,9 +123,14 @@ Definition wp_event_aux `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} : seal (
 Definition wp_event `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} : event → iProp Σ → iProp Σ := (wp_event_aux).(unseal).
 Definition wp_event_eq `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} : wp_event = @wp_event_def _ _ _ _ _ := (wp_event_aux).(seal_eq).
 
-Notation "'WPevent' e {{ Φ } }" := (wp_event e Φ)
+(* We override the WPevent notation from lifting.v. We also make it a
+local notation such that the warning is not triggered when this file
+is imported. *)
+Local Set Warnings "-notation-overridden".
+Local Notation "'WPevent' e {{ Φ } }" := (wp_event e Φ)
   (at level 20, e, Φ at level 200,
    format "'[' 'WPevent'  e  '/' '[   ' {{  Φ  } } ']' ']'") : bi_scope.
+Local Set Warnings "notation-overridden".
 
 Definition instr_pre'_def `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} (is_later : bool) (a : Z) (P : iProp Σ) : iProp Σ :=
   ▷?is_later (
