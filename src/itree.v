@@ -5,6 +5,11 @@ From ITree Require Import TranslateFacts InterpFacts RecursionFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
+(* We need to define our own bind notation for ITrees following the
+std++ notation since [Import ITreeNotations.] leads to:
+Error: Level 61 is already declared to have left associativity while it is now
+expected to have right associativity. *)
+
 Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
 Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
   (at level 20, y at level 100, z at level 200,
