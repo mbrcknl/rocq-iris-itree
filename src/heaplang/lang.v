@@ -138,14 +138,11 @@ Section semantics.
     [itree heaplangE val] to [itree (callE expr val +' heaplangE) val] using
     [do]. This helps with automation, which can cancel out [interp (rec f)] and
     [do]. *)
-    let yield := do yield in
     let yield_if_not_val e := do (yield_if_not_val e) in
-    let step := do step.step in
     let store'_or_ub l x := do (store'_or_ub l x) in
     let store_or_ub l x := do (store_or_ub l x) in
     let load_or_ub l := do (load_or_ub l) in
     let allocN_nondet n v := do (allocN_nondet n v) in
-    let ub := do ub in
     let assert P `{Decision P} := do (assert P) in
     let step_ret v := do (step_ret v) in
     (* Assuming [e] is not a value, [compile_expr_yield e] differs from
