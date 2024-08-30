@@ -4,8 +4,8 @@ maintainer: "anonymized"
 synopsis: "A framework for modularly defining program logics."
 
 depends: [
-  "coq-iris-heap-lang" { (= "dev.2024-02-16.1.06f499e0") | (= "dev") }
-  "coq-iris" { (= "dev.2024-02-16.1.06f499e0") | (= "dev") }
+  "coq-iris-heap-lang" { (= "dev.2024-08-30.0.efb542b0") | (= "dev") }
+  "coq-iris" { (= "dev.2024-08-30.0.efb542b0") | (= "dev") }
   "coq-itree" { (= "5.1.2") }
   "coq-elpi" { (= "2.0.1") }
   "coq-stdpp-unstable"

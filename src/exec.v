@@ -1031,7 +1031,7 @@ Proof.
   iExists (Ms1 ++ M :: Ms2). iSplit.
   - iPureIntro. by rewrite Permutation_middle.
   - move: (Hi) => /(lookup_lt_Some _ _ _)?.
-    rewrite insert_app_r_alt take_length_le // ?Nat.sub_diag/= ?omap_app; csimpl.
+    rewrite insert_app_r_alt length_take_le // ?Nat.sub_diag/= ?omap_app; csimpl.
     2,3:lia.
     iApply (big_sepL2_app with "Hs1"). iFrame.
 Qed.
@@ -1049,7 +1049,7 @@ Proof.
   iExists M, (Ms1 ++ Ms2). iFrame. iSplit.
   - iPureIntro. by rewrite Permutation_middle.
   - move: (Hi) => /(lookup_lt_Some _ _ _)?.
-    rewrite insert_app_r_alt take_length_le // ?Nat.sub_diag/= ?omap_app; csimpl.
+    rewrite insert_app_r_alt length_take_le // ?Nat.sub_diag/= ?omap_app; csimpl.
     2,3:lia.
     iApply (big_sepL2_app with "Hs1"). iFrame.
 Qed.
@@ -1081,8 +1081,8 @@ Next Obligation.
     iSplit; [done|] => /=. iFrame => /=.
     iSplit; [| iSplit].
     * iPureIntro. by rewrite -Hperm1 Hperm2.
-    * iPureIntro. rewrite list_lookup_insert // insert_length.
-      move: Hl => /(lookup_lt_Some _ _ _). by rewrite insert_length.
+    * iPureIntro. rewrite list_lookup_insert // length_insert.
+      move: Hl => /(lookup_lt_Some _ _ _). by rewrite length_insert.
     * iDestruct "Hx" as %(?&->&->). iApply bi_close_intro. iIntros (?) "HP". by iMod "Hmask".
   - destruct He as (?&?&Hl&?). iMod "HH". iApply fupd_mask_intro; [done|].
     iDestruct (big_sepL2_omap_id_delete with "Hs") as (???) "[Hx Hs]"; [done|].
