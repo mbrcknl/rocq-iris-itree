@@ -7,6 +7,7 @@ From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
 From iris.itree Require Import trace.
+From iris.itree Require Import exec.
 From iris.bi Require Import fixpoint.
 From iris.bi Require Import derived_laws.
 From iris.base_logic.lib Require Export fancy_updates.
@@ -185,3 +186,18 @@ Section adequacy.
     iIntros (?) "Hp". case_match; first done. by case_match.
   Qed.
 End adequacy.
+
+(** Definitions for exec *)
+Program Definition haltEH : seHandler haltE :=
+  SEHandler unit (λ A e s C, False) _.
+Next Obligation. done. Qed.
+
+Global Program Instance haltEH_adequate {Σ} `{!invGS_gen hlc Σ} :
+    seHandlerAdequate haltH haltEH := {| sehandler_inv s := True%I |}.
+Next Obligation. move => ????????? HP. done. Qed.
+
+Lemma exec_assume (P : Prop) E (EH : eHandler E E P) `{!haltE -< E} f1 f2 `{!inEH haltEH EH f1 f2} `{!Decision P} s C:
+  P →
+  (∀ HP, C (Ret HP) s) →
+  exec EH (assume P) s C.
+Proof. move => ??. rewrite /assume. case_decide; [apply exec_stop; naive_solver|done]. Qed.

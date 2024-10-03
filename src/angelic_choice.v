@@ -20,6 +20,16 @@ From ITree Require Import Eqit.
 Variant angelicE : Type → Type :=
   | EAngelic (A : Type) : angelicE A.
 
+Definition angelic_choice `{angelicE -< E} (A : Type) `{EqDecision A} `{Inhabited A} : itree E A :=
+  trigger (EAngelic A).
+Lemma angelic_choice_to_translate {E1 E2} (A : Type) `{EqDecision A} `{Inhabited A} (HE1 : angelicE -< E1) (HE2 : angelicE -< E2) (Hin : E1 -< E2) :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (angelic_choice A) Hin (angelic_choice A).
+Proof.
+  move => ?. by apply trigger_to_translate.
+Qed.
+Global Hint Resolve angelic_choice_to_translate : itree_auto.
+
 Section handler.
   Context {Σ : gFunctors}.
 

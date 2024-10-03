@@ -2,6 +2,7 @@ From iris.itree Require Import wpi choice ub handler itree step.
 From iris.itree Require Export state.
 From iris.heap_lang Require Export locations.
 From ITree Require Import ITree.
+From ITree Require Import TranslateFacts InterpFacts RecursionFacts.
 From stdpp Require Import gmap.
 From iris Require Import ghost_map.
 From iris Require Import invariants.
@@ -34,6 +35,70 @@ Definition load `{!heapE V -< E} (l : loc) : itree E (option V) :=
   | Some (Some v) => Some v
   | _ => None
   end.
+
+Lemma store'_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (Hin : E1 -< E2) l x :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (store' l x) Hin (store' l x).
+Proof.
+  move => ?. rewrite /store'.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  by apply Ret_to_translate.
+Qed.
+Global Hint Resolve store'_to_translate : itree_auto.
+Lemma store_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (Hin : E1 -< E2) l x :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (store l x) Hin (store l x).
+Proof. apply store'_to_translate. Qed.
+Global Hint Resolve store_to_translate : itree_auto.
+Lemma load_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (Hin : E1 -< E2) l :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (load l) Hin (load l).
+Proof.
+  move => ?. rewrite /store'.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  by apply Ret_to_translate.
+Qed.
+Global Hint Resolve load_to_translate : itree_auto.
+
+(** A version of [store'] that exhibits UB if overwriting a free memory cell. *)
+Definition store'_or_ub `{!heapE V -< E} `{ubE -< E} l x : itree E V :=
+  v ← store' l x;
+  some_or_ub v.
+(** A version of [store] that exhibits UB if overwriting a free memory cell. *)
+Definition store_or_ub `{!heapE V -< E} `{ubE -< E} l x : itree E V :=
+  store'_or_ub l (Some x).
+(** A version of [load] that exhibits UB if loading a free memory cell. *)
+Definition load_or_ub `{!heapE V -< E} `{ubE -< E} l : itree E V :=
+  v ← load l;
+  some_or_ub v.
+
+Lemma store'_or_ub_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (HE1' : ubE -< E1) (HE2' : ubE -< E2) (Hin : E1 -< E2) l x :
+  TranslateReSum Hin HE1 HE2 →
+  TranslateReSum Hin HE1' HE2' →
+  ITreeToTranslate (store'_or_ub l x) Hin (store'_or_ub l x).
+Proof.
+  move => Hresum [Heq]. rewrite /store'_or_ub.
+  apply bind_to_translate; [by apply store'_to_translate|]. move => ?.
+  by apply some_or_ub_to_translate.
+Qed.
+Global Hint Resolve store'_or_ub_to_translate : itree_auto.
+Lemma store_or_ub_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (HE1' : ubE -< E1) (HE2' : ubE -< E2) (Hin : E1 -< E2) l x :
+  TranslateReSum Hin HE1 HE2 →
+  TranslateReSum Hin HE1' HE2' →
+  ITreeToTranslate (store_or_ub l x) Hin (store_or_ub l x).
+Proof. apply store'_or_ub_to_translate. Qed.
+Global Hint Resolve store_or_ub_to_translate : itree_auto.
+Lemma load_or_ub_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (HE1' : ubE -< E1) (HE2' : ubE -< E2) (Hin : E1 -< E2) l :
+  TranslateReSum Hin HE1 HE2 →
+  TranslateReSum Hin HE1' HE2' →
+  ITreeToTranslate (load_or_ub l) Hin (load_or_ub l).
+Proof.
+  move => [Heq1 Heq2]. rewrite /load_or_ub.
+  apply bind_to_translate; [by apply load_to_translate|]. move => ?.
+  by apply some_or_ub_to_translate.
+Qed.
+Global Hint Resolve load_or_ub_to_translate : itree_auto.
 
 Section free_locations.
   (** If [P i] is decidable for all [i], then whether it holds in a finite range
@@ -135,20 +200,57 @@ Definition allocN `{!heapE V -< E} (n : nat) (v : V) : itree E loc :=
     trigger (ESetState ((heap_array (`l) (replicate n v)) ∪ σ));;
     Ret (`l).
 
+Lemma allocN_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (Hin : E1 -< E2) n v :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (allocN n v) Hin (allocN n v).
+Proof.
+  move => [Heq]. rewrite /allocN.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  apply Ret_to_translate.
+Qed.
+Global Hint Resolve allocN_to_translate : itree_auto.
+
 Definition allocN_nondet `{!heapE V -< E} `{demonicE -< E} (n : nat) (v : V) : itree E loc :=
   (* Read the entire heap. *)
   σ ← trigger EGetState;
   (* Demonically pick a free location of the heap. *)
-  l ← trigger (EDemonic (free_locations n σ));
+  l ← demonic_choice (free_locations n σ);
   (* Write the evaluated value [v] to every memory cell in that segment. *)
   trigger (ESetState ((heap_array (`l) (replicate n v)) ∪ σ));;
   Ret (`l).
 
+Lemma allocN_nondet_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (HE1' : demonicE -< E1) (HE2' : demonicE -< E2) (Hin : E1 -< E2) n v :
+  TranslateReSum Hin HE1 HE2 →
+  TranslateReSum Hin HE1' HE2' →
+  ITreeToTranslate (allocN_nondet n v) Hin (allocN_nondet n v).
+Proof.
+  move => [Heq] [Heq']. rewrite /allocN_nondet.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  apply bind_to_translate; [by apply trigger_to_translate|]. move => ?.
+  apply Ret_to_translate.
+Qed.
+Global Hint Resolve allocN_nondet_to_translate : itree_auto.
+
 Definition alloc `{!heapE V -< E} (v : V) : itree E loc :=
   allocN 1 v.
 
+Lemma alloc_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (Hin : E1 -< E2) v :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (alloc v) Hin (alloc v).
+Proof. apply allocN_to_translate. Qed.
+Global Hint Resolve alloc_to_translate : itree_auto.
+
 Definition alloc_nondet `{!heapE V -< E} `{demonicE -< E} (v : V) : itree E loc :=
   allocN_nondet 1 v.
+
+Lemma alloc_nondet_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (HE1' : demonicE -< E1) (HE2' : demonicE -< E2) (Hin : E1 -< E2) v :
+  TranslateReSum Hin HE1 HE2 →
+  TranslateReSum Hin HE1' HE2' →
+  ITreeToTranslate (alloc_nondet v) Hin (alloc_nondet v).
+Proof. apply allocN_nondet_to_translate. Qed.
+Global Hint Resolve alloc_nondet_to_translate : itree_auto.
 
 Class heapHGpreS (Σ : gFunctors) (V : Type) := HeapHGpreS {
   heapH_ghost_varG :> ghost_mapG Σ loc (option V);
@@ -295,7 +397,7 @@ Section wp.
     simpl. apply bool_decide_unpack in Hfree.
     iMod (ghost_map_insert_big (heap_array l (replicate n v)) with "Hauth") as "[Hauth Hpointsto]".
     { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
-      rewrite replicate_length in Hlt.
+      rewrite length_replicate in Hlt.
       apply Hfree; first done. lia.
     }
     iDestruct "Hauth" as "[Hauth Hauth']".
@@ -335,14 +437,14 @@ Section wp_nondet.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iFrame "Hauth' Hinv".
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iApply wpi_ret. iApply wpi_bind. iApply @wpi_demonic. iIntros ([l Hfree]). iApply wpi_ret.
-     iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "[Hauth' _]".
+    iApply wpi_ret. iApply wpi_bind. iApply @wpi_demonic. iIntros ([l Hfree]).
+    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "[Hauth' _]".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     simpl. apply bool_decide_unpack in Hfree.
     iMod (ghost_map_insert_big (heap_array l (replicate n v)) with "Hauth") as "[Hauth Hpointsto]".
     { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
-      rewrite replicate_length in Hlt.
+      rewrite length_replicate in Hlt.
       apply Hfree; first done. lia.
     }
     iDestruct "Hauth" as "[Hauth Hauth']".
@@ -363,3 +465,40 @@ Section wp_nondet.
     simpl. iIntros (l) "[Hpointsto _]". rewrite Loc.add_0. by iApply "Hwand".
   Qed.
 End wp_nondet.
+
+Section wp_or_ub.
+  Context {V : Type} {E : Type → Type} `{H : iHandler Σ E} `{heapE V -< E} `{ubE -< E}.
+  Context `{!invGS_gen hlc Σ} `{!heapHGS Σ V} `{inH Σ (heapE V) E (heapH V) H}.
+
+  Lemma wpi_load_or_ub M l v dq Φ :
+    ↑heapH_inv_name ⊆ M →
+    l ↦{dq} v -∗
+    (l ↦{dq} v -∗ Φ v) -∗
+    WPi load_or_ub l @ H; M {{ Φ }}.
+  Proof.
+    iIntros (Hmask) "Hpointsto Hwand".
+    iApply wpi_bind. iApply (wpi_load with "Hpointsto"); first done.
+    iIntros "Hpointsto". iApply wpi_ret. by iApply "Hwand".
+  Qed.
+
+  Lemma wpi_store'_or_ub M l v v' Φ :
+    ↑heapH_inv_name ⊆ M →
+    l ↦ v -∗
+    (l ↦? v' -∗ Φ v) -∗
+    WPi store'_or_ub l v' @ H; M {{ Φ }}.
+  Proof.
+    iIntros (Hmask) "Hpointsto Hwand".
+    iApply wpi_bind. iApply (wpi_store' with "Hpointsto"); first done.
+    iIntros "Hpointsto". iApply wpi_ret. by iApply "Hwand".
+  Qed.
+
+  Lemma wpi_store_or_ub M l v v' Φ :
+    ↑heapH_inv_name ⊆ M →
+    l ↦? v -∗
+    (l ↦ v' -∗ Φ v) -∗
+    WPi store l v' @ H; M {{ Φ }}.
+  Proof.
+    iIntros (Hmask) "Hpointsto Hwand".
+    by iApply (wpi_store with "Hpointsto").
+  Qed.
+End wp_or_ub.

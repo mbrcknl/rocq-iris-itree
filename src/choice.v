@@ -7,6 +7,7 @@ From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
 From iris.itree Require Import trace.
+From iris.itree Require Import exec.
 From iris.bi Require Import fixpoint.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
@@ -35,6 +36,16 @@ Proof.
   intros A e. by destruct e.
 Qed.
 
+Definition demonic_choice `{demonicE -< E} (A : Type) `{EqDecision A} `{Inhabited A} : itree E A :=
+  trigger (EDemonic A).
+Lemma demonic_choice_to_translate {E1 E2} (A : Type) `{EqDecision A} `{Inhabited A} (HE1 : demonicE -< E1) (HE2 : demonicE -< E2) (Hin : E1 -< E2) :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (demonic_choice A) Hin (demonic_choice A).
+Proof.
+  move => ?. by apply trigger_to_translate.
+Qed.
+Global Hint Resolve demonic_choice_to_translate : itree_auto.
+
 Section handler.
   Context {Σ : gFunctors}.
 
@@ -58,7 +69,7 @@ Section wp.
   Context {E : Type → Type} `{H : iHandler Σ E} `{demonicE -< E} `{inH Σ demonicE E demonicH H}.
   Context `{!invGS_gen hlc Σ}.
 
-  Lemma wpi_demonic {R A} `{EqDecision A} `{Inhabited A} k M (Φ : R → iProp Σ) :
+  Lemma wpi_demonic_vis {R A} `{EqDecision A} `{Inhabited A} k M (Φ : R → iProp Σ) :
     (∀ a, WPi k a @ H; M {{ Φ }}) -∗
     WPi (vis (EDemonic A) k) @ H; M {{ Φ }}.
   Proof.
@@ -68,11 +79,11 @@ Section wp.
     iEval (rewrite -wpi_update). iMod "Hfupd". rewrite wpi_clear_mask //.
   Qed.
 
-  Lemma wpi_demonic_trigger {A} `{EqDecision A} `{Inhabited A} M (Φ : A → iProp Σ) :
+  Lemma wpi_demonic {A} `{EqDecision A} `{Inhabited A} M (Φ : A → iProp Σ) :
     (∀ a,  Φ a) -∗
-    WPi (trigger (EDemonic A)) @ H; M {{ Φ }}.
+    WPi (demonic_choice A) @ H; M {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_demonic. iIntros (?). iApply wpi_ret. iApply "Hwp".
+    iIntros "Hwp". iApply wpi_demonic_vis. iIntros (?). iApply wpi_ret. iApply "Hwp".
   Qed.
 End wp.
 
@@ -298,3 +309,16 @@ Section trace.
         + by constructor.
   Qed.
 End trace.
+
+(** Definitions for exec *)
+Program Definition demonicEH : seHandler demonicE :=
+  SEHandler unit (λ A e s, match e with | EDemonic A => λ C, ∃ x, C x tt end) _.
+Next Obligation. move => /= *. case_match; naive_solver. Qed.
+
+Global Program Instance demonicEH_adequate {Σ} `{!invGS_gen hlc Σ} :
+    seHandlerAdequate demonicH demonicEH := {| sehandler_inv s := True%I |}.
+Next Obligation.
+  move => ????????? HP. iIntros "Hwp _".
+  rewrite /demonicH/=. case_match => /=. simplify_eq/=. destruct HP as [??].
+  iModIntro. iExists _, _. iSplit; [done|]. iSplit; [done|]. iApply "Hwp".
+Qed.

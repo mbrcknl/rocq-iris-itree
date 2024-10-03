@@ -7,6 +7,7 @@ From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
 From iris.itree Require Import trace.
+From iris.itree Require Import exec.
 From iris.bi Require Import fixpoint.
 From iris.bi Require Import derived_laws.
 From iris.base_logic.lib Require Export fancy_updates.
@@ -253,3 +254,23 @@ Section ub_trace.
     ∃ t', ub_irel t t' ∧ is_trace (interp_tr_ub tr) t'.
   Proof. intros Htr%ub_ifn_trace. exists (ub_ifn t). by split. Qed.
 End ub_trace.
+
+(** Definitions for exec *)
+Program Definition ubEH : seHandler ubE :=
+  SEHandler unit (λ A e s C, True) _.
+Next Obligation. done. Qed.
+
+Global Program Instance ubEH_adequate {Σ} `{!invGS_gen hlc Σ} :
+    seHandlerAdequate ubH ubEH := {| sehandler_inv s := True%I |}.
+Next Obligation. move => ??????????. by iIntros (?). Qed.
+
+
+Lemma exec_some_or_ub E R (EH : eHandler E E R) `{!ubE -< E} f1 f2 `{!inEH ubEH EH f1 f2} (o : option R) s C:
+  (∀ x, o = Some x → C (Ret x) s) →
+  exec EH (o?) s C.
+Proof. move => ?. destruct o => /=; [apply exec_stop; naive_solver|]. by apply: exec_vis. Qed.
+
+Lemma exec_assert E (EH : eHandler E E unit) `{!ubE -< E} f1 f2 `{!inEH ubEH EH f1 f2} P `{!Decision P} s C:
+  (P → C (Ret tt) s) →
+  exec EH (assert P) s C.
+Proof. move => ?. rewrite /assert. case_decide; [apply exec_stop; naive_solver|]. by apply: exec_vis. Qed.

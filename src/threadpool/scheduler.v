@@ -99,7 +99,7 @@ Section scheduler.
     - destruct e as [e|e]; first destruct e.
       * constructor. right. apply CIH; eauto.
         simpl. apply lookup_lt_Some in Hidx.
-        rewrite lookup_app_l; last rewrite insert_length //.
+        rewrite lookup_app_l; last rewrite length_insert //.
         rewrite list_lookup_insert; eauto.
       * apply Yield with (new_current_tid :=
           match tid with
@@ -108,7 +108,7 @@ Section scheduler.
           end).
         right. apply CIH; last done.
         simpl. apply lookup_lt_Some in Hidx.
-        destruct tid; apply lookup_lt_is_Some_2; rewrite insert_length; lia.
+        destruct tid; apply lookup_lt_is_Some_2; rewrite length_insert; lia.
       * apply singleton_or_more in Hidx as [[-> ->]|[Hlen Hidx]].
         + constructor.
         + destruct tp as [|t1 [|t2 tp']] eqn:Heq.

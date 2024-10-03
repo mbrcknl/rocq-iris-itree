@@ -54,15 +54,13 @@
 (****************************************************************************)
 
 From Coq Require Export ssreflect.
-From stdpp Require Export prelude strings gmap.
-From stdpp.unstable Require Export bitblast.
+From stdpp Require Export prelude strings gmap bitblast bitvector.
 From RecordUpdate Require Export RecordSet.
 From iris.program_logic Require Import weakestpre.
 From iris.bi Require Import bi.
 From iris.proofmode Require Import tactics.
 From iris.algebra Require Export big_op.
 (* From lithium Require Export base. *)
-From stdpp.unstable Require Export bitvector.
 Export RecordSetNotations.
 
 Open Scope Z_scope.
@@ -88,7 +86,7 @@ Section sep_list.
     destruct (lookup_lt_is_Some_2 l i Hl) as [y Hy].
     rewrite big_sepL_delete; [| by apply list_lookup_insert].
     rewrite insert_take_drop // -{3}(take_drop_middle l i y) // !big_sepL_app /=.
-    do 3 f_equiv. rewrite take_length. case_decide => //. lia.
+    do 3 f_equiv. rewrite length_take. case_decide => //. lia.
   Qed.
 
 Lemma big_sepL_impl' {B} Φ (Ψ : _ → B → _) (l1 : list A) (l2 : list B) :
@@ -116,7 +114,7 @@ End sep_list.
     iIntros (Hlen1 Hlen2) "Hl #Himpl".
     rewrite !big_sepL2_alt. iDestruct "Hl" as (Hl1) "Hl".
     iSplit. { iPureIntro. congruence. }
-    iApply (big_sepL_impl' with "Hl"). { rewrite !zip_with_length. lia. }
+    iApply (big_sepL_impl' with "Hl"). { rewrite !length_zip_with. lia. }
     iIntros "!>" (k [x1 x2] [y1 y2]).
     rewrite !lookup_zip_with_Some.
     iDestruct 1 as %(?&?&?&?).

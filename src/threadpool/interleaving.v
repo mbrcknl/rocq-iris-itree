@@ -614,7 +614,7 @@ Section list.
 
   Lemma zip_length {A B} (xs : list A) (ys : list B) :
     length (zip xs ys) = min (length xs) (length ys).
-  Proof. apply zip_with_length. Qed.
+  Proof. apply length_zip_with. Qed.
 
   Lemma zip_lookup {A B} (xs : list A) (a : A) (ys : list B) (b : B) (idx : nat) :
     (zip xs ys) !! idx = Some (a, b) →
@@ -642,7 +642,7 @@ Section list.
       * apply Nat.eqb_neq in Heq. rewrite list_lookup_insert_ne //.
     - apply Nat.ltb_ge in Hineq.
       rewrite !lookup_ge_None_2 //. { rewrite seq_length //. }
-      rewrite insert_length seq_length //.
+      rewrite length_insert seq_length //.
   Qed.
 
   Lemma nin_cons {A} (xs : list A) (x x' : A) :
@@ -695,7 +695,7 @@ Section list.
   Lemma enumerate_insert {A} (xs : list A) (i : nat) (x : A) :
     enumerate (<[i:=x]>xs) = <[i:=(i, x)]>(enumerate xs).
   Proof.
-    rewrite zip_insert seq_0_insert /enumerate/enumerate_from insert_length //.
+    rewrite zip_insert seq_0_insert /enumerate/enumerate_from length_insert //.
   Qed.
 
   Lemma enumerate_bound {A} (xs : list A) (i : nat) (x : A) :
@@ -825,8 +825,8 @@ Section pointed_permutations.
     fst <$> xs !! idx' = Some idx →
     length (remove idx xs) = length xs - 1.
   Proof.
-    intros Hdup Hidx. rewrite -(fmap_length snd) (NoDup_delete_remove _ _ idx') // length_delete.
-    - rewrite fmap_length //.
+    intros Hdup Hidx. rewrite -(length_fmap snd) (NoDup_delete_remove _ _ idx') // length_delete.
+    - rewrite length_fmap //.
     - rewrite list_lookup_fmap. by destruct (xs !! idx').
   Qed.
 
@@ -900,7 +900,7 @@ Section pointed_permutations.
     ∃ idx, permutes (Some idx) xs (Some idx') xs'.
   Proof.
     intros [enumerated_xs' [Hperm [Hsnd _]]] Hbound.
-    rewrite -Hsnd fmap_length in Hbound. apply lookup_lt_is_Some_2 in Hbound as [[idx x] Hidx'].
+    rewrite -Hsnd length_fmap in Hbound. apply lookup_lt_is_Some_2 in Hbound as [[idx x] Hidx'].
     exists idx. exists enumerated_xs'. split; first done. split.
     - done.
     - rewrite Hidx' //.
@@ -1072,7 +1072,7 @@ Section pointed_permutations.
     - rewrite !fmap_app /enumerate !enumerate_from_snd //.
     - rewrite -list_lookup_fmap fmap_app lookup_app_l.
       * rewrite /enumerate !enumerate_from_fst lookup_seq_lt //.
-      * rewrite fmap_length enumerate_length //.
+      * rewrite length_fmap enumerate_length //.
   Qed.
 End pointed_permutations.
 
@@ -1178,11 +1178,11 @@ Section threadpool_adequacy.
           clear -Hperm.
           iIntros (tid_' t Hidx_').
           apply permutes_mapping with (idx' := tid_') in Hperm; first last.
-          { rewrite insert_length. by eapply lookup_lt_Some. }
+          { rewrite length_insert. by eapply lookup_lt_Some. }
           destruct Hperm as [tid_ Hperm].
           destruct (permutes_Some_Some _ _ _ _ Hperm) as [Hidxbound Hcoincide].
           iDestruct "Hwptp'" as "[_ Hwptp']".
-          rewrite insert_length in Hidxbound. apply lookup_lt_is_Some_2 in Hidxbound as [t' Hidx_].
+          rewrite length_insert in Hidxbound. apply lookup_lt_is_Some_2 in Hidxbound as [t' Hidx_].
           by iApply "Hwptp'".
       * iExists _. iSplit. { iPureIntro. by etransitivity. }
         iModIntro. iSplit.
@@ -1340,7 +1340,7 @@ Section threadpool_adequacy.
       * iExists _. iSplit. { iPureIntro. by apply lookup_app_l_Some. }
         simpl. rewrite insert_app_l; last first. { by eapply lookup_lt_Some. }
         iMod "Hwptp''". iDestruct "Hwptp''" as "[_ Hwptp'']". iApply wptp_reorder'.
-        { rewrite insert_length. by apply lookup_lt_is_Some_1. }
+        { rewrite length_insert. by apply lookup_lt_is_Some_1. }
         iApply "Hwptp''".
         iEval (rewrite wptp_unfold /=).
         clear. iModIntro. iIntros (tid' t' Hidx'). iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
@@ -1361,7 +1361,7 @@ Section threadpool_adequacy.
              iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'". iModIntro.
              iDestruct "Hwptp'" as "[$ _]".
           ++ iDestruct "Hwptp''" as "[>[_ [_ Hwptp'']] _]". iApply "Hwptp''".
-             { iPureIntro. rewrite insert_length.
+             { iPureIntro. rewrite length_insert.
                apply (Nat.le_add_sub (length tp) new_tid Hidx'bound). }
              iSpecialize ("Hwptp'" $! _ _ Hidx'). iMod "Hwptp'".
              iModIntro. by iDestruct "Hwptp'" as "[Hwptp' _]".
@@ -1530,7 +1530,7 @@ Section threadpool_adequacy.
       destruct Hinter as [interleaving' [tid' [Hinter ->]]]. rewrite -wpi_tau.
       assert (Hidx'' := interleaves_lookup _ _ _ Hinter).
       destruct Hidx'' as [t Hidx''].
-      apply lookup_lt_Some in Hidx''. rewrite insert_length in Hidx''.
+      apply lookup_lt_Some in Hidx''. rewrite length_insert in Hidx''.
       apply lookup_lt_is_Some_2 in Hidx'' as [t' Hidx''].
       by iApply ("Hwptp'" $! tid').
     - apply singleton_or_more in Hidx' as [[-> ->]|[Hlen Hidx']].

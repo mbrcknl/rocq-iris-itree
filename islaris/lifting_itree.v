@@ -123,9 +123,14 @@ Definition wp_event_aux `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} : seal (
 Definition wp_event `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} : event → iProp Σ → iProp Σ := (wp_event_aux).(unseal).
 Definition wp_event_eq `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} : wp_event = @wp_event_def _ _ _ _ _ := (wp_event_aux).(seal_eq).
 
-Notation "'WPevent' e {{ Φ } }" := (wp_event e Φ)
+(* We override the WPevent notation from lifting.v. We also make it a
+local notation such that the warning is not triggered when this file
+is imported. *)
+Local Set Warnings "-notation-overridden".
+Local Notation "'WPevent' e {{ Φ } }" := (wp_event e Φ)
   (at level 20, e, Φ at level 200,
    format "'[' 'WPevent'  e  '/' '[   ' {{  Φ  } } ']' ']'") : bi_scope.
+Local Set Warnings "notation-overridden".
 
 Definition instr_pre'_def `{!Arch} `{!islaG Σ} `{!stateG Σ} `{!threadG} (is_later : bool) (a : Z) (P : iProp Σ) : iProp Σ :=
   ▷?is_later (
@@ -370,7 +375,7 @@ Section lifting.
     iIntros (?) "Hwp". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
     iApply wpi_bind. iApply wpi_assert; [done|].
-    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    iApply wpi_bind. iApply @wpi_demonic. iIntros (?).
     iApply wpi_bind. iApply @wpi_assume. iIntros (?).
     rewrite interp_recursive_call. by iApply ("Hwp" with "[//] [//] [$] [$] [$] [$]").
   Qed.
@@ -584,7 +589,7 @@ Section lifting.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    iApply wpi_bind. iApply @wpi_demonic. iIntros (?).
     iApply wpi_bind. iApply @wpi_assume. iIntros (?).
     rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
@@ -595,7 +600,7 @@ Section lifting.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    iApply wpi_bind. iApply @wpi_demonic. iIntros (?).
     rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
 
@@ -605,7 +610,7 @@ Section lifting.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    iApply wpi_bind. iApply @wpi_demonic_trigger. iIntros (?).
+    iApply wpi_bind. iApply @wpi_demonic. iIntros (?).
     rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
 

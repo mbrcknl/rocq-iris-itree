@@ -1,6 +1,5 @@
 From stdpp Require Import countable numbers gmap strings stringmap.
 From ITree Require Import ITree Recursion RecursionFacts InterpFacts Eqit.
-From iris.itree.threadpool Require Import handler.
 From iris.prelude Require Import prelude.
 From iris.base_logic Require Import ghost_map invariants.
 From iris.base_logic.lib Require Import ghost_var.
@@ -10,6 +9,7 @@ From elpi.apps Require Import locker.
 
 From iris.itree Require Import wpi choice ub heap handler itree step.
 From iris.itree.heaplang Require Export definition lang.
+From iris.itree.threadpool Require Import handler.
 
 Class heaplangHGpreS (Σ : gFunctors) := HeapLangHGpreS {
   heaplangH_heapHG :> heapHGpreS Σ val;
@@ -460,11 +460,10 @@ Class PureExec (φ : Prop) (e1 e2 : expr) :=
 
 (* Unfortunately, this lemma does not hold.
 We would need the inverse of [wp_bind_K] to make it hold. *)
-Lemma wp_bind_pure `{!invGS_gen hlc Σ} `{!heaplangHGS Σ} φ e1 e2 m Φ K :
+Instance pure_exec_fill φ e1 e2 K :
   PureExec φ e1 e2 →
-  φ → lat m (WP fill K e2 @ m; ⊤ {{ Φ }}) ⊢ WP fill K e1 @ m; ⊤ {{ Φ }}.
+  PureExec φ (fill K e1) (fill K e2).
 Proof.
- iIntros (Hexec Hφ).
 Abort.
 
 (** * Instances of the [PureExec] class *)

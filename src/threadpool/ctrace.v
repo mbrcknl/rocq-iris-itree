@@ -229,9 +229,9 @@ Section is_ctrace.
           apply REL.
         }
         eapply IH; eauto.
-        + rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+        + rewrite lookup_app_l; last rewrite length_insert -lookup_lt_is_Some //.
           apply list_lookup_insert. by apply lookup_lt_is_Some_1.
-        + rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+        + rewrite lookup_app_l; last rewrite length_insert -lookup_lt_is_Some //.
           apply list_lookup_insert. by apply lookup_lt_is_Some_1.
         + f_equiv.
           ++ f_equiv; first apply REL. done.
@@ -342,7 +342,7 @@ Section is_ctrace.
     destruct Htr as (t'&Ht'&Htr).
     constructor; first done.
     apply lookup_lt_Some in Htp.
-    rewrite lookup_app_l in Ht'; last rewrite insert_length //.
+    rewrite lookup_app_l in Ht'; last rewrite length_insert //.
     rewrite list_lookup_insert // in Ht'.
     injection Ht' as Heq. rewrite Heq. by rewrite Heq in Htr.
   Qed.
@@ -485,7 +485,7 @@ Section interleaving.
       constructor.
     - pfold. rewrite /interleaves_. exists t. split; first done. destruct Heqot, Heqot_int.
       constructor. left. apply IH with (t := k CurrentThread); eauto.
-      simpl. rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+      simpl. rewrite lookup_app_l; last rewrite length_insert -lookup_lt_is_Some //.
       apply list_lookup_insert. by apply lookup_lt_is_Some_1.
     - pfold. punfold Hint. rewrite /interleaves_. rewrite /interleaves_ in Hint. simpl in Hint.
       rewrite -Heqot_int //.
@@ -511,7 +511,7 @@ Section interleaving.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
       apply IH with (t := k CurrentThread); eauto.
-      rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+      rewrite lookup_app_l; last rewrite length_insert -lookup_lt_is_Some //.
       apply list_lookup_insert. by apply lookup_lt_is_Some_1.
     - simpl. rewrite /is_trace. destruct Heqot_int. constructor.
   Qed.
@@ -563,11 +563,11 @@ Section interleaving.
       eexists. split; first done. destruct Heqot. by econstructor.
     - exists (Ret (inr LastThreadKilled)). eexists. split; first done.  destruct Heqot. constructor.
     - unshelve epose (IH (k CurrentThread) _ _) as Hext; eauto.
-      { rewrite lookup_app_l; last rewrite insert_length -lookup_lt_is_Some //.
+      { rewrite lookup_app_l; last rewrite length_insert -lookup_lt_is_Some //.
         apply list_lookup_insert. by apply lookup_lt_is_Some_1. }
       destruct Hext as [t_int [t'' [Hidx' Hext]]]. exists (Tau t_int).
       eexists. split; first done. destruct Heqot. constructor; first done.
-      rewrite lookup_app_l in Hidx'; last rewrite insert_length -lookup_lt_is_Some //.
+      rewrite lookup_app_l in Hidx'; last rewrite length_insert -lookup_lt_is_Some //.
       rewrite /= list_lookup_insert in Hidx'; last by apply lookup_lt_is_Some_1.
       by injection Hidx' as <-.
     - exists (scheduler tid tp).

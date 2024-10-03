@@ -40,7 +40,7 @@ Qed.
 
 This appears many times in the below specification of the semantics of
 heaplang. The reason is explained later by example. *)
-Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} `{stepE -< E} : itree E () :=
+Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
   match to_val e with
   | Some _ => Ret ()
   | None => yield
@@ -62,8 +62,6 @@ Proof.
 Qed.
 
 (* TODO: Remove these duplicate definitions (already in [ub.v] but without [do]) *)
-Definition some_or_ub {E R} `{!ubE -< E} (o : option R) : itree E R :=
-  (match o with | Some x => Ret x | None => ub end)%itree.
 Notation "x ?" := (do $ some_or_ub x) (at level 10, format "x ?") : itree_scope.
 
 (** Cast a value to [RecV]. *)
@@ -103,18 +101,6 @@ Definition val_to_sum (v : val) : option (val + val) :=
   | InjRV v => Some (inr v)
   | _ => None
   end.
-
-(** A version of [store'] that exhibits UB if overwriting a free memory cell. *)
-Definition store'_or_ub l x : itree heaplangE val :=
-  v ← store' l x;
-  some_or_ub v.
-(** A version of [store] that exhibits UB if overwriting a free memory cell. *)
-Definition store_or_ub l x : itree heaplangE val :=
-  store'_or_ub l (Some x).
-(** A version of [load] that exhibits UB if loading a free memory cell. *)
-Definition load_or_ub l : itree heaplangE val :=
-  v ← load l;
-  some_or_ub v.
 
 Section semantics.
   (* We first define some abstractions for manipulating memory that we can
@@ -193,12 +179,12 @@ Section semantics.
         (* f = λ x, e *)
         '(f_, x_, e) ← (val_to_RecV f)?;
         (* [App f v ~> e[v/x]]. *)
-        let body := subst' x_ v  (subst' f_ f e) in
+        let body := subst' x_ v (subst' f_ f e) in
         (* If [e[v/x]] is a value, we are done and so we simply need to [step]
         and return it (remember we don't end on a yield; see comment above
         [compile_expr']). If not, we need to [step], [yield] (to mark the opsem
         step [App f v ~> e[v/x]]), and evaluate it. *)
-        step;;
+        step.step;;
         yield_if_not_val body;;
         call body
     | UnOp op e =>
@@ -218,12 +204,12 @@ Section semantics.
           (* [If true e1 e2 ~> e1]. The [step] and [yield_if_not_val] here
           follows the exact same reasoning as the comments for the [App e1 e2]
           case. *)
-          step;;
+          step.step;;
           yield_if_not_val e1;;
           compile_expr' e1
         else
           (* [If false e1 e2 ~> e2]. *)
-          step;;
+          step.step;;
           yield_if_not_val e2;;
           compile_expr' e2
     | Pair e1 e2 =>
@@ -254,12 +240,12 @@ Section semantics.
             follows the exact same reasoning as the comments for the [App e1 e2]
             case. We write [yield] instead of the equivalent
             [yield_if_not_value (App e1 (Val v))]. *)
-            step ;;
+            step.step ;;
             yield ;;
             call (App e1 (Val v))
         | inr v =>
             (* [Case (inr v) e1 e2 ~> App e2 v]. *)
-            step ;;
+            step.step ;;
             yield ;;
             call (App e2 (Val v))
         end

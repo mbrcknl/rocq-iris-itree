@@ -1,7 +1,7 @@
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic Require Import bi.
 From iris.proofmode Require Import proofmode.
-From iris.itree Require Import itree wpi trace handler.
+From iris.itree Require Import itree wpi trace handler exec.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
 From ITree Require Import ITree Eqit.
@@ -324,3 +324,23 @@ Section trace.
     exists (step_ifn n t). by split.
   Qed.
 End trace.
+
+(** Definitions for exec *)
+Local Unset Program Cases.
+
+Program Definition stepEH lat : seHandler stepE :=
+  SEHandler nat (λ A e s, match e with | EStep =>
+     λ C, ∃ s', s = S s' ∧ C tt (if lat is Later then s' else s) end) _.
+Next Obligation. move => /= *. case_match; naive_solver. Qed.
+
+Global Program Instance stepEH_adequate {Σ} `{!invGS Σ} lat :
+  seHandlerAdequate (stepH lat) (stepEH lat) := {| sehandler_inv s := £ s |}.
+Next Obligation.
+  move => /= ?? lat ?????? HP.
+  iIntros "Hp Hs". case_match.
+  destruct HP as [? [??]]; subst.
+  destruct lat => /=.
+  - iModIntro. by iFrame.
+  - rewrite lc_succ. iDestruct "Hs" as "[Hl $]". iApply (lc_fupd_elim_later with "[$]").
+    iModIntro. by iFrame.
+Qed.

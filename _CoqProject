@@ -5,6 +5,8 @@
 -Q src iris.itree
 -Q islaris isla
 
+# not sure this is correct, but it silences the warning about multiple roots
+-docroot iris
 INSTALLDEFAULTROOT = iris
 
 src/axioms.v
@@ -23,6 +25,7 @@ src/threadpool/handler.v
 src/threadpool/interleaving.v
 src/threadpool/scheduler.v
 src/threadpool/ctrace.v
+src/threadpool/exec.v
 src/wpi.v
 src/interpreter.v
 src/exec.v
@@ -33,6 +36,8 @@ src/heaplang/program_logic.v
 src/heaplang/adequacy.v
 src/heaplang/opsem_adequacy.v
 src/heaplang/interpreter.v
+src/examplelang/lang.v
+src/examplelang/program_logic.v
 
 islaris/base.v
 islaris/adequacy.v

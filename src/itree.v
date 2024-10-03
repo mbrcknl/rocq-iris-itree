@@ -5,6 +5,11 @@ From ITree Require Import TranslateFacts InterpFacts RecursionFacts.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.
 
+(* We need to define our own bind notation for ITrees following the
+std++ notation since [Import ITreeNotations.] leads to:
+Error: Level 61 is already declared to have left associativity while it is now
+expected to have right associativity. *)
+
 Notation "m ≫= f" := (ITree.bind f m) (at level 60, right associativity) : itree_scope.
 Notation "x ← y ; z" := (ITree.bind y (fun x : _ => z)%itree)
   (at level 20, y at level 100, z at level 200,
@@ -109,7 +114,7 @@ Proof.
   intros Heqit. apply eqit_flip. eapply eqit_mon; last apply Heqit; eauto. by intros.
 Qed.
 
-Lemma eutt_weak {E R} b1 b2 (t1 t2 : itree E R) :
+Lemma eutt_weak {E R} {b1 b2} {t1 t2 : itree E R} :
   eqit (=) b1 b2 t1 t2 →
   t1 ≈ t2.
 Proof.
@@ -184,7 +189,7 @@ Class TranslateReSum {E E1 E2} (Hin : E1 -< E2) (HE1 : E -< E1) (HE2 : E -< E2) 
 Global Hint Extern 5 (TranslateReSum _ _ _) => (constructor; constructor) : itree_auto.
 
 Record ITreeToTranslate {E1 E2 R} (i : itree E1 R) (H : E2 -< E1) (o : itree E2 R) := {
-    itree_to_translate : i ≅ translate (@resum _ _ _ _ H) o
+    itree_to_translate : i ≈ translate (@resum _ _ _ _ H) o
 }.
 Global Hint Mode ITreeToTranslate + + + ! + - : itree_auto.
 
@@ -286,6 +291,15 @@ Proof.
 Qed.
 Global Hint Resolve normalize_itree_interp_bind : itree_auto.
 
+Lemma normalize_itree_translate_bind {E F R S} p1 p2 (f : E ~>  F) (t1 t1' : itree E S) t2 (t' : itree _ R) :
+  NormalizeITree p1 t1 t1' →
+  NormalizeITree p2 (ITree.bind (translate f t1') (λ x, (translate f (t2 x)))) t' →
+  NormalizeITree true (translate f (ITree.bind t1 t2)) t'.
+Proof.
+  move => [Heq1] [Heq2]. constructor. by rewrite Heq1 -Heq2 translate_bind.
+Qed.
+Global Hint Resolve normalize_itree_translate_bind : itree_auto.
+
 Lemma normalize_itree_interp_Ret {E F R} (f : E ~> itree F) (x : R) :
   NormalizeITree true (interp f (Ret x)) (Ret x).
 Proof. constructor. by rewrite interp_ret. Qed.
@@ -303,6 +317,14 @@ Lemma normalize_itree_interp_trigger {E F R} p (f : ∀ T : Type, E T → itree 
   NormalizeITree true (interp f (trigger e)) t'.
 Proof. move => [Heq]. constructor. by setoid_rewrite interp_trigger. Qed.
 Global Hint Resolve normalize_itree_interp_trigger : itree_auto.
+
+Lemma normalize_itree_translate_trigger {E F R} (f : E -< F) (e : E R) :
+  NormalizeITree true (translate f (trigger e)) (trigger (f R e)).
+Proof. constructor. by setoid_rewrite translate_trigger. Qed.
+Global Hint Resolve normalize_itree_translate_trigger : itree_auto.
+(* Since unification in typeclass search sometimes struggles to instantiate [f]
+with [id] when [E = F], we add the following [Hint Extern]: *)
+Global Hint Extern 0 (NormalizeITree true (translate _ (trigger _)) _) => notypeclasses refine (normalize_itree_translate_trigger _ _) : itree_auto.
 
 (* TODO: generalize to more interp functions? *)
 Lemma normalize_itree_interp_recursive_translate {E R A B} f (t : itree (callE A B +' E) R) t' :
