@@ -36,6 +36,7 @@ src/heaplang/program_logic.v
 src/heaplang/adequacy.v
 src/heaplang/opsem_adequacy.v
 src/heaplang/interpreter.v
+src/heaplang/tactics.v
 src/examplelang/lang.v
 src/examplelang/program_logic.v
 

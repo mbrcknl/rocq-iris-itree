@@ -47,6 +47,16 @@ Definition yield_if_not_val (e : expr) {E} `{threadpoolE -< E} : itree E () :=
   end.
 Arguments yield_if_not_val !_ / _.
 
+Lemma yield_if_not_val_to_translate {E1 E2} (HE1 : threadpoolE -< E1) (HE2 : threadpoolE -< E2) (Hin : E1 -< E2) e :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (yield_if_not_val e) Hin (yield_if_not_val e).
+Proof.
+  move => ?. rewrite /yield_if_not_val. destruct (to_val e).
+  - apply Ret_to_translate.
+  - by apply yield_to_translate.
+Qed.
+Global Hint Resolve yield_if_not_val_to_translate : itree_auto.
+
 Lemma fill_item_not_val Ki e :
   yield_if_not_val (fill_item Ki e) ≈ (yield : itree heaplangE ()).
 Proof.
@@ -102,15 +112,25 @@ Definition val_to_sum (v : val) : option (val + val) :=
   | _ => None
   end.
 
+(** Do a step and then return [v]. This is used to ensure that the
+postcondition is asserted under a later modality. *)
+Definition step_ret {E} `{stepE -< E} (v : val) : itree E val :=
+  step.step ;; Ret v.
+
+Lemma step_ret_to_translate {E1 E2} (HE1 : stepE -< E1) (HE2 : stepE -< E2) (Hin : E1 -< E2) v :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (step_ret v) Hin (step_ret v).
+Proof.
+  move => ?. rewrite /step_ret. apply bind_to_translate.
+  - by apply step_to_translate.
+  - intros _. apply Ret_to_translate.
+Qed.
+Global Hint Resolve step_ret_to_translate : itree_auto.
+
 Section semantics.
   (* We first define some abstractions for manipulating memory that we can
   reuse in the definition of the semantics of heaplang ([compile_expr]). In
   turn, we also get to reuse reasoning principles about these abstractions. *)
-
-  (** Do a step and then return [v]. This is used to ensure that the
-  postcondition is asserted under a later modality. *)
-  Definition step_ret {E} `{stepE -< E} (v : val) : itree E val :=
-    step.step ;; Ret v.
 
   (** The semantic interpretation of [e], before rectifying the recursive
   calls.

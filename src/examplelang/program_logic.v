@@ -146,7 +146,7 @@ Section wp.
   Proof.
     iIntros (Hmask) "Hwand".
     rewrite wp_unfold /compile_expr. wpi_norm/=.
-    iApply wpi_bind. Set Typeclasses Debug. wpi_norm. iApply @wpi_alloc; first done.
+    iApply wpi_bind. wpi_norm. iApply @wpi_alloc; first done.
     iIntros (l) "Hpointsto". iApply wpi_ret.
     by iApply "Hwand".
   Qed.

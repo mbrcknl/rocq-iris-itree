@@ -87,7 +87,7 @@ Section wp.
   [WP e @ m ; M {{ Φ }}] for [M ≠ ⊤] when [e] is not atomic. Another
   perspective is that we need [⊤] mask to account for the [yield] in the
   "semantic bind lemma" [compile_expr_bind]. *)
-  Lemma wp_bind_K m K e Φ :
+  Lemma wp_bind m K e Φ :
     WP e @ m; ⊤ {{ v,
       WP fill K (Val v) @ m; ⊤ {{ Φ }}
     }} -∗
