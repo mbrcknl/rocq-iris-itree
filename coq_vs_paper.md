@@ -19,7 +19,7 @@
 - The effect "Conc" in the paper is called `threadpool` in our Coq formalization.
   * The threadpool event and handler are found in `threadpool/handler.v`.
   * The concurrency adequacy theorem `ConcAdequate` is proven and thoroughly explained in
-    `threadpool/interleaving.v` (lemma name: `threadpool_adequacy`).
+    `threadpool/interleaving.v` (theorem name: `threadpool_adequacy`).
 - The infrastructure for state machine adequacy is in `exec.v`:
   * The multi-step relation is called `exec`. Note that this relation and other definitions in this
     file are more complex than described in the paper to support concurrency.
@@ -28,6 +28,14 @@
   * `sound(H, I)` is called `seHandlerAdequate` (or `eHandlerAdequate` for concurrent handlers). The
     invariant `I` is called `sehandler_inv` (resp. `ehandler_inv`).
   * The theorem `StateMachineAdeqate` corresponds to `wpi_adequate`.
+
+# ExampleLang
+All the files pertaining to our ExampleLang example are in the `src/examplelang/` directory.
+
+- The language definition of ExampleLang is in `lang.v`.
+- The denotation of ExampleLang is `compile_expr` in `lang.v`.
+- The rules of Figure 2 and Figure 4, and `WpPickInt` in Figure 6 are stated and proven in
+  `program_logic.v`.
 
 # HeapLang
 All the files pertaining to our HeapLang case study are in the `src/heaplang/` directory.
