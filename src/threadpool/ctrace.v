@@ -5,7 +5,6 @@ From stdpp Require Import list.
 From iris.itree.threadpool Require Import handler interleaving scheduler.
 From iris.itree Require Import axioms itree.
 From iris.itree Require Export trace.
-Import Coq.Logic.ClassicalChoice.
 
 (** A variant of [trace] tailored specifically for [threadpoolE] ("concurrent
 trace").
@@ -543,7 +542,7 @@ Section interleaving.
     - exists (Ret (inl r)). eexists. split; first done. destruct Heqot. constructor.
     - apply exists_Vis with (t := t) (k := k); eauto.
       (* FIXME: Get rid of manual instantiation of [R]. *)
-      apply choice with (R := (λ a' k_inta', interleaves tid (<[tid:=k a']>tp) (k_inta') ∧ (a = a' → extends_ctrace_ tr' tid (observe (k a')) (<[tid:=k a']>tp) (observe (k_inta'))))).
+      apply AxChoice with (R := (λ a' k_inta', interleaves tid (<[tid:=k a']>tp) (k_inta') ∧ (a = a' → extends_ctrace_ tr' tid (observe (k a')) (<[tid:=k a']>tp) (observe (k_inta'))))).
       intros a'. destruct (equal e a a') as [<-|Hneq].
       * unshelve epose (IH (k a) _ _) as Hext; eauto.
         (* FIXME: These two tactics are repeated a lot. Would make sense to automate. *)

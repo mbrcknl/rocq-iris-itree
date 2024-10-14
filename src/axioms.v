@@ -19,3 +19,6 @@ Ltac simplify_K :=
   | H : existT _ _ = existT _ _ |- _ =>
      apply UIPM.inj_pair2 in H
   end; simplify_eq.
+
+(* Functional form of the (non extensional) axiom of choice, Choice (`FunctionalChoice` of `Coq.Logic.ChoiceFacts`)*)
+Axiom AxChoice : ∀ A B, FunctionalChoice_on A B.
