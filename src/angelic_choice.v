@@ -53,7 +53,7 @@ Section wp.
   Context {E : Type → Type} `{H : iHandler Σ E} `{!angelicE -< E} `{!inH angelicH H}.
   Context `{!invGS_gen hlc Σ}.
 
-  Lemma wpi_angelic {R A} k a M (Φ : R → iProp Σ) :
+  Lemma wpi_angelic_vis {R A} k a M (Φ : R → iProp Σ) :
     WPi k a @ H; M {{ Φ }} -∗
     WPi (vis (EAngelic A) k) @ H; M {{ Φ }}.
   Proof.
@@ -63,11 +63,11 @@ Section wp.
     iEval (rewrite -wpi_update). iMod "Hfupd". rewrite wpi_clear_mask //.
   Qed.
 
-  Lemma wpi_angelic_trigger {A} M a (Φ : A → iProp Σ) :
+  Lemma wpi_angelic {A} `{EqDecision A} `{Inhabited A} M a (Φ : A → iProp Σ) :
     Φ a -∗
-    WPi (trigger (EAngelic A)) @ H; M {{ Φ }}.
+    WPi angelic_choice A @ H; M {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_angelic. iApply wpi_ret. iApply "Hwp".
+    iIntros "Hwp". iApply wpi_angelic_vis. iApply wpi_ret. iApply "Hwp".
   Qed.
 End wp.
 

@@ -292,7 +292,7 @@ Section is_ctrace.
 
   (** Step over an [EYield]. *)
   Lemma is_ctrace_yield tid tid' (tp : list (itree (threadpoolE +' E) R)) tr t :
-    tp !! tid = Some (ITree.bind (trigger EYield) (λ _, t))%itree →
+    tp !! tid = Some (ITree.bind yield (λ _, t))%itree →
     is_ctrace tr tid' (<[tid := t]>tp) →
     is_ctrace (CTYield tid' tr) tid tp.
   Proof.

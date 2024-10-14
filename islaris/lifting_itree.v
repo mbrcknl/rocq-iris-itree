@@ -233,9 +233,9 @@ Section lifting.
     (state_link σ -∗ Φ σ) -∗
     WPi get_state @ islaH;⊤ {{Φ}}.
   Proof.
-    iIntros "Hσ HΦ". rewrite /get_state. iApply @wpi_get.
+    iIntros "Hσ HΦ". rewrite /get_state. iApply @wpi_get_state.
     iIntros (?) "Hs !>". iDestruct (state_link_agree with "[$] [$]") as %->.
-    iFrame. iApply wpi_ret. by iApply "HΦ".
+    iFrame. by iApply "HΦ".
   Qed.
 
   Lemma wpi_set_state_isla σ σ' Φ :
@@ -243,9 +243,9 @@ Section lifting.
     (state_link σ' -∗ Φ tt) -∗
     WPi set_state σ' @ islaH;⊤ {{Φ}}.
   Proof.
-    iIntros "Hσ HΦ". rewrite /set_state. iApply @wpi_set.
+    iIntros "Hσ HΦ". iApply @wpi_set_state.
     iIntros (?) "Hs". iMod (state_link_update with "[$] [$]") as "[$ ?]". iModIntro.
-    iApply wpi_ret. by iApply "HΦ".
+    by iApply "HΦ".
   Qed.
 
   Lemma wpi_read_reg r al σ Φ :

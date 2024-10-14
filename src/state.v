@@ -21,6 +21,11 @@ Inductive stateE (S : Type) : Type → Type :=
 Arguments EGetState {_}.
 Arguments ESetState {_} _.
 
+Definition get_state {S} `{stateE S -< E} : itree E S :=
+  trigger EGetState.
+Definition set_state {S} `{stateE S -< E} (x : S) : itree E unit :=
+  trigger (ESetState x).
+
 Global Instance AnswerEqDecision_stateE {S} `{EqDecision S} :
   AnswerEqDecision (stateE S).
 Proof. intros A [|x]; apply _. Qed.
@@ -58,28 +63,26 @@ Section wp_state.
   Context `{!stateInterp Σ S}.
   Context {H : iHandler Σ E} `{stateE S -< E} `{inH Σ (stateE S) E (stateH S) H}.
 
-  Lemma wpi_get {R} (k : S → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    (∀ s, state_interp s ={M}=∗ state_interp s ∗ WPi (k s) @ H; M {{ Φ }}) -∗
-    WPi (vis EGetState k) @ H; M {{ Φ }}.
+  Lemma wpi_get_state (M : coPset) (Φ : S → iProp Σ) :
+    (∀ s, state_interp s ={∅}=∗ state_interp s ∗ Φ s) -∗
+    WPi get_state @ H; M {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_vis.
+    iIntros "HΦ". iApply wpi_vis.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iApply is_inH.
-    rewrite /stateH. iIntros (s) "Hs". iDestruct ("Hwp" with "Hs") as "Hswp".
-    iMod "Hfupd" as "_". iMod "Hswp". iDestruct "Hswp" as "[Hwp Hs]". iFrame.
-    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iApply wpi_update. iMod "Hfupd". rewrite wpi_clear_mask //.
+    simpl. iIntros (s) "Hs".
+    iMod ("HΦ" with "Hs") as "[Hs HΦ]".
+    iFrame. iApply wpi_ret. iModIntro. by iMod "Hfupd".
   Qed.
 
-  Lemma wpi_set {R} (s' : S) (k : unit → itree E R) (M : coPset) (Φ : R → iProp Σ) :
-    (∀ s, state_interp s ={M}=∗ state_interp s' ∗ WPi (k tt) @ H; M {{ Φ }}) -∗
-    WPi (vis (ESetState s') k) @ H; M {{ Φ }}.
+  Lemma wpi_set_state (s' : S) (M : coPset) (Φ : unit → iProp Σ) :
+    (∀ s, state_interp s ={∅}=∗ state_interp s' ∗ Φ ()) -∗
+    WPi set_state s' @ H; M {{ Φ }}.
   Proof.
-    iIntros "Hwp". iApply wpi_vis.
+    iIntros "HΦ". iApply wpi_vis.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd". iApply is_inH.
-    rewrite /stateH. iIntros (s) "Hs". simpl. iMod "Hfupd" as "_".
-    iDestruct ("Hwp" with "Hs") as ">[Hs Hwp]". iFrame.
-    iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    rewrite -wpi_clear_mask. iApply wpi_update. iMod "Hfupd". by iMod "Hwp".
+    simpl. iIntros (s) "Hs".
+    iMod ("HΦ" with "Hs") as "[Hs HΦ]".
+    iFrame. iApply wpi_ret. iModIntro. by iMod "Hfupd".
   Qed.
 End wp_state.
 

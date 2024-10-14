@@ -19,8 +19,8 @@ Notation heapE V := (stateE (heap V)).
 the memory cell at [l] is currently free. If [x = None], [l] gets
 deallocated. *)
 Definition store' `{!heapE V -< E} (l : loc) (x : option V) : itree E (option V) :=
-  σ ← trigger EGetState;
-  trigger (ESetState (<[l:=x]> σ));;
+  σ ← get_state;
+  set_state (<[l:=x]> σ);;
   Ret match σ !! l with
   | Some (Some v) => Some v
   | _ => None
@@ -30,7 +30,7 @@ Definition store `{!heapE V -< E} (l : loc) (x : V) : itree E (option V) :=
   store' l (Some x).
 (** Load memory cell [l]. *)
 Definition load `{!heapE V -< E} (l : loc) : itree E (option V) :=
-  σ ← trigger EGetState;
+  σ ← get_state;
   Ret match σ !! l with
   | Some (Some v) => Some v
   | _ => None
@@ -193,11 +193,11 @@ Qed.
 
 Definition allocN `{!heapE V -< E} (n : nat) (v : V) : itree E loc :=
   (* Read the entire heap. *)
-  σ ← trigger EGetState;
+  σ ← get_state;
   (* Deterministically pick a free location on the heap. *)
   let l : free_locations n σ := inhabitant in
     (* Write the evaluated value [v] to every memory cell in that segment. *)
-    trigger (ESetState ((heap_array (`l) (replicate n v)) ∪ σ));;
+    set_state ((heap_array (`l) (replicate n v)) ∪ σ);;
     Ret (`l).
 
 Lemma allocN_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (Hin : E1 -< E2) n v :
@@ -213,11 +213,11 @@ Global Hint Resolve allocN_to_translate : itree_auto.
 
 Definition allocN_nondet `{!heapE V -< E} `{demonicE -< E} (n : nat) (v : V) : itree E loc :=
   (* Read the entire heap. *)
-  σ ← trigger EGetState;
+  σ ← get_state;
   (* Demonically pick a free location of the heap. *)
   l ← demonic_choice (free_locations n σ);
   (* Write the evaluated value [v] to every memory cell in that segment. *)
-  trigger (ESetState ((heap_array (`l) (replicate n v)) ∪ σ));;
+  set_state ((heap_array (`l) (replicate n v)) ∪ σ);;
   Ret (`l).
 
 Lemma allocN_nondet_to_translate {E1 E2 V} (HE1 : heapE V -< E1) (HE2 : heapE V -< E2) (HE1' : demonicE -< E1) (HE2' : demonicE -< E2) (Hin : E1 -< E2) n v :
@@ -318,11 +318,11 @@ Section wp.
     WPi load l @ H; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    iApply wpi_bind. iApply @wpi_get.
+    iApply wpi_bind. iApply @wpi_get_state.
     iIntros (s) "[Hauth #Hinv]".
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %Hlu.
     iFrame. iFrame "Hinv".
-    iApply wpi_ret. rewrite Hlu. iModIntro. wpi_norm. iApply wpi_ret. by iApply "Hwand".
+    iApply wpi_ret. rewrite Hlu. by iApply "Hwand".
   Qed.
 
   Lemma wpi_store' M l v v' Φ :
@@ -332,15 +332,15 @@ Section wp.
     WPi store' l v' @ H; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand". iApply wpi_clear_mask.
-    iApply @wpi_bind. iApply @wpi_get.
+    iApply @wpi_bind. iApply @wpi_get_state.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
     iIntros (σ) "[Hauth' #Hinv]". iMod "Hfupd" as "_".
     iMod (inv_acc_timeless _ with "Hinv") as "[[%σ' Hauth] Hclose]"; first done.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %->.
-    iFrame "Hinv Hauth'". iApply wpi_ret.
+    iFrame "Hinv Hauth'".
     iDestruct (ghost_map_lookup with "Hauth Hpointsto") as %Heq. rewrite Heq.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "[Hauth' _]".
+    iApply wpi_bind. iApply @wpi_set_state. iIntros (σ'') "[Hauth' _]".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     iDestruct (ghost_map_update v' with "Hauth Hpointsto") as ">[[Hauth Hauth'] Hpointsto]".
@@ -383,14 +383,14 @@ Section wp.
     WPi allocN n v @ H; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hwand". iApply wpi_clear_mask.
-    iApply wpi_bind. iApply wpi_get.
+    iApply wpi_bind. iApply wpi_get_state.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
     iIntros (σ) "[Hauth #Hinv]". iMod "Hfupd" as "_".
     iMod (inv_acc_timeless _ with "Hinv") as "[[%σ' Hauth'] Hclose]"; first done.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iFrame "Hauth' Hinv".
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iApply wpi_ret. iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "[Hauth' _]".
+    iApply wpi_bind. iApply @wpi_set_state. iIntros (σ'') "[Hauth' _]".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     destruct (inhabitant : free_locations n σ) as [l Hfree].
@@ -430,15 +430,15 @@ Section wp_nondet.
     WPi allocN_nondet n v @ H; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hwand". iApply wpi_clear_mask.
-    iApply wpi_bind. iApply wpi_get.
+    iApply wpi_bind. iApply wpi_get_state.
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
     iIntros (σ) "[Hauth #Hinv]". iMod "Hfupd" as "_".
     iMod (inv_acc_timeless _ with "Hinv") as "[[%σ' Hauth'] Hclose]"; first done.
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iFrame "Hauth' Hinv".
     iApply fupd_mask_intro; first apply empty_subseteq. iIntros "Hfupd".
-    iApply wpi_ret. iApply wpi_bind. iApply @wpi_demonic. iIntros ([l Hfree]).
-    iApply wpi_bind. iApply @wpi_set. iIntros (σ'') "[Hauth' _]".
+    iApply wpi_bind. iApply @wpi_demonic. iIntros ([l Hfree]).
+    iApply wpi_bind. iApply @wpi_set_state. iIntros (σ'') "[Hauth' _]".
     iDestruct (ghost_map_auth_agree with "Hauth Hauth'") as %<-.
     iCombine "Hauth Hauth'" as "Hauth".
     simpl. apply bool_decide_unpack in Hfree.

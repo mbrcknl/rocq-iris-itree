@@ -180,7 +180,7 @@ Section wp.
     iIntros "Hwp". rewrite !wp_unfold.
     rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iDestruct "Hwp" as "[%n HΦ]". iApply @wpi_angelic.
-    iApply wpi_ret. by iApply wpi_ret.
+    by iApply wpi_ret.
   Qed.
 
   Lemma wp_spawn E e Φ :
