@@ -166,13 +166,12 @@ Section stateH_adequacy.
       + done.
       + clear REL REL0. by pclearbot.
     - do 2 simplify_K. pclearbot. inversion Heval. constructor. right.
-      destruct H4 as [H4|X]; [|contradiction X].
-      pclearbot. eapply CIH; last apply H4; first reflexivity.
+      eapply CIH; last apply H4; first reflexivity.
       * apply REL.
       * apply REL0.
     - do 2 simplify_K. pclearbot. inversion Heval. constructor. right.
-      destruct (H5 a) as [H5'|X]; [|contradiction X]. simplify_K.
-      eapply CIH; last apply H5'; first reflexivity.
+      destruct (H5 a); [|contradiction]. simplify_K.
+      eapply CIH; last done; first reflexivity.
       * apply REL.
       * apply REL0.
   Qed.

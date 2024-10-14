@@ -8,6 +8,7 @@ depends: [
   "coq-iris" { (= "dev.2024-08-30.0.efb542b0") | (= "dev") }
   "coq-itree" { (= "5.1.2") }
   "coq-elpi" { (= "2.0.1") }
+  "coq-paco" { (= "4.2.1") }
   "coq-stdpp-unstable"
   "coq-record-update"
 ]
