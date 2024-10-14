@@ -494,11 +494,11 @@ Section wp_or_ub.
 
   Lemma wpi_store_or_ub M l v v' Φ :
     ↑heapH_inv_name ⊆ M →
-    l ↦? v -∗
+    l ↦ v -∗
     (l ↦ v' -∗ Φ v) -∗
-    WPi store l v' @ H; M {{ Φ }}.
+    WPi store_or_ub l v' @ H; M {{ Φ }}.
   Proof.
     iIntros (Hmask) "Hpointsto Hwand".
-    by iApply (wpi_store with "Hpointsto").
+    by iApply (wpi_store'_or_ub with "Hpointsto Hwand").
   Qed.
 End wp_or_ub.

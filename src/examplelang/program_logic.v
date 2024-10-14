@@ -162,6 +162,17 @@ Section wp.
     by iApply (@wpi_load_or_ub with "Hmapsto").
   Qed.
 
+  Lemma wp_store E l v v' Φ :
+    ↑heapH_inv_name ⊆ E →
+    l ↦ v -∗
+    (l ↦ v' -∗ Φ v) -∗
+    WP Store (Val $ LitV $ LitLoc l) (Val v') @ E {{ Φ }}.
+  Proof.
+    iIntros (Hmask) "Hmapsto Hwand".
+    rewrite wp_unfold /compile_expr. wpi_norm/=.
+    by iApply (@wpi_store_or_ub with "Hmapsto").
+  Qed.
+
   Lemma wp_pick_int E Φ :
     (∃ n, Φ (LitV (LitInt n))) -∗
     WP PickInt @ E {{ Φ }}.
