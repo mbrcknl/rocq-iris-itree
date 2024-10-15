@@ -233,7 +233,7 @@ Section stateH_adequacy.
   Theorem state_adequacy s t t' M Φ :
     state_irel s t t' →
     state_interp s -∗
-    WPi t @ stateH S ⊕ H; M {{ v, Φ v }} -∗
+    WPi t @ stateH S ⊕ H; M {{ Φ }} -∗
     WPi t' @ H; M {{ x, let (s, v) := x in state_interp s ∗ Φ v }}.
   Proof.
     iIntros (Heval) "Hstate Hwp". rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
@@ -372,3 +372,5 @@ Next Obligation.
   - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
   - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
 Qed.
+
+

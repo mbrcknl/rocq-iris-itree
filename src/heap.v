@@ -502,3 +502,46 @@ Section wp_or_ub.
     by iApply (wpi_store'_or_ub with "Hpointsto Hwand").
   Qed.
 End wp_or_ub.
+
+Definition heap_irel {V E R} :
+  heap V → itree (heapE V +' E) R → itree E (heap V * R) → Prop :=
+  state_irel.
+
+Definition heap_ifn {V E R} :
+  heap V → itree (heapE V +' E) R → itree E (heap V * R) :=
+  state_ifn.
+
+Lemma heap_ifn_irel {V E R} (σ : heap V) (t : itree (heapE V +' E) R) :
+  heap_irel σ t (heap_ifn σ t).
+Proof. apply state_ifn_irel. Qed.
+
+Section adequacy.
+  Context {V : Type} {E : Type → Type} `{!invGS_gen hlc Σ} `{!heapHGS Σ V}.
+  Context {H : iHandler Σ E} `{!Sequential H}.
+  Context {R : Type}.
+
+  Theorem heap_adequacy σ (t : itree (heapE V +' E) R) t' M Φ :
+    heap_irel σ t t' →
+    state_interp σ -∗
+    WPi t @ heapH V ⊕ H; M {{ Φ }} -∗
+    WPi t' @ H; M {{ x, let (σ, v) := x in state_interp σ ∗ Φ v }}.
+  Proof.
+    apply state_adequacy.
+  Qed.
+
+  (*
+  Theorem heap_adequacy σ (t : itree (heapE V +' E) R) t' M Φ :
+    heap_irel σ t t' →
+    heap_inv V -∗
+    ghost_map_auth heapH_heap_name (1 / 2) σ -∗
+    WPi t @ heapH V ⊕ H; M {{ Φ }} -∗
+    WPi t' @ H; M {{ x, let (σ, v) := x in ghost_map_auth heapH_heap_name (1 / 2) σ ∗ Φ v }}.
+  Proof.
+    iIntros (Hirel) "#Hinv Hσ Hwp".
+    iDestruct (state_adequacy σ t with "[Hσ] Hwp") as "Hwp".
+    - done.
+    - by iFrame.
+    - iApply wpi_wand; last done. iIntros ([σ' r]) "[[Hs _] HΦ]". iFrame.
+  Qed.
+  *)
+End adequacy.

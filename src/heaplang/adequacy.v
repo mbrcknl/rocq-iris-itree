@@ -110,7 +110,7 @@ Section adequacy.
     iIntros ((?&?&?&?&?&->&?&?&->)) "Hlc Hs Hwp".
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; [done|].
     iDestruct (ub_adequacy with "Hwp") as "Hwp".
-    iDestruct (state_adequacy with "Hs Hwp") as "Hwp"; [done|].
+    iDestruct (heap_adequacy with "Hs Hwp") as "Hwp"; [done|].
     iDestruct (demonic_adequacy with "Hwp") as "Hwp"; [done|].
     rewrite -wpi_clear_mask. iMod "Hwp".
     iDestruct (wpi_insert_voidE with "Hwp") as "Hwp".

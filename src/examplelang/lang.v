@@ -19,6 +19,7 @@ Inductive expr :=
   | Load (e : expr)
   | Store (e1 e2 : expr)
   | PickInt
+  | AngelicPickInt
   | Spawn (e : expr)
 with val :=
   | LitV (l : base_lit)
@@ -38,6 +39,7 @@ Fixpoint subst (x : string) (v : val) (e : expr) : expr :=
   | Load e => Load (subst x v e)
   | Store e1 e2 => Store (subst x v e1) (subst x v e2)
   | PickInt => PickInt
+  | AngelicPickInt => AngelicPickInt
   | Spawn e => Spawn (subst x v e)
   end.
 
@@ -122,6 +124,9 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' exampleE) val :=
       l ← (val_to_loc l')?;
       store_or_ub l v
   | PickInt =>
+      n ← demonic_choice Z;
+      Ret (LitV (LitInt n))
+  | AngelicPickInt =>
       n ← angelic_choice Z;
       Ret (LitV (LitInt n))
   | Spawn e =>

@@ -174,8 +174,18 @@ Section wp.
   Qed.
 
   Lemma wp_pick_int E Φ :
-    (∃ n, Φ (LitV (LitInt n))) -∗
+    (∀ n, Φ (LitV (LitInt n))) -∗
     WP PickInt @ E {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_unfold.
+    rewrite /compile_expr. wpi_norm/=.
+    iApply wpi_bind. iApply @wpi_demonic.
+    iIntros (n). by iApply wpi_ret.
+  Qed.
+
+  Lemma wp_angelic_pick_int E Φ :
+    (∃ n, Φ (LitV (LitInt n))) -∗
+    WP AngelicPickInt @ E {{ Φ }}.
   Proof.
     iIntros "Hwp". rewrite !wp_unfold.
     rewrite /compile_expr. wpi_norm/=.

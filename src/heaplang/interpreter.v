@@ -1,14 +1,14 @@
 From ITree Require Import ITree Eqit.
 From iris Require Import invariants ghost_map.
 From iris.proofmode Require Import proofmode.
-From iris.itree Require Import wpi ub itree choice state handler void interpreter step.
+From iris.itree Require Import wpi ub itree choice heap handler void interpreter step.
 From iris.itree.threadpool Require Import handler interleaving scheduler.
 From iris.itree.heaplang Require Import lang adequacy.
 
 (** Interpretation function for [heaplangE], obtained compositionally by
 composing interpretation functions for the various event types. *)
 Definition heaplang_ifn {R} (σ : heaplang_heap) (step_fuel : option nat) (t : itree heaplangE R) : Execution R :=
-  step_ifn step_fuel (insert_voidE (demonic_ifn (state_ifn σ (ub_ifn (threadpool_ifn t))))).
+  step_ifn step_fuel (insert_voidE (demonic_ifn (heap_ifn σ (ub_ifn (threadpool_ifn t))))).
 
 (** The function [heaplang_ifn] instantiates the relation [heaplang_irel]. *)
 Lemma heaplang_ifn_irel {R} (t : itree heaplangE R) (σ : heaplang_heap) (step_fuel : option nat) :
@@ -17,7 +17,7 @@ Proof.
   eexists. eexists. eexists. eexists.
   split; first apply threadpool_ifn_irel.
   split; first apply ub_ifn_irel.
-  split; first apply state_ifn_irel.
+  split; first apply heap_ifn_irel.
   split; first apply demonic_ifn_irel.
   apply step_ifn_irel.
 Qed.
