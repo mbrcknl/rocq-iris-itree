@@ -114,7 +114,7 @@ Section adequacy.
     iDestruct (demonic_adequacy with "Hwp") as "Hwp"; [done|].
     rewrite -wpi_clear_mask. iMod "Hwp".
     iDestruct (wpi_insert_voidE with "Hwp") as "Hwp".
-    iDestruct (step_adequacy_empty with "Hlc Hwp") as "Hwp".
+    iDestruct (step_adequacy_empty with "Hlc Hwp") as "Hwp"; first done.
     iApply void_adequacy_empty.
     iApply wpi_wand; last done.
     iIntros (?) "HΦ". repeat case_match; eauto.

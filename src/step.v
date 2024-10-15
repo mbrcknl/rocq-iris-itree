@@ -166,12 +166,13 @@ Section adequacy.
   Context `{!invGS Σ} {H : iHandler Σ E}.
 
   (** Adequacy for [stepH]. *)
-  Theorem step_adequacy_empty (t : itree (stepE +' E) R) m Φ n `{!Sequential H}:
+  Theorem step_adequacy_empty (t : itree (stepE +' E) R) t' m Φ n `{!Sequential H}:
+    step_irel n t t' →
     (* When the [Later] modality is enabled, we need [£ n] so that we can strip
     [n] laters in the goal. *)
     (⌜m = Later⌝ → match n with Some n => £ n | None => False end) -∗
     WPi t @ stepH m ⊕ H; ∅ {{ Φ }} -∗
-    WPi step_ifn n t @ H; ∅ {{ r,
+    WPi t' @ H; ∅ {{ r,
       match r with
       | inl r => Φ r
       (* We can only exhaust laters if we set a timeout in the first place. *)
@@ -179,7 +180,7 @@ Section adequacy.
       end
     }}.
   Proof.
-    iIntros "Hlc Hwp". iRevert (n) "Hlc".
+    iIntros (->) "Hlc Hwp". iRevert (n) "Hlc".
     iRevert (t Φ) "Hwp". iApply wpi_iter'; first solve_proper.
     - iIntros "!>" (Φ t) "Hwp". iIntros (n) "Hlc".
       rewrite step_ifn_unfold /step_ifn_loop/=. wpi_norm. by iApply wpi_ret'.
