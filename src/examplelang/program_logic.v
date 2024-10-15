@@ -34,7 +34,7 @@ Section handler.
   Qed.
 End handler.
 
-(** Weakest precondition abstraction for heaplang expressions. *)
+(** Weakest precondition abstraction for ExampleLang expressions. *)
 lock Definition wp_example `{!invGS_gen hlc Σ} `{!exampleHGS Σ} :
   Wp (iProp Σ) expr val stuckness := λ _ E e Φ,
     (WPi compile_expr e @ exampleH; E {{ Φ }})%I.
@@ -47,6 +47,14 @@ Section wp.
     WP e @ E {{ Φ }} ⊣⊢
     WPi compile_expr e @ exampleH; E {{ Φ }}.
   Proof. by rewrite unlock. Qed.
+
+  Lemma wp_atomic E1 E2 e Φ :
+    (|={E1,E2}=> WP e @ E2 {{ v, |={E2,E1}=> Φ v }}) ⊢ WP e @ E1 {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_unfold.
+    setoid_rewrite <- wpi_clear_mask. iMod "Hwp".
+    iApply wpi_wand; last done. iIntros (r) "HΦ". by iMod "HΦ".
+  Qed.
 
   Lemma wp_wand E e Φ Ψ :
     (∀ v, Φ v -∗ Ψ v) -∗
