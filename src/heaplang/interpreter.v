@@ -44,6 +44,10 @@ Definition heaplang_interpreter σ (fuel : nat) (step_fuel : option nat) (e : ex
   | Some x => inl x
   end.
 
+Compute heaplang_interpreter inhabitant 99 None (BinOp PlusOp (Val (LitV $ LitInt 1)) (Val (LitV $ LitInt 1))).
+Compute heaplang_interpreter inhabitant 99 None (Load (AllocN (Val (LitV $ LitInt 1)) (Val (LitV $ LitInt 42)))).
+Compute heaplang_interpreter inhabitant 99 None (CmpXchg (AllocN (Val (LitV $ LitInt 1)) (Val (LitV $ LitInt 42))) (Val (LitV $ LitInt 42)) (Val (LitV $ LitInt 43))).
+
 (** The interpreter produces an execution. *)
 Lemma heaplang_interpreter_execution e σ fuel step_fuel x :
   heaplang_interpreter σ fuel step_fuel e = inl x →
