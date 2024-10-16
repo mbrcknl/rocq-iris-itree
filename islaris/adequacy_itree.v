@@ -163,11 +163,11 @@ Proof.
     apply isla_exec_not_stuck => ?? Hls. rewrite right_id_L. split; [|done].
     move => ? /elem_of_list_singleton ->. by apply Hls.
   - move => n IH ls ls' gs κs κs' ? Hs HPκs -> ??. destruct ls; simplify_eq/=.
-    rewrite /compile_trace. exec_norm/=. rewrite {2}/compile_trace'.
-    exec_bind. apply: exec_trigger => /=. eexists _. split; [done|].
+    rewrite /compile_trace. exec_norm/=.
     exec_norm/=. inv Hs. revert select (step _ _ _) => /step_singleton_inv[?[? [? [Hs ?]]]].
     inv Hs; simplify_eq/=. rename select (trace_step _ _ _ _) into Hs.
     inv Hs; simplify_eq/=; destruct_and?; rewrite_eq_Some; simplify_eq/=; exec_norm/=.
+    all: exec_bind; apply: exec_trigger => /=; eexists _; split; [done|].
     + exec_bind. apply: exec_trigger => /=. eexists _.
       exec_bind. apply: exec_assume => //=. move => ?.
       exec_norm/=. rewrite interp_recursive_call.
@@ -179,25 +179,25 @@ Proof.
     + exec_norm/=. rewrite interp_recursive_call. by eapply IH.
     + exec_norm/=. destruct b.
       * exec_bind. apply: exec_assume; [done|] => ?.
-        exec_norm. rewrite interp_recursive_call. by eapply IH.
+        exec_norm. rewrite -rec_as_interp. by eapply IH.
       * apply exec_stop. ogeneralize* nsteps_nb; [done..|] => -[-> [-> ->]].
         rewrite right_id_L. split; [|done] => ? /elem_of_list_singleton->.
         by repeat econstructor.
     + exec_bind. apply: exec_trigger => /=.
       exec_norm/=. rewrite_eq_Some.
       exec_bind. apply: exec_assert => ?.
-      exec_norm/=. rewrite interp_recursive_call. by eapply IH.
+      exec_norm/=. rewrite -rec_as_interp. by eapply IH.
     + exec_bind. apply: isla_exec_read_reg => /=????.
       revert select (∃ _, _) => -[??]. destruct_and!. simplify_eq/=.
       exec_bind. apply: exec_assert => ?. simplify_eq/=.
-      exec_norm/=. rewrite interp_recursive_call. by eapply IH.
+      exec_norm/=. rewrite -rec_as_interp. by eapply IH.
     + revert select (∃ _, _) => -[?[?[?[?[?[?[?[? Hor]]]]]]]]. simplify_eq/=.
       rewrite /read_reg. exec_bind. apply: exec_trigger => /=.
       exec_norm/=. rewrite_eq_Some.
       exec_norm/=. rewrite_eq_Some.
       exec_norm/=. destruct Hor as [[??]|?]; simplify_eq.
       * exec_bind. apply: exec_assume; [done|] => ?.
-        exec_norm/=. rewrite interp_recursive_call. by eapply IH.
+        exec_norm/=. rewrite -rec_as_interp. by eapply IH.
       * apply exec_stop. ogeneralize* nsteps_nb; [done..|] => -[-> [-> ->]].
         rewrite right_id_L. split; [|done] => ? /elem_of_list_singleton->.
         by repeat econstructor.
@@ -208,7 +208,7 @@ Proof.
       exec_norm/=. rewrite_eq_Some.
       exec_norm/=. rewrite_eq_Some.
       exec_bind. apply: exec_trigger => /=.
-      exec_norm/=. rewrite interp_recursive_call. by eapply IH.
+      exec_norm/=. rewrite -rec_as_interp. by eapply IH.
     + revert select (∃ _, _) => -[?[?[??]]]. destruct_and!. simplify_eq/=.
       exec_norm/=. rewrite bvn_to_bv_to_bvn.
       exec_norm/=. rewrite /read_mem_checked.
@@ -218,14 +218,14 @@ Proof.
       * exec_norm/=. rewrite bvn_to_bv_to_bvn.
         exec_norm/=. revert select (_ ∨ _) => -[[??]|?]; simplify_eq.
         -- exec_bind. apply: exec_assume => // ?.
-           exec_norm/=. rewrite interp_recursive_call. by eapply IH.
+           exec_norm/=. rewrite -rec_as_interp. by eapply IH.
         -- apply exec_stop. ogeneralize* nsteps_nb; [done..|] => -[-> [-> ->]].
            rewrite right_id_L. split; [|done] => ? /elem_of_list_singleton->.
            by repeat econstructor.
       * exec_bind. apply: exec_assert => /= ?.
         exec_bind. apply: exec_assert => /= ?.
         exec_bind. apply: exec_trigger => /= ?.
-        exec_norm/=. rewrite interp_recursive_call.
+        exec_norm/=. rewrite -rec_as_interp.
         rewrite (cons_middle _ _ κs0) app_assoc. by eapply IH.
     + revert select (∃ _, _) => -[?[?[??]]]. destruct_and!. simplify_eq/=.
       exec_norm/=. rewrite bvn_to_bv_to_bvn.
@@ -235,16 +235,16 @@ Proof.
       exec_norm/=. case_match; destruct_and!; simplify_eq/=.
       * exec_bind. apply: exec_trigger => /=.
         exec_bind. apply: exec_trigger => /=.
-        exec_norm/=. rewrite interp_recursive_call. by eapply IH.
+        exec_norm/=. rewrite -rec_as_interp. by eapply IH.
       * exec_bind. apply: exec_assert => /= ?.
         exec_bind. apply: exec_assert => /= ?.
         exec_bind. apply: exec_trigger => /= ?.
-        exec_norm/=. rewrite interp_recursive_call.
+        exec_norm/=. rewrite -rec_as_interp.
         rewrite (cons_middle _ _ κs0) app_assoc. by eapply IH.
-    + rewrite interp_recursive_call. by eapply IH.
-    + rewrite interp_recursive_call. by eapply IH.
-    + rewrite interp_recursive_call. by eapply IH.
-    + rewrite interp_recursive_call. by eapply IH.
+    + exec_norm/=. rewrite -rec_as_interp. by eapply IH.
+    + exec_norm/=. rewrite -rec_as_interp. by eapply IH.
+    + exec_norm/=. rewrite -rec_as_interp. by eapply IH.
+    + exec_norm/=. rewrite -rec_as_interp. by eapply IH.
     + exec_bind. apply: exec_assert => /= ?.
       exec_bind. apply: exec_trigger => /=. eexists _.
       exec_bind. apply: exec_assume; [done|]. move => ?.
