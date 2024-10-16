@@ -109,12 +109,12 @@ Section adequacy.
   Proof.
     iIntros ((?&?&?&?&?&->&?&?&->)) "Hlc Hs Hwp".
     iDestruct (threadpool_adequacy with "Hwp") as "Hwp"; [done|].
-    iDestruct (ub_adequacy with "Hwp") as "Hwp".
+    iDestruct (ub_adequacy with "Hwp") as "Hwp"; [done|].
     iDestruct (heap_adequacy with "Hs Hwp") as "Hwp"; [done|].
     iDestruct (demonic_adequacy with "Hwp") as "Hwp"; [done|].
     rewrite -wpi_clear_mask. iMod "Hwp".
     iDestruct (wpi_insert_voidE with "Hwp") as "Hwp".
-    iDestruct (step_adequacy_empty with "Hlc Hwp") as "Hwp"; first done.
+    iDestruct (step_adequacy_empty with "Hlc Hwp") as "Hwp"; [done|].
     iApply void_adequacy_empty.
     iApply wpi_wand; last done.
     iIntros (?) "HΦ". repeat case_match; eauto.
