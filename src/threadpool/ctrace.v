@@ -152,7 +152,7 @@ Section is_ctrace.
     remember (observe t1) as ot1.
     remember (observe t2) as ot2.
     revert tr2 tp2 t1 t2 ot2 Heqot1 Heqot2.
-    induction Htr as [tid tp1 r|tr' tid tp1 A e a k Htr IH|tid tp1 A f e k|tr' tid tp1 k t' tid' Hidx' Htr IH|tr' tid tp1 k t' tid' Hidx' Htr IH|k t'|tr' tid tp1 k k_new' Hsim' Htr IH|tid t' tp1 Htr|tr t' tid tp1 Htr IH]; intros tr2 tp2 t1 t2 ot2 Heqot1 Heqot2 Hidx1 Hidx2 Hsim Htp Heqit.
+    induction Htr as [tid tp1 r|tr' tid tp1 A e a k Htr IH|tid tp1 A f e k|tr' tid tp1 k t' tid' Hidx' Htr IH|tr' tid tp1 k t' tid' Hidx' Htr IH|k t'|tr' tid tp1 k k_new' Hsim' Htr IH|tid t' tp1|tr t' tid tp1 Htr IH]; intros tr2 tp2 t1 t2 ot2 Heqot1 Heqot2 Hidx1 Hidx2 Hsim Htp Heqit.
     - punfold Heqit. rewrite /eqit_ in Heqit. remember (observe t1) as ot1. rewrite -Heqot2 in Heqit.
       revert t1 t2 tp2 Htp Hidx1 Hidx2 Heqot0 Heqot1 Heqot2. induction Heqit as [r1 r2| | | | ot1 t2' _ _ IH ]; try discriminate.
       * intros. injection Heqot1 as ->. destruct REL. inversion Hsim. constructor.
@@ -538,7 +538,7 @@ Section interleaving.
     intros Hanswer [t [Hidx Htr]].
     remember (observe t) as ot.
     revert t Hidx Heqot.
-    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k k_new' Hsim Htr IH|tid t' tp Htr|tr t' tid tp Htr IH]; intros t Hidx Heqot.
+    induction Htr as [tid tp r|tr' tid tp A e a k Htr IH|tid tp A f e k|tr' tid tp k t' tid' Hidx' Htr IH|tr' tid tp k t' tid' Hidx' Htr IH|k t'|tr' tid tp k k_new' Hsim Htr IH|tid t' tp|tr t' tid tp Htr IH]; intros t Hidx Heqot.
     - exists (Ret (inl r)). eexists. split; first done. destruct Heqot. constructor.
     - apply exists_Vis with (t := t) (k := k); eauto.
       (* FIXME: Get rid of manual instantiation of [R]. *)
