@@ -396,7 +396,7 @@ Section wp.
     destruct (inhabitant : free_locations n σ) as [l Hfree].
     simpl. apply bool_decide_unpack in Hfree.
     iMod (ghost_map_insert_big (heap_array l (replicate n v)) with "Hauth") as "[Hauth Hpointsto]".
-    { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
+    { apply heap_array_map_disjoint. destruct l as [l]. intros i Hnz Hlt.
       rewrite length_replicate in Hlt.
       apply Hfree; first done. lia.
     }
@@ -443,7 +443,7 @@ Section wp_nondet.
     iCombine "Hauth Hauth'" as "Hauth".
     simpl. apply bool_decide_unpack in Hfree.
     iMod (ghost_map_insert_big (heap_array l (replicate n v)) with "Hauth") as "[Hauth Hpointsto]".
-    { apply heap_array_map_disjoint. destruct l as [l Hl]. intros i Hnz Hlt.
+    { apply heap_array_map_disjoint. destruct l as [l]. intros i Hnz Hlt.
       rewrite length_replicate in Hlt.
       apply Hfree; first done. lia.
     }

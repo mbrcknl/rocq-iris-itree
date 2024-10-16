@@ -73,7 +73,7 @@ Section scheduler.
       | VisF (inr1 e) k => Vis e (λ a, scheduler tid (<[tid := k a]>tp))
       end
     | None => (* placeholder: *) Ret (inr LastThreadKilled)
-    end.
+    end (tid in scope nat, tp in scope list).
 
   Lemma unfold_scheduler tid tp :
     scheduler tid tp = scheduler_ tid tp.
