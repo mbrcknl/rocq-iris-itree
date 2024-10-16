@@ -524,7 +524,7 @@ Section adequacy.
     heap_irel σ t t' →
     state_interp σ -∗
     WPi t @ heapH V ⊕ H; M {{ Φ }} -∗
-    WPi t' @ H; M {{ x, let (σ, v) := x in state_interp σ ∗ Φ v }}.
+    WPi t' @ H; M {{ x, let (σ', v) := x in state_interp σ' ∗ Φ v }}.
   Proof.
     apply state_adequacy.
   Qed.

@@ -153,16 +153,17 @@ Section adequacy.
   Qed.
 
   (** Adequacy theorem for [ubH]. *)
-  Theorem ub_adequacy (t : itree (ubE +' E) R) M Φ :
+  Theorem ub_adequacy (t : itree (ubE +' E) R) (t' : itree E (R + ub_crash)) M Φ :
+    ub_irel t t' →
     WPi t @ ubH ⊕ H; M {{ Φ }} -∗
-    WPi ub_ifn t @ H; M {{ r,
+    WPi t' @ H; M {{ r,
       match r with
       | inl r => Φ r
       | inr UbCrash => False
       end
     }}.
   Proof.
-    iIntros "Hwp".
+    iIntros (->) "Hwp".
     rewrite -wpi_clear_mask. iEval (rewrite -wpi_clear_mask).
     iMod "Hwp". iModIntro.
     iPoseProof ub_adequacy_empty as "Had". iSpecialize ("Had" with "Hwp").
