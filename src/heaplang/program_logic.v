@@ -104,6 +104,22 @@ Section wp.
       rewrite wp_heaplang_unfold. by iApply "Hwp".
   Qed.
 
+  (** Wand rule for [WP]. *)
+  Lemma wp_wand m E e Φ Ψ :
+    (∀ v, Φ v -∗ Ψ v) -∗
+    WP e @ m; E {{ Φ }} -∗ WP e @ m; E {{ Ψ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_heaplang_unfold.
+    by iApply wpi_wand.
+  Qed.
+
+  Lemma wp_frame_l m P E e Φ :
+    P ∗ WP e @ m; E {{ Φ }} -∗ WP e @ m; E {{ v, P ∗ Φ v }}.
+  Proof.
+    iIntros "[HP Hwp]". iApply (wp_wand with "[HP]"); last eauto.
+    iIntros (v) "HΦ". iFrame.
+  Qed.
+
   (** Rule for changing the mask.
 
   Contrary to [wp_atomic] in upstream Iris, this rule curiously has no
@@ -118,16 +134,30 @@ Section wp.
     iApply wpi_wand; last done. iIntros (r) "HΦ". by iMod "HΦ".
   Qed.
 
-  (** Wand rule for [WP]. *)
-  Lemma wp_wand m E e Φ Ψ :
-    (∀ v, Φ v -∗ Ψ v) -∗
-    WP e @ m; E {{ Φ }} -∗ WP e @ m; E {{ Ψ }}.
+  Lemma fupd_wp m E e Φ :
+    (|={E}=> WP e @ m; E {{ v, Φ v }}) ⊢ WP e @ m; E {{ Φ }}.
   Proof.
-    iIntros "Hwp". rewrite !wp_heaplang_unfold.
-    by iApply wpi_wand.
+    iIntros "Hwp". iApply wp_atomic. iApply wp_wand; last done.
+    by iIntros (v) "HΦ".
+  Qed.
+
+  Lemma wp_fupd m E e Φ :
+    (WP e @ m; E {{ v, |={E}=> Φ v }}) ⊢ WP e @ m; E {{ Φ }}.
+  Proof.
+    iIntros "Hwp". iApply wp_atomic. iApply wp_wand; last done.
+    by iIntros (v) "HΦ".
   Qed.
 
   (** Proof rules for pure operations: *)
+
+  Lemma wp_val m E v Φ :
+    Φ v -∗
+    WP Val v @ m; E {{ Φ }}.
+  Proof.
+    iIntros "Hwp". rewrite !wp_heaplang_unfold.
+    rewrite /compile_expr. wpi_norm/=.
+    by iApply wpi_ret.
+  Qed.
 
   Lemma wp_UnOp m E op v v' Φ :
     un_op_eval op v = Some v' →
@@ -309,9 +339,8 @@ Section wp.
       by iApply wpi_ret.
   Qed.
 
-  (** Proof rule for heap operations *)
+  (** Proof rules for heap operations *)
 
-  (* TODO: adapt the following lemmas to use WP instead of WPi *)
   Lemma wp_AllocN m E v n Φ :
     (0 < n)%Z →
     ↑heapH_inv_name ⊆ E →
@@ -328,6 +357,20 @@ Section wp.
     iIntros (l) "Hpointsto". iApply wpi_step_ret.
     iApply (lat_mono with "[Hpointsto]"); last done.
     iIntros "Hwand". by iApply "Hwand".
+  Qed.
+
+  Lemma wp_Alloc m E v Φ :
+    ↑heapH_inv_name ⊆ E →
+    lat m (∀ l,
+       (l ↦ v) -∗ Φ (LitV (LitLoc l))
+    ) -∗
+    WP ref (Val v) @ m; E {{ Φ }}.
+  Proof.
+    iIntros (Hmask) "Hwand".
+    iApply wp_AllocN; try done.
+    simpl. iApply lat_mono; last done.
+    iIntros "Hloc" (l). iIntros "[Hwand _]".
+    iApply "Hloc". rewrite Loc.add_0 //.
   Qed.
 
   Lemma wp_Load m E l v dq Φ :
@@ -442,6 +485,98 @@ Section wp.
   Qed.
 
 End wp.
+
+Import uPred.
+
+(** Proofmode class instances *)
+Section proofmode_classes.
+  Context `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.
+  Implicit Types P Q : iProp Σ.
+  Implicit Types Φ : val → iProp Σ.
+  Implicit Types v : val.
+  Implicit Types e : expr.
+
+  Global Instance frame_wp p s E e R Φ Ψ :
+    (∀ v, Frame p R (Φ v) (Ψ v)) →
+    Frame p R (WP e @ s; E {{ Φ }}) (WP e @ s; E {{ Ψ }}) | 2.
+  Proof.
+    rewrite /Frame=> HR. iIntros "[HR Hwp]".
+    iApply (wp_wand with "[HR]"); last done.
+    iIntros (v) "HΨ". iApply HR. iFrame.
+  Qed.
+
+  Global Instance is_except_0_wp m E e Φ : IsExcept0 (WP e @ m; E {{ Φ }}).
+  Proof. by rewrite /IsExcept0 -{2}fupd_wp -except_0_fupd -fupd_intro. Qed.
+
+  Global Instance elim_modal_bupd_wp p m E e P Φ :
+    ElimModal True p false (|==> P) P (WP e @ m; E {{ Φ }}) (WP e @ m; E {{ Φ }}).
+  Proof.
+    by rewrite /ElimModal intuitionistically_if_elim
+      (bupd_fupd E) fupd_frame_r wand_elim_r fupd_wp.
+  Qed.
+
+  Global Instance elim_modal_fupd_wp p m E e P Φ :
+    ElimModal True p false (|={E}=> P) P (WP e @ m; E {{ Φ }}) (WP e @ m; E {{ Φ }}).
+  Proof.
+    by rewrite /ElimModal intuitionistically_if_elim
+      fupd_frame_r wand_elim_r fupd_wp.
+  Qed.
+  (** Error message instance for non-mask-changing view shifts.
+  Also uses a slightly different error: we cannot apply [fupd_mask_subseteq]
+  if [e] is not atomic, so we tell the user to first add a leading [fupd]
+  and then change the mask of that. *)
+  Global Instance elim_modal_fupd_wp_wrong_mask p m E1 E2 e P Φ :
+    ElimModal
+      (pm_error "Goal and eliminated modality must have the same mask.
+Use [iApply fupd_wp; iMod (fupd_mask_subseteq E2)] to adjust the mask of your goal to [E2]")
+      p false
+      (|={E2}=> P) False (WP e @ m; E1 {{ Φ }}) False | 100.
+  Proof. intros []. Qed.
+
+  Global Instance elim_modal_fupd_wp_atomic p m E1 E2 e P Φ :
+    ElimModal (True) p false
+            (|={E1,E2}=> P) P
+            (WP e @ m; E1 {{ Φ }}) (WP e @ m; E2 {{ v, |={E2,E1}=> Φ v }})%I | 100.
+  Proof.
+    intros ?. by rewrite intuitionistically_if_elim
+      fupd_frame_r wand_elim_r wp_atomic.
+  Qed.
+  (** Error message instance for mask-changing view shifts. *)
+  Global Instance elim_modal_fupd_wp_atomic_wrong_mask p s E1 E2 E2' e P Φ :
+    ElimModal
+      (pm_error "Goal and eliminated modality must have the same mask.
+Use [iMod (fupd_mask_subseteq E2)] to adjust the mask of your goal to [E2]")
+      p false
+      (|={E2,E2'}=> P) False
+      (WP e @ s; E1 {{ Φ }}) False | 200.
+  Proof. intros []. Qed.
+
+  Global Instance add_modal_fupd_wp s E e P Φ :
+    AddModal (|={E}=> P) P (WP e @ s; E {{ Φ }}).
+  Proof. by rewrite /AddModal fupd_frame_r wand_elim_r fupd_wp. Qed.
+
+  Global Instance elim_acc_wp_atomic {X} E1 E2 α β γ e m Φ :
+    ElimAcc (X:=X) (True)
+            (fupd E1 E2) (fupd E2 E1)
+            α β γ (WP e @ m; E1 {{ Φ }})
+            (λ x, WP e @ m; E2 {{ v, |={E2}=> β x ∗ (γ x -∗? Φ v) }})%I | 100.
+  Proof.
+    iIntros (?) "Hinner >Hacc". iDestruct "Hacc" as (x) "[Hα Hclose]".
+    iApply (wp_wand with "[Hclose]"); last by iApply "Hinner".
+    iIntros (v) ">[Hβ HΦ]". iApply "HΦ". by iApply "Hclose".
+  Qed.
+
+  Global Instance elim_acc_wp_nonatomic {X} E α β γ e m Φ :
+    ElimAcc (X:=X) True (fupd E E) (fupd E E)
+            α β γ (WP e @ m; E {{ Φ }})
+            (λ x, WP e @ m; E {{ v, |={E}=> β x ∗ (γ x -∗? Φ v) }})%I.
+  Proof.
+    iIntros (_) "Hinner >Hacc". iDestruct "Hacc" as (x) "[Hα Hclose]".
+    iApply wp_fupd.
+    iApply (wp_wand with "[Hclose]"); last by iApply "Hinner".
+    iIntros (v) ">[Hβ HΦ]". iApply "HΦ". by iApply "Hclose".
+  Qed.
+End proofmode_classes.
 
 (** Pure reductions *)
 
