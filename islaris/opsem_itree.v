@@ -278,7 +278,7 @@ Qed.
 Global Hint Resolve read_mem_checked_to_translate : itree_auto.
 
 
-Definition compile_trace' (t : isla_trace) :
+Fixpoint compile_trace' (t : isla_trace) :
   itree (callE isla_trace void +' islaE) void :=
   step.step;;
   match t with
@@ -304,26 +304,26 @@ Definition compile_trace' (t : isla_trace) :
       v ← eval_exp e?;
       b ← base_val_to_bool v?;
       assume b;;
-      call es
+      compile_trace' es
   | Assume e ann :t: es =>
       s ← get_state;
       v ← eval_a_exp s.(seq_local).(seq_regs) e?;
       b ← base_val_to_bool v?;
       assert b;;
-      call es
+      compile_trace' es
   | AssumeReg r al v ann :t: es =>
       v' ← read_reg r al;
       assert (v' = v);;
-      call es
+      compile_trace' es
   | ReadReg r al v ann :t: es =>
       v' ← read_reg r al;
       vread ← (read_accessor al v)?;
       assume (vread = v');;
-      call es
+      compile_trace' es
   | WriteReg r al v ann :t: es =>
       vnew ← (read_accessor al v)?;
       write_reg r al vnew;;
-      call es
+      compile_trace' es
   | ReadMem data kind addr len tag ann :t: es =>
       addr' ← (val_to_bits 64 addr)?;
       data' ← (val_to_bits (8 * len) data)?;
@@ -331,10 +331,10 @@ Definition compile_trace' (t : isla_trace) :
       if res is Some databvn then
         data'' ← (bvn_to_bv (8 * len) databvn)?;
         assume (data' = data'');;
-        call es
+        compile_trace' es
       else
         emit_label (SReadMem addr' data');;
-        call es
+        compile_trace' es
   | WriteMem res kind addr data len tag ann :t: es =>
       addr' ← (val_to_bits 64 addr)?;
       data' ← (val_to_bits (8 * len) data)?;
@@ -343,10 +343,10 @@ Definition compile_trace' (t : isla_trace) :
         s ← get_state;
         let mem' := write_mem len s.(seq_global).(seq_mem) addr' (bv_unsigned data') in
         set_state (s <|seq_global;seq_mem := mem'|>);;
-        call es
+        compile_trace' es
       else
         emit_label (SWriteMem addr' data');;
-        call es
+        compile_trace' es
   | tcases ts =>
       assert (ts ≠ []);;
       es ← trigger (EDemonic _);
@@ -360,10 +360,10 @@ Definition compile_trace' (t : isla_trace) :
       | Some es' => call es'
       | None => emit_label (SInstrTrap pc);; halt
       end
-  | BranchAddress v ann :t: es => call es
-  | Branch c desc ann :t: es => call es
-  | Barrier v ann :t: es => call es
-  | AbstractPrimop n v args ann :t: es => call es
+  | BranchAddress v ann :t: es => compile_trace' es
+  | Branch c desc ann :t: es => compile_trace' es
+  | Barrier v ann :t: es => compile_trace' es
+  | AbstractPrimop n v args ann :t: es => compile_trace' es
   | _ => ub
   end.
 Global Arguments compile_trace' !_ /.

@@ -391,7 +391,7 @@ Section lifting.
     iApply wpi_bind. iApply (wpi_read_reg with "[$] [$]").
     iApply (wp_readreg_mono with "Hread"). iIntros (?) "Hwp ??/=". wpi_norm/=.
     iApply wpi_bind. iApply @wpi_assume. iIntros (?).
-    rewrite interp_recursive_call. rewrite wp_asm_unfold.
+    rewrite -rec_as_interp. rewrite wp_asm_unfold.
     by iApply ("Hwp" with "[//] [//] [$] [$] [$] [$]").
   Qed.
 
@@ -404,7 +404,7 @@ Section lifting.
     iApply wpi_bind. iApply (wpi_read_reg with "[$] [$]").
     iApply (wp_readreg_mono with "Hread"). iIntros (?) "[% Hwp] ??/=". wpi_norm/=.
     iApply wpi_bind. iApply @wpi_assert; [done|].
-    rewrite interp_recursive_call. rewrite wp_asm_unfold.
+    rewrite -rec_as_interp. rewrite wp_asm_unfold.
     by iApply ("Hwp" with "[//] [$] [$] [$] [$]").
   Qed.
 
@@ -420,7 +420,7 @@ Section lifting.
     iDestruct (reg_mapsto_lookup with "[$] Hr") as %?.
     wpi_norm/=. iApply wpi_bind. iApply (wpi_write_reg with "[$]"); [done..|]. iIntros "?".
     iApply wpi_update. iMod (reg_mapsto_update with "[$] Hr") as "[? Hr]"; [done..|]. iModIntro.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_write_reg_struct r v v' vnew ann es f:
@@ -435,7 +435,7 @@ Section lifting.
     wpi_norm/=. iApply wpi_bind. iApply (wpi_write_reg with "[$]"); [done| |].
     { rewrite /write_accessor/=. by simplify_option_eq. } iIntros "?".
     iApply wpi_update. iMod (struct_reg_mapsto_update with "[$] Hr") as "[? Hr]"; [done..|]. iModIntro.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_write_reg r v v' ann es:
@@ -461,7 +461,7 @@ Section lifting.
     iApply wpi_bind. iApply wpi_assert; [done|]. rewrite Heq. wpi_norm/=.
     rewrite bvn_to_bv_to_bvn/=. wpi_norm/=.
     iApply wpi_bind. iApply @wpi_assume. iIntros (?).
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [%] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[//] [$] [%] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_read_mem_array n len a a' vread vmem (i : nat) (l : list (bv n)) es ann kind tag q:
@@ -500,7 +500,7 @@ Section lifting.
     iApply wpi_bind. iApply wpi_assert; [naive_solver|].
     iApply wpi_bind. iApply wpi_assert; [naive_solver|].
     iApply wpi_bind. iApply (@wpi_emit_label with "[$]"); [done|]. iIntros "?".
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_write_mem n len a (vold vnew : bv n) es ann res kind tag:
@@ -522,7 +522,7 @@ Section lifting.
     iApply wpi_update.
     iMod (mem_mapsto_update with "[$] Hm") as (len' ?) "[Hmem Hm]". iModIntro.
     rewrite Z_to_bv_bv_unsigned. have ? : len' = len by lia. subst.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_write_mem_array n len a a' vnew (i : nat) (l : list (bv n)) es ann kind res tag:
@@ -561,7 +561,7 @@ Section lifting.
     iApply wpi_bind. iApply wpi_assert; [naive_solver|].
     iApply wpi_bind. iApply wpi_assert; [naive_solver|].
     iApply wpi_bind. iApply (@wpi_emit_label with "[$]"); [done|]. iIntros "?".
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[$] [%] [$] [$] [$] [$]").
   Qed.
 
   (** * Other lifting lemmas  *)
@@ -571,7 +571,7 @@ Section lifting.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_branch c desc es ann:
@@ -580,7 +580,7 @@ Section lifting.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_declare_const_bv v es ann b:
@@ -633,7 +633,7 @@ Section lifting.
     rewrite !wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
     rewrite Hv. wpi_norm/=. iApply wpi_bind. iApply @wpi_assume. iIntros (?). destruct b => //.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [//] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[//] [//] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_assume es ann e:
@@ -645,7 +645,7 @@ Section lifting.
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
     iApply wpi_bind. iApply (wpi_get_state_isla with "[$]"). iIntros "?". rewrite Hv /=. wpi_norm/=.
     iApply wpi_bind. iApply wpi_assert; [done|].
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_barrier es v ann:
@@ -654,7 +654,7 @@ Section lifting.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
 
   Lemma wp_abstract_primop es n v args ann:
@@ -663,7 +663,7 @@ Section lifting.
   Proof.
     iIntros "Hcont". setoid_rewrite wp_asm_unfold. iIntros (? ?) "????".
     wpi_norm/=. iApply wpi_bind. iApply @wpi_step => /=. do 2 iModIntro.
-    rewrite interp_recursive_call. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
+    rewrite -rec_as_interp. by iApply ("Hcont" with "[//] [$] [$] [$] [$]").
   Qed.
 
 End lifting.
