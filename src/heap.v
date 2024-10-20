@@ -259,9 +259,13 @@ Local Existing Instances heapH_ghost_varG.
 Class heapHGS (Σ : gFunctors) (V : Type) := HeapHGS {
   heapH_inG : heapHGpreS Σ V;
   heapH_heap_name : gname;
-  heapH_inv_name : namespace;
+  heapH_inv_name_postfix : string;
 }.
 Local Existing Instances heapH_inG.
+
+Definition heapH_inv_name `{!heapHGS Σ V} : namespace :=
+
+  nroot .@ "heapH" .@ heapH_inv_name_postfix.
 
 Definition pointsto `{!heapHGS Σ V} (l : loc) (v : option V) (dq : dfrac) : iProp Σ :=
   l ↪[ heapH_heap_name ]{dq} v.
@@ -300,10 +304,10 @@ Lemma heapH_init V `{!invGS_gen hlc Σ} `{!heapHGpreS Σ V} σ :
 Proof.
   iDestruct (ghost_map_alloc (K := loc) (V := option V) σ) as "Hgmap".
   iMod "Hgmap" as "[%γ [[Hauth' Hauth] Hfrag]]".
-  iDestruct (inv_alloc (nroot .@ "heaplangH") (∅) ((∃ σ, ghost_map_auth γ (1 / 2) σ)%I)) as "Hinv".
+  iDestruct (inv_alloc (nroot .@ "heapH" .@ "") (∅) ((∃ σ, ghost_map_auth γ (1 / 2) σ)%I)) as "Hinv".
   iSpecialize ("Hinv" with "[Hauth]"). { iNext. by iExists σ. }
   iMod "Hinv" as "#Hinv". iModIntro.
-  iExists (HeapHGS Σ V _ γ (nroot .@ "heaplangH")).
+  iExists (HeapHGS Σ V _ γ "").
   iFrame "Hinv". iFrame.
 Qed.
 
