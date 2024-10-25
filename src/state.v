@@ -26,6 +26,17 @@ Definition get_state {S} `{stateE S -< E} : itree E S :=
 Definition set_state {S} `{stateE S -< E} (x : S) : itree E unit :=
   trigger (ESetState x).
 
+Lemma get_state_to_translate {E1 E2 S} (HE1 : stateE S -< E1) (HE2 : stateE S -< E2) (Hin : E1 -< E2) :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate get_state Hin get_state.
+Proof. move => ?. rewrite /get_state. by apply trigger_to_translate. Qed.
+Global Hint Resolve get_state_to_translate : itree_auto.
+Lemma set_state_to_translate {E1 E2 S} s (HE1 : stateE S -< E1) (HE2 : stateE S -< E2) (Hin : E1 -< E2) :
+  TranslateReSum Hin HE1 HE2 →
+  ITreeToTranslate (set_state s) Hin (set_state s).
+Proof. move => ?. rewrite /set_state. by apply trigger_to_translate. Qed.
+Global Hint Resolve set_state_to_translate : itree_auto.
+
 Global Instance AnswerEqDecision_stateE {S} `{EqDecision S} :
   AnswerEqDecision (stateE S).
 Proof. intros A [|x]; apply _. Qed.
@@ -372,5 +383,3 @@ Next Obligation.
   - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
   - iMod ("HH" with "Hs") as "[$ $]". by iModIntro.
 Qed.
-
-

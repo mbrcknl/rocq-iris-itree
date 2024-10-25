@@ -178,26 +178,6 @@ Proof.
   - move => -> /=. apply bvn_to_bv_to_bvn.
 Qed.
 
-
-(* TODO: Upstream these wrappers? *)
-Definition get_state {S} `{!stateE S -< E} : itree E S :=
-  trigger EGetState.
-
-Definition set_state {S} `{!stateE S -< E} (s : S) : itree E unit :=
-  trigger (ESetState s).
-
-Lemma get_state_to_translate {E1 E2 S} (HE1 : stateE S -< E1) (HE2 : stateE S -< E2) (Hin : E1 -< E2) :
-  TranslateReSum Hin HE1 HE2 →
-  ITreeToTranslate get_state Hin get_state.
-Proof. move => ?. rewrite /get_state. by apply trigger_to_translate. Qed.
-Global Hint Resolve get_state_to_translate : itree_auto.
-Lemma set_state_to_translate {E1 E2 S} s (HE1 : stateE S -< E1) (HE2 : stateE S -< E2) (Hin : E1 -< E2) :
-  TranslateReSum Hin HE1 HE2 →
-  ITreeToTranslate (set_state s) Hin (set_state s).
-Proof. move => ?. rewrite /set_state. by apply trigger_to_translate. Qed.
-Global Hint Resolve set_state_to_translate : itree_auto.
-
-
 Record seq_state := {
    seq_local : seq_local_state;
    seq_global : seq_global_state;
