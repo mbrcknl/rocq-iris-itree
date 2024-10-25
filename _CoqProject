@@ -41,6 +41,7 @@ src/heaplang/adequacy.v
 src/heaplang/opsem_adequacy.v
 src/heaplang/interpreter.v
 src/heaplang/tactics.v
+src/heaplang/examples/join.v
 src/examplelang/lang.v
 src/examplelang/program_logic.v
 
