@@ -72,8 +72,7 @@ Section proof.
     iApply wp_App. iApply lat_intro. simpl.
     wp_bind (CmpXchg _ _ _). iInv N as ([]) "[>Hl HR]".
     - iApply (wp_CmpXchg_fail with "Hl"); eauto.
-      (* TODO: Is there a better way to reason about disjoint namespaces? *)
-      { apply namespaces.coPset_subseteq_difference_r; last done. apply ndot_preserve_disjoint_l. by apply ndot_ne_disjoint. }
+      { solve_ndisj. }
       { repeat constructor. }
       iNext. iIntros "Hl".
       iModIntro. iSplitL "Hl". { iNext. iExists true; eauto. }
@@ -114,8 +113,7 @@ Section proof.
     iDestruct "Hlock" as (l ->) "#Hinv".
     rewrite /release /=. iApply wp_App. iNext. iInv N as (b) "[>Hl _]".
     wp_apply (wp_Store with "Hl").
-    (* TODO: Is there a better way to reason about disjoint namespaces? *)
-    { apply namespaces.coPset_subseteq_difference_r; last done. apply ndot_preserve_disjoint_l. by apply ndot_ne_disjoint. }
+    { solve_ndisj. }
     iIntros (r ->) "Hl".
     iModIntro. by iFrame.
   Qed.

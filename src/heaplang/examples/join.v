@@ -74,8 +74,7 @@ Proof.
   wp_apply wp_InjR.
   iInv inv_name as (v') "[>Hl _]".
   iApply (wp_Store with "Hl").
-  (* TODO: Is there a better way to reason about disjoint namespaces? *)
-  { apply namespaces.coPset_subseteq_difference_r; last done. apply ndot_preserve_disjoint_l. by apply ndot_ne_disjoint. }
+  { solve_ndisj. }
   iNext. iIntros (r ->) "Hl". 
   iModIntro. iSplitL; last done. iNext. rewrite /spawn_inv.
   iExists (InjRV v). iFrame. iRight.
@@ -91,7 +90,7 @@ Proof.
   iApply wp_App. simpl. iNext.
   wp_bind (! _)%E. iInv inv_name as (v) "[>Hl Hinv]".
   iApply (wp_Load with "Hl").
-  { apply namespaces.coPset_subseteq_difference_r; last done. apply ndot_preserve_disjoint_l. by apply ndot_ne_disjoint. }
+  { solve_ndisj. }
   iNext. iIntros "Hl". 
   iDestruct "Hinv" as "[%|Hinv]"; subst.
   - iModIntro. iSplitL "Hl"; [iNext; iExists _; iFrame; eauto|].
