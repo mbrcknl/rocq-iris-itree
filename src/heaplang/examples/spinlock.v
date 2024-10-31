@@ -79,7 +79,7 @@ Section proof.
       iApply wp_Snd.
       iNext. by iApply "HΦ".
     - iApply (wp_CmpXchg_suc with "Hl"); eauto.
-      { apply namespaces.coPset_subseteq_difference_r; last done. apply ndot_preserve_disjoint_l. by apply ndot_ne_disjoint. }
+      { solve_ndisj. }
       { repeat constructor. }
       iApply lat_intro.
       iIntros "Hl".
