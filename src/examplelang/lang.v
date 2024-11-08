@@ -1,7 +1,7 @@
 From ITree Require Import ITree.
 From stdpp Require Import strings binders.
 
-From iris.itree Require Import wpi choice angelic_choice ub heap handler itree.
+From iris.itree Require Import wpi choice ub heap handler itree.
 From iris.itree.threadpool Require Import handler.
 
 Inductive base_lit : Set :=
@@ -19,7 +19,6 @@ Inductive expr :=
   | Load (e : expr)
   | Store (e1 e2 : expr)
   | PickInt
-  | AngelicPickInt
   | Spawn (e : expr)
 with val :=
   | LitV (l : base_lit)
@@ -39,14 +38,13 @@ Fixpoint subst (x : string) (v : val) (e : expr) : expr :=
   | Load e => Load (subst x v e)
   | Store e1 e2 => Store (subst x v e1) (subst x v e2)
   | PickInt => PickInt
-  | AngelicPickInt => AngelicPickInt
   | Spawn e => Spawn (subst x v e)
   end.
 
 Definition subst' (mx : binder) (v : val) : expr → expr :=
   match mx with BNamed x => subst x v | BAnon => id end.
 
-Definition exampleE : Type → Type := threadpoolE +' ubE +' heapE val +' demonicE +' angelicE.
+Definition exampleE : Type → Type := threadpoolE +' ubE +' heapE val +' demonicE.
 Global Hint Transparent exampleE : itree_auto.
 
 (** Cast a value to [LamV]. *)
@@ -125,9 +123,6 @@ Fixpoint compile_expr' (e : expr) : itree (callE expr val +' exampleE) val :=
       store_or_ub l v
   | PickInt =>
       n ← demonic_choice Z;
-      Ret (LitV (LitInt n))
-  | AngelicPickInt =>
-      n ← angelic_choice Z;
       Ret (LitV (LitInt n))
   | Spawn e =>
       spawn (compile_expr_yield e ;; Ret ()) ;;

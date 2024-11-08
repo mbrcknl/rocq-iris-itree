@@ -45,6 +45,7 @@ src/heaplang/examples/join.v
 src/heaplang/examples/spinlock.v
 src/examplelang/lang.v
 src/examplelang/program_logic.v
+src/examplelang/adequacy.v
 
 islaris/base.v
 islaris/adequacy.v

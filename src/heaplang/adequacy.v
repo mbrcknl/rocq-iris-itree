@@ -90,7 +90,6 @@ Section soundness.
   Qed.
 End soundness.
 
-
 Section adequacy.
   Context {Σ} `{!invGS Σ} `{!heaplangHGS Σ}.
 

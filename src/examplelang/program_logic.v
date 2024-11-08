@@ -5,7 +5,7 @@ From iris.proofmode Require Import proofmode.
 From iris.base_logic Require Import ghost_map invariants.
 From iris.bi Require Import weakestpre.
 
-From iris.itree Require Import wpi choice angelic_choice ub heap handler itree.
+From iris.itree Require Import wpi choice ub heap handler itree.
 From iris.itree.threadpool Require Import handler.
 From iris.itree.examplelang Require Import lang.
 
@@ -22,7 +22,7 @@ Section handler.
   Context {Σ} `{!invGS_gen hlc Σ} `{!exampleHGS Σ}.
 
   Definition exampleH : iHandler Σ exampleE :=
-    threadpoolH ⊕ ubH ⊕ heapH val ⊕ demonicH ⊕ angelicH.
+    threadpoolH ⊕ ubH ⊕ heapH val ⊕ demonicH.
 
   Lemma wpi_yield_if_not_val e Φ :
     Φ tt -∗
@@ -189,16 +189,6 @@ Section wp.
     rewrite /compile_expr. wpi_norm/=.
     iApply wpi_bind. iApply @wpi_demonic.
     iIntros (n). by iApply wpi_ret.
-  Qed.
-
-  Lemma wp_angelic_pick_int E Φ :
-    (∃ n, Φ (LitV (LitInt n))) -∗
-    WP AngelicPickInt @ E {{ Φ }}.
-  Proof.
-    iIntros "Hwp". rewrite !wp_unfold.
-    rewrite /compile_expr. wpi_norm/=.
-    iApply wpi_bind. iDestruct "Hwp" as "[%n HΦ]". iApply @wpi_angelic.
-    by iApply wpi_ret.
   Qed.
 
   Lemma wp_spawn E e Φ :
