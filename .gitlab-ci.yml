@@ -9,8 +9,8 @@ variables:
 
 .branches_and_mr: &branches_and_mr
   only:
-    - master@ou-plf/iris-itree
-    - /^ci/@ou-plf/iris-itree
+    - master@iris/itree-program-logic
+    - /^ci/@iris/itree-program-logic
     - merge_requests
 
 .template: &template
