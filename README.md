@@ -1,7 +1,7 @@
 # Program logics à la carte
 
-This is the Coq code for our paper ["Program logics à la carte"][paper] (doi: 10.1145/3704847).
-A mapping between the paper and the Coq code can be found in `coq_vs_paper.md`.
+This is the Coq code for our paper ["Program logics à la carte"][paper] (doi: [10.1145/3704847](https://doi.org/10.1145/3704847)).
+A mapping between the paper and the Coq code can be found in [`coq_vs_paper.md`][coq_vs_paper.md].
 
 [paper]: https://plf.inf.ethz.ch/research/popl25-itree-program-logic.html
 
