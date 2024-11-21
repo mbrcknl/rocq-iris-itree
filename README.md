@@ -1,11 +1,21 @@
 # Program logics à la carte
 
-This is the Coq code for our paper "Program logics à la carte". A mapping between the
-paper and the Coq code can be found in `coq_vs_paper.md`.
+This is the Coq code for our paper ["Program logics à la carte"][paper] (doi: 10.1145/3704847).
+A mapping between the paper and the Coq code can be found in `coq_vs_paper.md`.
+
+[paper]: https://plf.inf.ethz.ch/research/popl25-itree-program-logic.html
 
 **Important note:** the `islaris` folder in the root is a fork of pre-existing
 open-source software. Copyright notices and author names in that folder have to do with their
 original authors (they were not updated by us).
+
+## Prerequisites
+
+This version is known to compile with:
+
+ - Coq 8.19.0
+ - A development version of [Iris](https://gitlab.mpi-sws.org/iris/iris)
+ - The "itree", "elpi", and "paco" Coq libraries (see `coq-iris-itree.opam` for the exact versions)
 
 ## Building from source
 
