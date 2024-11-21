@@ -136,7 +136,7 @@ Section 4.2:
     `wpi_bind`. For an example, consult the proof of `wp_bind_plus_l`.
 - `WpiInvOpen` corresponds to either `wpi_open_invariant` or
   `wpi_open_invariant_timeless` depending on which of the two
-  technical side-conditions of footnote 3 is preferred.
+  technical side-conditions of footnote 5 is preferred.
 - $\LangH_{\mathbb{Z},!,\text{pick},\text{spawn}}$ is `exampleH` in
   `src/examplelang/program_logic.v`.
 
@@ -150,7 +150,7 @@ Section 4.3:
 Section 4.4:
 - The concurrency adequacy theorem `ConcAdequate` is `threadpool_adequacy` in
   `threadpool/interleaving.v`, with one difference: $t'$ has return type `R + last_thread_killed`
-  instead of `R` to account for footnote 5. In the post-condition, `last_thread_killed` is handled
+  instead of `R` to account for footnote 7. In the post-condition, `last_thread_killed` is handled
   by `True`, reflecting that `endthread` means safely terminating the thread.
 - `LangAdequate'` corresponds to `wp_adequacy_irel` in `src/examplelang/adequacy.v` (modulo various
   simplifications made in the paper).
@@ -165,7 +165,7 @@ Section 4.4:
   * `ConcIrelEndthread` corresponds to the variant `KillThread` of `interleavesF`
   * `ConcIrelFork` corresponds to the variant `Fork` of `interleavesF`
   * The variant `KillLastThread` of `interleavesF` is not discussed in the paper, in accordance
-    to footnote 9.
+    to footnote 7.
 - $f_\ConcE$ is `threadpool_ifn` in `src/threadpool/scheduler.v`
 
 # Section 5: Extension: Angelic Choice and State Machine Adequacy
