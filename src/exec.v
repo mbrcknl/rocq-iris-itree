@@ -2,7 +2,7 @@ From ITree Require Import ITree.
 From ITree Require Import Eqit.
 From ITree Require Import TranslateFacts InterpFacts RecursionFacts.
 From Paco Require Import paco.
-From iris.bi.lib Require Import fixpoint.
+From iris.bi.lib Require Import fixpoint_mono.
 From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic.lib Require Import invariants.

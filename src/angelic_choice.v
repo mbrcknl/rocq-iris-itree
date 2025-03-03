@@ -7,7 +7,7 @@ From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
 From iris.itree Require Import axioms.
 From iris.itree Require Import exec.
-From iris.bi Require Import fixpoint.
+From iris.bi Require Import fixpoint_mono.
 From iris.base_logic.lib Require Export fancy_updates.
 From iris.proofmode Require Import proofmode.
 From Paco Require Import paco.

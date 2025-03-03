@@ -2,7 +2,7 @@ From iris.proofmode Require Import proofmode.
 From iris.base_logic.lib Require Import iprop.
 From iris.base_logic.lib Require Import ghost_var.
 From iris.base_logic.lib Require Export fancy_updates.
-From iris.bi Require Import fixpoint.
+From iris.bi Require Import fixpoint_mono.
 From iris.itree Require Import handler.
 From iris.itree Require Import wpi.
 From iris.itree Require Import itree.
