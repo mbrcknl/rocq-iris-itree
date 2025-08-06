@@ -46,15 +46,15 @@ Proof.
   rewrite bind_trigger.
   apply lookup_lt_Some in Htp. 
   eapply is_ctrace_CTFork.
-  - rewrite list_lookup_insert //.
+  - rewrite list_lookup_insert_eq //.
   - simpl. rewrite /compile_expr_kill. eutt_norm/=. f_equiv. intros v.
     by rewrite kill_thread_bind.
-  - rewrite list_insert_insert.
+  - rewrite list_insert_insert_eq.
     eapply is_ctrace_insert.
     * rewrite lookup_app_l; last rewrite length_insert //.
-      rewrite list_lookup_insert //.
+      rewrite list_lookup_insert_eq //.
     * by eutt_norm.
-    * rewrite -insert_app_l // list_insert_insert insert_app_l //.
+    * rewrite -insert_app_l // list_insert_insert_eq insert_app_l //.
 Qed.
 
 Lemma base_UnOp op v v' :
@@ -401,7 +401,7 @@ Proof.
   eapply is_ctrace_insert; first done.
   { rewrite bind_vis //. }
   eexists. split.
-  - rewrite list_lookup_insert //. by apply lookup_lt_is_Some_1.
+  - rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some_1.
   - by constructor.
 Qed.
 
@@ -516,11 +516,11 @@ Proof.
   intros Htp Htr. rewrite /ctrace_step_yield.
   eapply is_ctrace_insert; first done. { eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-  rewrite list_insert_insert.
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+  rewrite list_insert_insert_eq.
   eapply is_ctrace_yield.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-  by rewrite list_insert_insert.
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+  by rewrite list_insert_insert_eq.
 Qed.
 
 Lemma trace_invariant_yield tid σ n tx tr :
@@ -564,11 +564,11 @@ Proof.
   intros Hl Htp Htr.
   eapply is_ctrace_insert; first done. { rewrite /store'. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-  rewrite list_insert_insert Hl /=. simpl_itree.
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+  rewrite list_insert_insert_eq Hl /=. simpl_itree.
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-  rewrite list_insert_insert //.
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+  rewrite list_insert_insert_eq //.
 Qed.
 Lemma is_ctrace_store σ l x v tid tp tr k :
   σ !! l = Some (Some v) →
@@ -588,8 +588,8 @@ Proof.
   intros Hl Htp Htr.
   eapply is_ctrace_insert; first done. { rewrite /load. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-  rewrite list_insert_insert Hl /=. by simpl_itree.
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+  rewrite list_insert_insert_eq Hl /=. by simpl_itree.
 Qed.
 
 Definition ctrace_allocN_nondet v n σ l tr : ctrace sequential_heaplangE val :=
@@ -603,12 +603,12 @@ Proof.
   eapply is_ctrace_insert; first done.
   { rewrite /allocN_nondet. eutt_norm/=. reflexivity. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+  { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert // length_insert -lookup_lt_is_Some //. }
+  { rewrite list_lookup_insert_eq // length_insert -lookup_lt_is_Some //. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert // !length_insert -lookup_lt_is_Some //. }
-  by rewrite !list_insert_insert.
+  { rewrite list_lookup_insert_eq // !length_insert -lookup_lt_is_Some //. }
+  by rewrite !list_insert_insert_eq.
 Qed.
 
 Definition ctrace_store'_ub l x σ : ctrace sequential_heaplangE val :=
@@ -626,18 +626,18 @@ Proof.
   intros Hl Htp.
   eapply is_ctrace_insert; first done. { rewrite /store'_or_ub/store'. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
   destruct Hl as [Hl|Hl].
-  - rewrite list_insert_insert Hl /ub.
+  - rewrite list_insert_insert_eq Hl /ub.
     eapply is_ctrace_Vis.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
     eapply is_ctrace_ub.
-    { rewrite list_lookup_insert // length_insert. by apply lookup_lt_is_Some. }
-  - rewrite list_insert_insert Hl /ub.
+    { rewrite list_lookup_insert_eq // length_insert. by apply lookup_lt_is_Some. }
+  - rewrite list_insert_insert_eq Hl /ub.
     eapply is_ctrace_Vis.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
     eapply is_ctrace_ub.
-    { rewrite list_lookup_insert // length_insert. by apply lookup_lt_is_Some. }
+    { rewrite list_lookup_insert_eq // length_insert. by apply lookup_lt_is_Some. }
 Qed.
 Lemma is_ctrace_store_ub σ l x tid tp k :
   σ !! l = Some None ∨ σ !! l = None →
@@ -647,7 +647,7 @@ Proof.
   intros Hl Htp.
   eapply is_ctrace_insert; first done. { rewrite /store. eutt_norm. reflexivity. }
   eapply is_ctrace_store'_ub; first done.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
 Qed.
 Lemma is_ctrace_load_ub σ l tid tp k :
   σ !! l = Some None ∨ σ !! l = None →
@@ -657,14 +657,14 @@ Proof.
   intros Hl Htp.
   eapply is_ctrace_insert; first done. { rewrite /load_or_ub/load. eutt_norm. reflexivity. }
   eapply is_ctrace_Vis.
-  { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+  { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
   destruct Hl as [Hl|Hl].
-  - rewrite list_insert_insert Hl /ub /=.
+  - rewrite list_insert_insert_eq Hl /ub /=.
     eapply is_ctrace_ub.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-  - rewrite list_insert_insert Hl /ub.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+  - rewrite list_insert_insert_eq Hl /ub.
     eapply is_ctrace_ub.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
 Qed.
 
 Lemma trace_invariant_demonic σ tx n tr A a `{EqDecision A} `{Inhabited A} :
@@ -736,7 +736,7 @@ Proof.
     { rewrite /compile_expr_yield compile_expr_bind' //. }
     rewrite /compile_expr. is_ctrace_norm/=.
     eapply is_ctrace_ub.
-    rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+    rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - eapply stuck_false in Hstuck as [].
     eapply Ectx_step with (K := []); eauto.
     by constructor.
@@ -752,7 +752,7 @@ Proof.
       by constructor.
     * rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - exists ctrace_ub.
     split; first done.
     eapply is_ctrace_insert.
@@ -761,7 +761,7 @@ Proof.
     rewrite /compile_expr. is_ctrace_norm/=.
     apply UnOp_stuck in Hstuck as ->.
     is_ctrace_norm/=. eapply is_ctrace_ub.
-    rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+    rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - exists ctrace_ub.
     split; first done.
     eapply is_ctrace_insert.
@@ -770,7 +770,7 @@ Proof.
     rewrite /compile_expr. is_ctrace_norm/=.
     apply BinOp_stuck in Hstuck as ->.
     is_ctrace_norm/=. eapply is_ctrace_ub.
-    rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+    rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - exists ctrace_ub.
     split; first done.
     eapply is_ctrace_insert.
@@ -784,7 +784,7 @@ Proof.
       constructor.
     * rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - eapply stuck_false in Hstuck as [].
     eapply Ectx_step with (K := []); eauto.
     by constructor.
@@ -800,7 +800,7 @@ Proof.
       by constructor.
     * rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - exists ctrace_ub.
     split; first done.
     eapply is_ctrace_insert.
@@ -813,7 +813,7 @@ Proof.
       by constructor.
     * rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - eapply stuck_false in Hstuck as [].
     eapply Ectx_step with (K := []); eauto.
     by constructor.
@@ -836,7 +836,7 @@ Proof.
       by constructor.
     * rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - eapply stuck_false in Hstuck as [].
     eapply Ectx_step with (K := []); eauto.
     by constructor.
@@ -855,10 +855,10 @@ Proof.
         intros i Hlower Hupper.  apply not_elem_of_dom_1. by apply Loc.fresh_fresh.
       + rewrite /compile_expr. is_ctrace_norm/=. rewrite assert_False /=. is_ctrace_norm/=.
         eapply is_ctrace_ub.
-        rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. done.
+        rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. done.
     * rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - destruct (val_to_loc v) as [l|] eqn:Heq.
     * destruct (σ.(heap) !! l) as [[x|]|] eqn:Hheap.
       + destruct v; try discriminate.
@@ -875,7 +875,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_store'_ub; first by left.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_store'_ub l None σ.(heap)).
         split.
         { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -884,7 +884,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_store'_ub; first by right.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
     * exists ctrace_ub.
       split; first by done.
       eapply is_ctrace_insert.
@@ -892,7 +892,7 @@ Proof.
       { rewrite /compile_expr_yield compile_expr_bind' //. }
       rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - destruct (val_to_loc v) as [l|] eqn:Heq.
     * destruct (σ.(heap) !! l) as [[x|]|] eqn:Hheap.
       + destruct v; try discriminate.
@@ -909,7 +909,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_load_ub; first by left.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_load_ub σ.(heap)).
         split.
         { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -918,7 +918,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_load_ub; first by right.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
     * exists ctrace_ub.
       split; first split.
       eapply is_ctrace_insert.
@@ -926,7 +926,7 @@ Proof.
       { rewrite /compile_expr_yield compile_expr_bind' //. }
       rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - destruct (val_to_loc v1) as [l|] eqn:Heq.
     * destruct (σ.(heap) !! l) as [[x|]|] eqn:Hheap.
       + destruct v1; try discriminate.
@@ -943,7 +943,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_store_ub; first by left.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_store_ub l v2 σ.(heap)).
         split.
         { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -952,7 +952,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_store_ub; first by right.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
     * exists ctrace_ub.
       split; first done.
       eapply is_ctrace_insert.
@@ -960,7 +960,7 @@ Proof.
       { rewrite /compile_expr_yield compile_expr_bind' //. }
       rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - destruct (val_to_loc v1) as [l|] eqn:Heq.
     * destruct (σ.(heap) !! l) as [[x|]|] eqn:Hheap.
       + destruct v1; try discriminate.
@@ -977,7 +977,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_store_ub; first by left.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_store_ub l v2 σ.(heap)).
         split.
         { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -986,7 +986,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_store_ub; first by right.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
     * exists ctrace_ub.
       split; first done.
       eapply is_ctrace_insert.
@@ -994,7 +994,7 @@ Proof.
       { rewrite /compile_expr_yield compile_expr_bind' //. }
       rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - destruct (val_to_loc v1) as [l|] eqn:Heq.
     * destruct (σ.(heap) !! l) as [[x|]|] eqn:Hheap.
       + destruct (decide (vals_compare_safe x v2)).
@@ -1013,10 +1013,10 @@ Proof.
            rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
            rewrite /load_or_ub. is_ctrace_norm/=.
            eapply is_ctrace_load; first done.
-           { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+           { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
            is_ctrace_norm/=. rewrite assert_False // /ub.
            eapply is_ctrace_ub.
-           rewrite list_lookup_insert // length_insert compile_tp_len -lookup_lt_is_Some //.
+           rewrite list_lookup_insert_eq // length_insert compile_tp_len -lookup_lt_is_Some //.
       + exists (ctrace_load_ub σ.(heap)).
         split.
         { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -1025,7 +1025,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_load_ub; first by left.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
       + exists (ctrace_load_ub σ.(heap)).
         split.
         { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -1034,7 +1034,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
         eapply is_ctrace_load_ub; first by right.
-        { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+        { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
     * exists ctrace_ub.
       split; first done.
       eapply is_ctrace_insert.
@@ -1042,7 +1042,7 @@ Proof.
       { rewrite /compile_expr_yield compile_expr_bind' //. }
       rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
   - destruct (val_to_int v2) as [n|] eqn:Heq'.
     * destruct (val_to_loc v1) as [l|] eqn:Heq.
       + destruct (σ.(heap) !! l) as [[x|]|] eqn:Hheap.
@@ -1066,10 +1066,10 @@ Proof.
                rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq Heq' /=. is_ctrace_norm/=.
                rewrite /load_or_ub. is_ctrace_norm/=.
                eapply is_ctrace_load; first done.
-               { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+               { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
                is_ctrace_norm/=. rewrite Heq''.
                eapply is_ctrace_ub.
-               rewrite list_lookup_insert // length_insert compile_tp_len -lookup_lt_is_Some //.
+               rewrite list_lookup_insert_eq // length_insert compile_tp_len -lookup_lt_is_Some //.
         ++ exists (ctrace_load_ub σ.(heap)).
            split.
            { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -1078,7 +1078,7 @@ Proof.
            { rewrite /compile_expr_yield compile_expr_bind' //. }
            rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq Heq' /=. is_ctrace_norm/=.
            eapply is_ctrace_load_ub; first by left.
-           { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+           { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
         ++ exists (ctrace_load_ub σ.(heap)).
            split.
            { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //. }
@@ -1087,7 +1087,7 @@ Proof.
            { rewrite /compile_expr_yield compile_expr_bind' //. }
            rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq Heq' /=. is_ctrace_norm/=.
            eapply is_ctrace_load_ub; first by right.
-           { rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //. }
+           { rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //. }
       + exists ctrace_ub.
         split; first done.
         eapply is_ctrace_insert.
@@ -1095,7 +1095,7 @@ Proof.
         { rewrite /compile_expr_yield compile_expr_bind' //. }
         rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq Heq' /=. is_ctrace_norm/=.
         eapply is_ctrace_ub.
-        rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+        rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
     * exists ctrace_ub.
       split; first done.
       eapply is_ctrace_insert.
@@ -1103,7 +1103,7 @@ Proof.
       { rewrite /compile_expr_yield compile_expr_bind' //. }
       rewrite /compile_expr. is_ctrace_norm/=. rewrite Heq' /=. is_ctrace_norm/=.
       eapply is_ctrace_ub.
-      rewrite list_lookup_insert // compile_tp_len -lookup_lt_is_Some //.
+      rewrite list_lookup_insert_eq // compile_tp_len -lookup_lt_is_Some //.
 Qed.
 
 Program Definition to_free_location n v σ ρs l efs (Hbase : base_step (AllocN (Val $ LitV $ LitInt n) (Val v)) σ ρs (Val $ LitV $ LitLoc l) (state_init_heap l n v σ) efs) : free_locations (Z.to_nat n) σ.(heap) :=
@@ -1144,8 +1144,8 @@ Proof.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
     apply is_ctrace_step_yield with (t := k (RecV f x e)).
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
@@ -1153,8 +1153,8 @@ Proof.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
     apply is_ctrace_step_yield with (t := k (PairV v1 v2)).
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
@@ -1162,8 +1162,8 @@ Proof.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
     apply is_ctrace_step_yield with (t := k (InjLV v)).
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
@@ -1171,8 +1171,8 @@ Proof.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
     apply is_ctrace_step_yield with (t := k (InjRV v)).
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - pose (e' := subst' x v2 (subst' f (RecV f x e0) e0)).
     exists (ctrace_step_yield tid' tr). repeat split.
@@ -1185,8 +1185,8 @@ Proof.
       rewrite /e' in Hval. apply of_to_val in Hval as Heq.
       rewrite -Heq in Htr. rewrite -Heq. rewrite /compile_expr. is_ctrace_norm/=. simpl_itree in Htr.
       apply is_ctrace_step_yield with (t := (k v)%itree).
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      by rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      by rewrite list_insert_insert_eq.
     * eapply is_ctrace_insert; first done.
       { rewrite /compile_expr_yield /= base_Beta /= /yield_if_not_val.
         rewrite /e' in Hval. rewrite Hval. eutt_norm/=. reflexivity. }
@@ -1194,22 +1194,22 @@ Proof.
       rewrite Hval in Htr.
       rewrite bind_bind in Htr. setoid_rewrite bind_bind in Htr. setoid_rewrite bind_ret_l in Htr.
       apply is_ctrace_step_yield with (t := (v ← compile_expr e'; yield ;; k v)%itree).
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert //.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq //.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
     eapply is_ctrace_insert with (t' := (step.step ;; yield ;; k v')%itree); first done.
     { rewrite /compile_expr_yield base_UnOp //. eutt_norm/=. rewrite /step_ret. by eutt_norm/=. }
-    eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    by rewrite list_insert_insert.
+    eapply is_ctrace_step_yield. { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert_eq.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
     eapply is_ctrace_insert with (t' := (step.step ;; yield ;; k v')%itree); first done.
     { rewrite /compile_expr_yield base_BinOp //. eutt_norm/=. rewrite /step_ret. by eutt_norm/=. }
-    eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    by rewrite list_insert_insert.
+    eapply is_ctrace_step_yield. { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert_eq.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     destruct (to_val e2) eqn:Hval.
@@ -1217,16 +1217,16 @@ Proof.
       eapply is_ctrace_insert; first done.
       { rewrite /compile_expr_yield/compile_expr/=. eutt_norm/=. reflexivity. }
       apply is_ctrace_step_yield with (t := k v).
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       by simpl_itree in Htr.
     * eapply is_ctrace_insert; first done.
       { rewrite /compile_expr_yield/compile_expr. eutt_norm/=.
         rewrite /yield_if_not_val Hval /=. reflexivity. }
       rewrite /compile_expr_yield/yield_if_not_val Hval in Htr. simpl_itree in Htr.
       eapply is_ctrace_step_yield.
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       by simpl_itree in Htr.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
@@ -1235,16 +1235,16 @@ Proof.
       eapply is_ctrace_insert; first done.
       { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. reflexivity. }
       apply is_ctrace_step_yield with (t := k v).
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       by simpl_itree in Htr.
     * eapply is_ctrace_insert; first done.
       { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=.
         rewrite /yield_if_not_val Hval /=. reflexivity. }
       rewrite /compile_expr_yield/yield_if_not_val Hval in Htr. simpl_itree in Htr.
       eapply is_ctrace_step_yield.
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       by simpl_itree in Htr.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
@@ -1252,23 +1252,23 @@ Proof.
     eapply is_ctrace_insert with (t' := (step.step ;; yield ;; k v1)%itree); first done.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
-    eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    by rewrite list_insert_insert.
+    eapply is_ctrace_step_yield. { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert_eq.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
     eapply is_ctrace_insert with (t' := (step.step ;; yield ;; k v2)%itree); first done.
     { rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret. eutt_norm/=.
       reflexivity. }
-    eapply is_ctrace_step_yield. { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    by rewrite list_insert_insert.
+    eapply is_ctrace_step_yield. { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    by rewrite list_insert_insert_eq.
   - exists (ctrace_step_yield tid' tr). repeat split.
     { by apply trace_invariant_step_yield. }
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. reflexivity. }
     eapply is_ctrace_step_yield.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     rewrite /compile_expr_yield bind_bind in Htr.
     setoid_rewrite bind_bind in Htr. setoid_rewrite bind_ret_l in Htr.
     by rewrite interp_recursive_call.
@@ -1278,10 +1278,10 @@ Proof.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=.
       rewrite /yield_if_not_val /=. reflexivity. }
     eapply is_ctrace_step_yield.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
     rewrite /compile_expr_yield bind_bind in Htr.
     setoid_rewrite bind_bind in Htr. setoid_rewrite bind_ret_l in Htr.
-    by rewrite list_insert_insert interp_recursive_call.
+    by rewrite list_insert_insert_eq interp_recursive_call.
   - destruct (AllocN_free_locations _ _ _ _ _ _ Hbase) as [ll <-].
     exists (ctrace_allocN_nondet v (Z.to_nat n0) σ1.(heap) ll (ctrace_step_yield tid' tr)).
     split.
@@ -1291,11 +1291,11 @@ Proof.
       { simpl. rewrite /compile_expr_yield/compile_expr. simpl. eutt_norm/=.
         rewrite /step_ret assert_True; last done. eutt_norm/=. reflexivity. }
       eapply is_ctrace_allocN_nondet.
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       eapply is_ctrace_step_yield.
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       by rewrite /compile_expr_yield compile_expr_val !bind_ret_l in Htr.
   - exists (ctrace_store' l None σ1.(heap) (ctrace_step_yield tid' tr)). repeat split.
     { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
@@ -1304,11 +1304,11 @@ Proof.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret/store'_or_ub.
       eutt_norm/=. reflexivity. }
     eapply is_ctrace_store'; first done.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
     is_ctrace_norm/=.
     eapply is_ctrace_step_yield.
-    { rewrite list_lookup_insert // length_insert. by apply lookup_lt_is_Some. }
-    rewrite !list_insert_insert.
+    { rewrite list_lookup_insert_eq // length_insert. by apply lookup_lt_is_Some. }
+    rewrite !list_insert_insert_eq.
     by simpl_itree in Htr.
   - exists (ctrace_load σ2.(heap) (ctrace_step_yield tid' tr)). repeat split.
     { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
@@ -1317,12 +1317,12 @@ Proof.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /step_ret /load_or_ub.
       eutt_norm/=. reflexivity. }
     eapply is_ctrace_load; first done.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
+    rewrite list_insert_insert_eq.
     is_ctrace_norm/=.
     eapply is_ctrace_step_yield.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - exists (ctrace_store l w σ1.(heap) (ctrace_step_yield tid' tr)). repeat split.
     { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
@@ -1331,12 +1331,12 @@ Proof.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=.
       rewrite /step_ret /store_or_ub/store'_or_ub. eutt_norm/=. reflexivity. }
     eapply is_ctrace_store; first done.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite !list_insert_insert.
+    { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert_eq.
     is_ctrace_norm/=.
     eapply is_ctrace_step_yield.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - exists (ctrace_store l v2 σ1.(heap) (ctrace_step_yield tid' tr)). repeat split.
     { rewrite /trace_invariant/interp_tr_heaplang /= decide_True //.
@@ -1345,12 +1345,12 @@ Proof.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=.
       rewrite /step_ret /store_or_ub/store'_or_ub. eutt_norm/=. reflexivity. }
     eapply is_ctrace_store; first done.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite !list_insert_insert.
+    { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
+    rewrite !list_insert_insert_eq.
     is_ctrace_norm/=.
     eapply is_ctrace_step_yield.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - destruct (decide (vl = v1)) as [->|Hneq].
     * rewrite bool_decide_eq_true_2 // in Hinv.
@@ -1362,16 +1362,16 @@ Proof.
       { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /load_or_ub.
         eutt_norm/=. reflexivity. }
       eapply is_ctrace_load; first done.
-      { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+      { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
       is_ctrace_norm/=.
-      rewrite !list_insert_insert assert_True //. is_ctrace_norm/=.
+      rewrite !list_insert_insert_eq assert_True //. is_ctrace_norm/=.
       rewrite decide_True //. is_ctrace_norm/=. rewrite /store_or_ub/store'_or_ub. is_ctrace_norm/=.
       eapply is_ctrace_store; first done.
-      { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-      rewrite !list_insert_insert. rewrite /step_ret. is_ctrace_norm/=.
+      { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
+      rewrite !list_insert_insert_eq. rewrite /step_ret. is_ctrace_norm/=.
       eapply is_ctrace_step_yield.
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       by simpl_itree in Htr.
     * rewrite bool_decide_eq_false_2 // in Hinv.
       rewrite bool_decide_eq_false_2 // in Htr.
@@ -1382,12 +1382,12 @@ Proof.
       { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. reflexivity. }
       rewrite /load_or_ub. is_ctrace_norm/=.
       eapply is_ctrace_load; first done.
-      { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-      simpl. rewrite list_insert_insert. is_ctrace_norm/=.
+      { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
+      simpl. rewrite list_insert_insert_eq. is_ctrace_norm/=.
       rewrite assert_True // decide_False // /step_ret. is_ctrace_norm/=.
       eapply is_ctrace_step_yield.
-      { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-      rewrite list_insert_insert.
+      { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+      rewrite list_insert_insert_eq.
       by simpl_itree in Htr.
   - exists (ctrace_load σ1.(heap) (ctrace_store l (LitV (LitInt (i1 + i2))) σ1.(heap) (ctrace_step_yield tid' tr))). repeat split.
     { rewrite /trace_invariant/interp_tr_heaplang /= !decide_True //.
@@ -1396,16 +1396,16 @@ Proof.
     { simpl. rewrite /compile_expr_yield/compile_expr. eutt_norm/=. rewrite /load_or_ub.
       eutt_norm/=. reflexivity. }
     eapply is_ctrace_load; first done.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite list_insert_insert /step_ret. is_ctrace_norm/=.
+    { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
+    rewrite list_insert_insert_eq /step_ret. is_ctrace_norm/=.
     rewrite /store_or_ub/store'_or_ub. is_ctrace_norm/=.
     eapply is_ctrace_store; first done.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
+    rewrite list_insert_insert_eq.
     is_ctrace_norm/=.
     eapply is_ctrace_step_yield.
-    { rewrite list_lookup_insert //. by apply lookup_lt_is_Some. }
-    rewrite list_insert_insert.
+    { rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some. }
+    rewrite list_insert_insert_eq.
     by simpl_itree in Htr.
   - exists (CTFork (compile_expr_kill e) (ctrace_step_yield tid' tr)).
     repeat split.
@@ -1414,12 +1414,12 @@ Proof.
     eapply is_ctrace_insert; first done.
     { simpl. rewrite /compile_expr_yield. eutt_norm/=. reflexivity. }
     eapply trace_base_Fork.
-    { rewrite list_lookup_insert // -lookup_lt_is_Some //. }
+    { rewrite list_lookup_insert_eq // -lookup_lt_is_Some //. }
     simpl. eapply is_ctrace_step_yield.
     { rewrite lookup_app_l; last rewrite !length_insert -lookup_lt_is_Some //.
-      rewrite list_lookup_insert //. rewrite length_insert. by apply lookup_lt_is_Some. }
+      rewrite list_lookup_insert_eq //. rewrite length_insert. by apply lookup_lt_is_Some. }
     rewrite insert_app_l; last rewrite !length_insert -lookup_lt_is_Some //.
-    rewrite !list_insert_insert //.
+    rewrite !list_insert_insert_eq //.
 Qed.
 
 Lemma lt_gt n m :
@@ -1570,7 +1570,7 @@ Proof.
     destruct Hφ as (σ'&Heutt&σ_&->).
     odestruct (Had _ _ _) as (x&Heutt'&Hφ); first done.
     rewrite Heutt in Heutt'. by apply eutt_inv_Ret in Heutt' as <-.
-  - intros e2 _ [i Hidx]%elem_of_list_lookup.
+  - intros e2 _ [i Hidx]%list_elem_of_lookup.
     destruct (decide (not_stuck e2 σ2)) as [?| Hstuck%not_not_stuck]; [done|].
     exfalso.
     opose proof (execution_from_opsem_trace _ _ _ _ _ _ _ _ _) as (te&x&Heval&Heutt&σ'&Heq); eauto.

@@ -84,7 +84,7 @@ Section sep_list.
   Proof.
     intros Hl.
     destruct (lookup_lt_is_Some_2 l i Hl) as [y Hy].
-    rewrite big_sepL_delete; [| by apply list_lookup_insert].
+    rewrite big_sepL_delete; [| by apply list_lookup_insert_eq].
     rewrite insert_take_drop // -{3}(take_drop_middle l i y) // !big_sepL_app /=.
     do 3 f_equiv. rewrite length_take. case_decide => //. lia.
   Qed.
@@ -239,7 +239,7 @@ Section list_find_idx.
     list_find_idx P (<[i:=x]> l) = Some i.
   Proof.
     rewrite !list_find_idx_Some => -[?[?[??]]] ?. eexists _.
-    rewrite list_lookup_insert. 2: by apply: lookup_lt_Some. split_and! => //.
+    rewrite list_lookup_insert_eq. 2: by apply: lookup_lt_Some. split_and! => //.
     move => ?? /list_lookup_insert_Some. naive_solver.
   Qed.
 

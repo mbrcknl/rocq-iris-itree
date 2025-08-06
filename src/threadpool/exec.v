@@ -28,7 +28,7 @@ Next Obligation.
   - move: Hh => [i [y' [ ]]].
     move: (Hs) => /Forall2_length?.
     move => /list_lookup_insert_Some[[?[??]]|[??]] ?; simplify_eq.
-    + eexists i, _. rewrite list_lookup_insert. 2: lia. split; [done|].
+    + eexists i, _. rewrite list_lookup_insert_eq. 2: lia. split; [done|].
       apply: HC; [apply Hk|..|done].
       constructor; [done|] => /=. apply Forall2_insert. 2: by constructor.
       apply Forall2_insert; [done|]. by constructor.
@@ -109,7 +109,7 @@ Next Obligation.
     iSplit; [done|] => /=. iFrame => /=.
     iSplit; [| iSplit].
     * iPureIntro. by rewrite -Hperm1 Hperm2.
-    * iPureIntro. rewrite list_lookup_insert // length_insert.
+    * iPureIntro. rewrite list_lookup_insert_eq // length_insert.
       move: Hl => /(lookup_lt_Some _ _ _). by rewrite length_insert.
     * iDestruct "Hx" as %(?&->&->). iApply bi_close_intro. iIntros (?) "HP". by iMod "Hmask".
   - destruct He as (?&?&Hl&?). iMod "HH". iApply fupd_mask_intro; [done|].
@@ -118,7 +118,7 @@ Next Obligation.
     iSplit; [done|] => /=. iFrame => /=.
     iSplit; [| iSplit].
     * iPureIntro. by rewrite H1.
-    * iPureIntro. rewrite list_lookup_insert //. by apply: lookup_lt_Some.
+    * iPureIntro. rewrite list_lookup_insert_eq //. by apply: lookup_lt_Some.
     * iDestruct "Hx" as %(?&->&->). iApply bi_close_intro. iIntros (?) "HP". by iMod "Hmask".
 Qed.
 Next Obligation.

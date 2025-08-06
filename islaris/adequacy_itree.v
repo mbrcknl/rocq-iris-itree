@@ -161,7 +161,7 @@ Proof.
   elim: n ls ls' gs κs κs' t.
   - move => ls ????? Hs ? -> ??. inv Hs.
     apply isla_exec_not_stuck => ?? Hls. rewrite right_id_L. split; [|done].
-    move => ? /elem_of_list_singleton ->. by apply Hls.
+    move => ? /list_elem_of_singleton ->. by apply Hls.
   - move => n IH ls ls' gs κs κs' ? Hs HPκs -> ??. destruct ls; simplify_eq/=.
     rewrite /compile_trace. exec_norm/=.
     exec_norm/=. inv Hs. revert select (step _ _ _) => /step_singleton_inv[?[? [? [Hs ?]]]].
@@ -181,7 +181,7 @@ Proof.
       * exec_bind. apply: exec_assume; [done|] => ?.
         exec_norm. rewrite -rec_as_interp. by eapply IH.
       * apply exec_stop. ogeneralize* nsteps_nb; [done..|] => -[-> [-> ->]].
-        rewrite right_id_L. split; [|done] => ? /elem_of_list_singleton->.
+        rewrite right_id_L. split; [|done] => ? /list_elem_of_singleton->.
         by repeat econstructor.
     + exec_bind. apply: exec_trigger => /=.
       exec_norm/=. rewrite_eq_Some.
@@ -199,7 +199,7 @@ Proof.
       * exec_bind. apply: exec_assume; [done|] => ?.
         exec_norm/=. rewrite -rec_as_interp. by eapply IH.
       * apply exec_stop. ogeneralize* nsteps_nb; [done..|] => -[-> [-> ->]].
-        rewrite right_id_L. split; [|done] => ? /elem_of_list_singleton->.
+        rewrite right_id_L. split; [|done] => ? /list_elem_of_singleton->.
         by repeat econstructor.
     + revert select (∃ _, _) => -[?[?[??]]]. destruct_and!. simplify_eq/=.
       rewrite /write_reg. rewrite_eq_Some.
@@ -220,7 +220,7 @@ Proof.
         -- exec_bind. apply: exec_assume => // ?.
            exec_norm/=. rewrite -rec_as_interp. by eapply IH.
         -- apply exec_stop. ogeneralize* nsteps_nb; [done..|] => -[-> [-> ->]].
-           rewrite right_id_L. split; [|done] => ? /elem_of_list_singleton->.
+           rewrite right_id_L. split; [|done] => ? /list_elem_of_singleton->.
            by repeat econstructor.
       * exec_bind. apply: exec_assert => /= ?.
         exec_bind. apply: exec_assert => /= ?.
@@ -258,7 +258,7 @@ Proof.
       * exec_norm/=. rewrite interp_recursive_call. by eapply IH.
       * exec_bind. apply: exec_trigger => /= ?.
         apply exec_stop. ogeneralize* nsteps_nb; [done..|] => -[-> [-> ->]].
-        split; [|done] => ? /elem_of_list_singleton->.
+        split; [|done] => ? /list_elem_of_singleton->.
         by repeat econstructor.
 Qed.
 

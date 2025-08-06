@@ -360,7 +360,7 @@ Section reg.
       + by apply: map_Forall_delete.
       + apply map_Forall_union; [| split; [|done]].
         { apply map_disjoint_spec => -[??]?? /lookup_kmap_Some. naive_solver. }
-        move => [??] /=? /lookup_kmap_Some[?[? /elem_of_list_to_map/(elem_of_list_lookup_1 _ _)[//|i ?]]]; simplify_map_eq.
+        move => [??] /=? /lookup_kmap_Some[?[? /elem_of_list_to_map/(list_elem_of_lookup_1 _ _)[//|i ?]]]; simplify_map_eq.
         eexists _, _. split_and! => //.
         apply list_find_idx_Some. eexists _. split_and!; [done..|] => j[??]/=???; simplify_eq.
         opose proof* (NoDup_lookup l.*1 i j); [done| rewrite list_lookup_fmap fmap_Some.. | lia].
@@ -419,7 +419,7 @@ Section reg.
     - apply: map_Forall_insert_2'; simplify_map_eq. {
         eexists _, _. split_and! => //.
         - by apply: list_find_idx_insert_eq.
-        - rewrite list_lookup_insert //. by apply: list_find_idx_lt. }
+        - rewrite list_lookup_insert_eq //. by apply: list_find_idx_lt. }
       apply: map_Forall_impl; [done|] => -[r' f']/= ? [?[?[?[??]]]] ?; simplify_map_eq.
       destruct (decide (r = r')); simplify_map_eq. 2: naive_solver.
       move: Hl => /list_find_idx_Some[[??]/=[?[??]]].
