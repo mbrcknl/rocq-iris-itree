@@ -95,12 +95,12 @@ Section scheduler.
     - constructor.
     - constructor. right. apply CIH; eauto.
       apply lookup_lt_Some in Hidx.
-      rewrite list_lookup_insert //.
+      rewrite list_lookup_insert_eq //.
     - destruct e as [e|e]; first destruct e.
       * constructor. right. apply CIH; eauto.
         simpl. apply lookup_lt_Some in Hidx.
         rewrite lookup_app_l; last rewrite length_insert //.
-        rewrite list_lookup_insert; eauto.
+        rewrite list_lookup_insert_eq; eauto.
       * apply Yield with (new_current_tid :=
           match tid with
           | 0 => length tp - 1
@@ -124,7 +124,7 @@ Section scheduler.
                  simpl in Hidx. lia.
       * constructor. intros a. right.
         apply CIH.
-        + rewrite list_lookup_insert //. by apply lookup_lt_is_Some.
+        + rewrite list_lookup_insert_eq //. by apply lookup_lt_is_Some.
         + done.
   Qed.
 

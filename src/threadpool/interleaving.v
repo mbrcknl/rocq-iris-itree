@@ -638,7 +638,7 @@ Section list.
     - apply Nat.ltb_lt in Hineq.
       destruct (i =? idx) eqn:Heq.
       * apply Nat.eqb_eq in Heq as ->.
-        rewrite list_lookup_insert; last rewrite seq_length //. rewrite lookup_seq_lt //.
+        rewrite list_lookup_insert_eq; last rewrite seq_length //. rewrite lookup_seq_lt //.
       * apply Nat.eqb_neq in Heq. rewrite list_lookup_insert_ne //.
     - apply Nat.ltb_ge in Hineq.
       rewrite !lookup_ge_None_2 //. { rewrite seq_length //. }
@@ -701,7 +701,7 @@ Section list.
   Lemma enumerate_bound {A} (xs : list A) (i : nat) (x : A) :
     (i, x) ∈ enumerate xs → i < length xs.
   Proof.
-    by intros [idx [<- Hbound%lookup_lt_Some]%enumerate_lookup]%elem_of_list_lookup_1.
+    by intros [idx [<- Hbound%lookup_lt_Some]%enumerate_lookup]%list_elem_of_lookup_1.
   Qed.
 
   Lemma enumerate_from_NoDup {A} (n : nat) (xs : list A) :
@@ -771,7 +771,7 @@ Section pointed_permutations.
         destruct (n =? idx) as [|] eqn:Heq.
         + apply Nat.eqb_eq in Heq as <-.
           rewrite -list_lookup_fmap in Hidx.
-          apply elem_of_list_lookup_2 in Hidx. contradiction.
+          apply list_elem_of_lookup_2 in Hidx. contradiction.
         + f_equiv. by apply IH.
   Qed.
   Lemma enumerate_insert_fmap {A} (xs : list A) (enumerated_xs' : list (nat * A)) (idx idx' : nat) (x' : A) :
@@ -816,7 +816,7 @@ Section pointed_permutations.
       simpl. destruct (x.1 =? idx) eqn:Heq.
       * apply Nat.eqb_eq in Heq as <-.
         rewrite -list_lookup_fmap fmap_cons lookup_cons in Hidx.
-        apply elem_of_list_lookup_2 in Hidx. inversion Hdup. contradiction.
+        apply list_elem_of_lookup_2 in Hidx. inversion Hdup. contradiction.
       * apply Nat.eqb_neq in Heq. rewrite fmap_app.
         inversion Hdup. destruct (x.1 <? idx); simpl; f_equiv; by apply IH.
   Qed.
@@ -913,8 +913,8 @@ Section pointed_permutations.
     intros [enumerated_xs' [Hperm [Hsnd Hfst]]]. destruct idx' as [idx'|]; last done.
     destruct (enumerated_xs' !! idx') as [[idx'' x]|] eqn:Heidx; last discriminate.
     simpl in Hfst. injection Hfst as Hfst. destruct Hfst.
-    apply elem_of_list_lookup_2 in Heidx as Hin.
-    rewrite -Hperm in Hin. apply elem_of_list_lookup in Hin as [idx Heidx'].
+    apply list_elem_of_lookup_2 in Heidx as Hin.
+    rewrite -Hperm in Hin. apply list_elem_of_lookup in Hin as [idx Heidx'].
     assert (Heidx'' := Heidx'). apply enumerate_lookup in Heidx' as [<- Hidx].
     split.
     - rewrite -enumerate_length. by eapply lookup_lt_Some.
@@ -951,13 +951,13 @@ Section pointed_permutations.
       2:{ rewrite enumerate_lookup_fst; first done.
           destruct (enumerated_xs' !! idx') as [[idx'' x']|] eqn:Heq; last done.
           simpl in Hsnd. injection Hfst as ->.
-          apply elem_of_list_lookup_2 in Heq. rewrite -Hperm in Heq.
+          apply list_elem_of_lookup_2 in Heq. rewrite -Hperm in Heq.
           by apply enumerate_bound in Heq.
       }
       rewrite (enumerate_insert_fmap xs enumerated_xs' idx idx' x) //.
       by f_equiv.
     - rewrite list_fmap_insert Hsnd //.
-    - rewrite list_lookup_insert; first done. destruct (enumerated_xs' !! idx') eqn:Heq; last done.
+    - rewrite list_lookup_insert_eq; first done. destruct (enumerated_xs' !! idx') eqn:Heq; last done.
       by apply lookup_lt_Some in Heq.
   Qed.
 
@@ -971,7 +971,7 @@ Section pointed_permutations.
     split; last split.
     - destruct (enumerated_xs' !! idx') as [[idx'' x']|] eqn:Heq; last done.
       simpl in Hsnd. injection Hfst as ->.
-      apply elem_of_list_lookup_2 in Heq. rewrite -Hperm in Heq.
+      apply list_elem_of_lookup_2 in Heq. rewrite -Hperm in Heq.
       by apply enumerate_bound in Heq.
     - rewrite Hsnd' Hsnd //.
     - done.
