@@ -14,11 +14,11 @@ From iris.itree.threadpool Require Import handler.
 Class heaplangHGpreS (Σ : gFunctors) := HeapLangHGpreS {
   heaplangH_heapHG :> heapHGpreS Σ val;
 }.
-Local Existing Instances heaplangH_heapHG.
+Global Existing Instances heaplangH_heapHG.
 Class heaplangHGS (Σ : gFunctors) := HeapLangHGS {
   heaplangH_heapHGS :> heapHGS Σ val;
 }.
-Local Existing Instances heaplangH_heapHGS.
+Global Existing Instances heaplangH_heapHGS.
 
 Section handler.
   Context {Σ} `{!invGS_gen hlc Σ} `{!heaplangHGS Σ}.

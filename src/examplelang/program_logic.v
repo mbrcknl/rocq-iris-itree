@@ -12,11 +12,11 @@ From iris.itree.examplelang Require Import lang.
 Class exampleHGpreS (Σ : gFunctors) := ExampleHGpreS {
   exampleH_heapHG :> heapHGpreS Σ val;
 }.
-Local Existing Instances exampleH_heapHG.
+Global Existing Instances exampleH_heapHG.
 Class exampleHGS (Σ : gFunctors) := ExampleHGS {
   exampleH_heapHGS :> heapHGS Σ val;
 }.
-Local Existing Instances exampleH_heapHGS.
+Global Existing Instances exampleH_heapHGS.
 
 Section handler.
   Context {Σ} `{!invGS_gen hlc Σ} `{!exampleHGS Σ}.
