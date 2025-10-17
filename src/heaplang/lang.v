@@ -375,7 +375,7 @@ Section semantics.
     destruct n as [|n'].
     { apply list_singleton in Hlen as [x ->]. simpl. rewrite compile_expr_bind_item //. }
     unshelve epose (split_last K _) as Hsplit; first lia. destruct Hsplit as (Ki&K'&->).
-    rewrite app_length /= in Hlen.
+    rewrite length_app /= in Hlen.
     rewrite Nat.add_comm in Hlen.
     injection Hlen as Hlen.
     rewrite fill_app /= compile_expr_bind_item // /compile_expr_yield IH // /compile_expr_yield; try lia.

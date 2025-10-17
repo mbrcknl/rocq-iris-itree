@@ -604,12 +604,12 @@ Section list.
     - apply Nat.ltb_nlt in Heq as Hbound.
       destruct (idx <? length xs + length ys) eqn:Heq'.
       * apply Nat.ltb_lt in Heq' as Hbound'. right. right.
-        rewrite -app_length in Hbound'.
+        rewrite -length_app in Hbound'.
         apply lookup_lt_is_Some_2 in Hbound' as [x Hidx].
         eexists. split.
         + apply lookup_app_r. lia.
         + rewrite -lookup_app_r; first done. lia.
-      * apply Nat.ltb_nlt in Heq' as Hbound'. left. apply lookup_ge_None_2. rewrite app_length. lia.
+      * apply Nat.ltb_nlt in Heq' as Hbound'. left. apply lookup_ge_None_2. rewrite length_app. lia.
   Qed.
 
   Lemma zip_length {A B} (xs : list A) (ys : list B) :
@@ -638,11 +638,11 @@ Section list.
     - apply Nat.ltb_lt in Hineq.
       destruct (i =? idx) eqn:Heq.
       * apply Nat.eqb_eq in Heq as ->.
-        rewrite list_lookup_insert_eq; last rewrite seq_length //. rewrite lookup_seq_lt //.
+        rewrite list_lookup_insert_eq; last rewrite length_seq //. rewrite lookup_seq_lt //.
       * apply Nat.eqb_neq in Heq. rewrite list_lookup_insert_ne //.
     - apply Nat.ltb_ge in Hineq.
-      rewrite !lookup_ge_None_2 //. { rewrite seq_length //. }
-      rewrite length_insert seq_length //.
+      rewrite !lookup_ge_None_2 //. { rewrite length_seq //. }
+      rewrite length_insert length_seq //.
   Qed.
 
   Lemma nin_cons {A} (xs : list A) (x x' : A) :
@@ -670,13 +670,13 @@ Section list.
   Lemma enumerate_from_fst {A} (n : nat) (xs : list A) :
     fst <$> enumerate_from n xs = seq n (length xs).
   Proof.
-    rewrite /enumerate_from fst_zip // seq_length //.
+    rewrite /enumerate_from fst_zip // length_seq //.
   Qed.
 
   Lemma enumerate_from_snd {A} (n : nat) (xs : list A) :
     snd <$> enumerate_from n xs = xs.
   Proof.
-    rewrite /enumerate_from snd_zip // seq_length //.
+    rewrite /enumerate_from snd_zip // length_seq //.
   Qed.
 
   Lemma enumerate_lookup_fst {A} (xs : list A) (idx: nat) :
@@ -689,7 +689,7 @@ Section list.
   Lemma enumerate_length {A} (xs : list A) :
     length (enumerate xs) = length xs.
   Proof.
-    rewrite /enumerate zip_length seq_length. apply Nat.min_id.
+    rewrite /enumerate zip_length length_seq. apply Nat.min_id.
   Qed.
 
   Lemma enumerate_insert {A} (xs : list A) (i : nat) (x : A) :
@@ -721,8 +721,8 @@ Section list.
     enumerate (xs ++ xs') = enumerate xs ++ zip (seq (length xs) (length xs')) xs'.
   Proof.
     rewrite /enumerate/enumerate_from -zip_with_app.
-    - f_equiv. rewrite app_length. apply seq_app.
-    - rewrite seq_length //.
+    - f_equiv. rewrite length_app. apply seq_app.
+    - rewrite length_seq //.
   Qed.
 
   Lemma enumerate_from_fmap_offset A (xs : list A) n m :
@@ -985,7 +985,7 @@ Section pointed_permutations.
     exists (enumerated_xs' ++ enumerate_from (length xs) ys).
     split; last split.
     - rewrite enumerate_app. rewrite /enumerate_from. by f_equiv.
-    - rewrite -Hsnd fmap_app snd_zip // seq_length //.
+    - rewrite -Hsnd fmap_app snd_zip // length_seq //.
     - destruct idx, idx'; eauto.
       rewrite -list_lookup_fmap fmap_app. rewrite -list_lookup_fmap in Hfst.
       by apply lookup_app_l_Some.
@@ -1042,22 +1042,22 @@ Section pointed_permutations.
       rewrite enumerate_app //.
     - rewrite fmap_app /enumerate fmap_cons !snd_zip.
       * done.
-      * by rewrite seq_length.
-      * by rewrite seq_length.
+      * by rewrite length_seq.
+      * by rewrite length_seq.
     - destruct idx as [|idx].
       * lia.
       * simpl. destruct (app_lookup idx (enumerate xs) (zip (seq (S (length xs)) (length xs')) xs')) as [Hidx|[[[idx' x'] [-> Hidx]]|[[idx' x'] [-> Hidx]]]].
         + rewrite Hidx.
           assert (Hlen : length (enumerate xs ++ zip (seq (S (length xs)) (length xs')) xs') = length xs + length xs').
-          { rewrite app_length enumerate_length. f_equiv. rewrite zip_length.
-            apply Nat.min_r. rewrite seq_length //.
+          { rewrite length_app enumerate_length. f_equiv. rewrite zip_length.
+            apply Nat.min_r. rewrite length_seq //.
           }
           apply lookup_ge_None_1 in Hidx. lia.
         + apply lookup_lt_Some in Hidx. rewrite enumerate_length in Hidx. lia.
         + rewrite -list_lookup_fmap fst_zip.
           ++ rewrite enumerate_length. replace (S idx) with ((S (length xs)) + (idx - length xs)) by lia.
              apply lookup_seq_lt. lia.
-          ++ rewrite seq_length //.
+          ++ rewrite length_seq //.
   Qed.
 
   Lemma permutes_to_middle {A} (xs : list A) (idx: nat) (xs' : list A) (x : A) :
@@ -1068,7 +1068,7 @@ Section pointed_permutations.
     exists (enumerate xs ++ enumerate_from (length xs + 1) xs' ++ [(length xs, x)]).
     split; last split.
     - rewrite app_assoc !enumerate_app -app_assoc. f_equiv. simpl.
-      rewrite /enumerate_from Permutation_cons_append app_length //.
+      rewrite /enumerate_from Permutation_cons_append length_app //.
     - rewrite !fmap_app /enumerate !enumerate_from_snd //.
     - rewrite -list_lookup_fmap fmap_app lookup_app_l.
       * rewrite /enumerate !enumerate_from_fst lookup_seq_lt //.

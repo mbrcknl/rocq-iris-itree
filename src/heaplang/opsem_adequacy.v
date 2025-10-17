@@ -94,7 +94,7 @@ Definition compile_tp (tp : list expr) : list (itree heaplangE val) :=
 
 Lemma compile_tp_len tp :
   length (compile_tp tp) = length tp.
-Proof. rewrite /compile_tp map_length enumerate_length //. Qed.
+Proof. rewrite /compile_tp length_map enumerate_length //. Qed.
 Lemma compile_tp'_app tp tp' :
   compile_tp' (tp ++ tp') = compile_tp' tp ++ compile_tp' tp'.
 Proof. rewrite /compile_tp' map_app //. Qed.
@@ -1454,8 +1454,8 @@ Proof.
   destruct (decide (length K = 0)) as [HK|HK].
   - apply nil_length_inv in HK as ->. simpl. simpl in *.
     apply IH in Hstep' as [tid [tr [Hinv Htr]]]; eauto; last first.
-    { rewrite app_length /= app_length.
-      rewrite app_length /= in Hne.
+    { rewrite length_app /= length_app.
+      rewrite length_app /= in Hne.
       lia.
     }
     destruct (decide (length tpa = 0)) as [Htpa|Htpa].
