@@ -58,7 +58,7 @@ From stdpp Require Export prelude strings gmap bitblast bitvector.
 From RecordUpdate Require Export RecordSet.
 From iris.program_logic Require Import weakestpre.
 From iris.bi Require Import bi.
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 From iris.algebra Require Export big_op.
 (* From lithium Require Export base. *)
 Export RecordSetNotations.

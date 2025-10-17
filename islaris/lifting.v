@@ -53,7 +53,7 @@
 (* Exceptions to this license are detailed in THIRD_PARTY_FILES.md          *)
 (****************************************************************************)
 
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 From iris.program_logic Require Export weakestpre.
 From iris.program_logic Require Import ectx_lifting.
 From isla Require Export opsem ghost_state.

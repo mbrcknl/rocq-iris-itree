@@ -1,5 +1,5 @@
 From iris.proofmode Require Import coq_tactics reduction spec_patterns.
-From iris.proofmode Require Export tactics.
+From iris.proofmode Require Export proofmode.
 From iris.itree.heaplang Require Import lang program_logic.
 From iris.base_logic Require Import upred.
 From iris.base_logic Require Import ghost_map invariants.

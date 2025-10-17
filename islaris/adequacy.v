@@ -53,7 +53,7 @@
 (* Exceptions to this license are detailed in THIRD_PARTY_FILES.md          *)
 (****************************************************************************)
 
-From iris.proofmode Require Import tactics.
+From iris.proofmode Require Import proofmode.
 From iris.program_logic Require Export adequacy weakestpre.
 From iris.algebra Require Import csum excl auth cmra_big_op gmap dfrac_agree.
 From iris.base_logic.lib Require Import ghost_map ghost_var.
