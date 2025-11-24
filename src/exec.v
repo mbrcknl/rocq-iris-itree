@@ -736,7 +736,7 @@ Section wpi_adequate_pure.
          WPi_tp (M'::Ms') @ H {{v, |={∅,m}=> Φ v}} ={∅}=∗ ⌜Ψ⌝)) → Ψ.
   Proof.
     move => Hexec Hwp.
-    eapply uPred.pure_soundness.
+    eapply (pure_soundness (PROP:=uPredI _)).
     eapply (step_fupdN_soundness_gen _ hlc 0 n) => ?/=.
     iIntros "Hlc". iMod (Hwp with "Hlc") as (H A Φ) "[Hwp [Hs Hc]]".
     iMod (wpi_adequate with "Hwp Hs") as (????) "[Hp [??]]" ; [done|].

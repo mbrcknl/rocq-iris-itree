@@ -109,7 +109,7 @@ Lemma exec_soundness `{!invGpreS Σ} {R} M (t : itree voidE R) Φ :
   ∃ n, ∃ r, exec n t = Some r ∧ Φ r.
 Proof.
   intros Hwp.
-  apply: uPred.pure_soundness.
+  apply: (pure_soundness (PROP:=uPredI _)).
   eapply fupd_soundness_gen with (n := 0); first apply _.
   intros Hinv. iIntros "_". iDestruct Hwp as "Hwp".
   iDestruct (exec_soundness' with "Hwp") as "HΦ".

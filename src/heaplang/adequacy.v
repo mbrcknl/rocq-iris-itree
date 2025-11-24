@@ -82,7 +82,7 @@ Section soundness.
     P.
   Proof.
     move => Hwp.
-    eapply uPred.pure_soundness.
+    eapply (pure_soundness (PROP:=uPredI _)).
     eapply (step_fupdN_soundness_lc _ n n) => ?/=.
     iIntros "Hlc". iMod (fupd_mask_subseteq ∅) as "Hm"; [done|].
     iMod heaplangH_init as (?) "[? ?]".
